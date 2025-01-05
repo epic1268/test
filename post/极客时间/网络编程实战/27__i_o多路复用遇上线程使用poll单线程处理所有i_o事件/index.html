@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>27__I_O多路复用遇上线程：使用poll单线程处理所有I_O事件 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 27 讲，欢迎回来。
+我在前面两讲里，分别使用了 fork 进程和 pthread 线程来处理多并发，这两种技术使用简单，但是性能却会随着并发数的上涨而快速下降，并不能满足极端高并发的需求。就像第 24 讲中讲到的一样，这个时候我们需要寻找更好的解决之道，这个解决之道基本的思想就是 I/O 事件分发。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/27__i_o%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E9%81%87%E4%B8%8A%E7%BA%BF%E7%A8%8B%E4%BD%BF%E7%94%A8poll%E5%8D%95%E7%BA%BF%E7%A8%8B%E5%A4%84%E7%90%86%E6%89%80%E6%9C%89i_o%E4%BA%8B%E4%BB%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/27__i_o%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E9%81%87%E4%B8%8A%E7%BA%BF%E7%A8%8B%E4%BD%BF%E7%94%A8poll%E5%8D%95%E7%BA%BF%E7%A8%8B%E5%A4%84%E7%90%86%E6%89%80%E6%9C%89i_o%E4%BA%8B%E4%BB%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="27__I_O多路复用遇上线程：使用poll单线程处理所有I_O事件">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 27 讲，欢迎回来。
+我在前面两讲里，分别使用了 fork 进程和 pthread 线程来处理多并发，这两种技术使用简单，但是性能却会随着并发数的上涨而快速下降，并不能满足极端高并发的需求。就像第 24 讲中讲到的一样，这个时候我们需要寻找更好的解决之道，这个解决之道基本的思想就是 I/O 事件分发。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="27__I_O多路复用遇上线程：使用poll单线程处理所有I_O事件">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 27 讲，欢迎回来。
+我在前面两讲里，分别使用了 fork 进程和 pthread 线程来处理多并发，这两种技术使用简单，但是性能却会随着并发数的上涨而快速下降，并不能满足极端高并发的需求。就像第 24 讲中讲到的一样，这个时候我们需要寻找更好的解决之道，这个解决之道基本的思想就是 I/O 事件分发。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3476">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="27__I_O多路复用遇上线程：使用poll单线程处理所有I_O事件">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 27 讲，欢迎回来。
+我在前面两讲里，分别使用了 fork 进程和 pthread 线程来处理多并发，这两种技术使用简单，但是性能却会随着并发数的上涨而快速下降，并不能满足极端高并发的需求。就像第 24 讲中讲到的一样，这个时候我们需要寻找更好的解决之道，这个解决之道基本的思想就是 I/O 事件分发。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">27__I_O多路复用遇上线程：使用poll单线程处理所有I_O事件</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3476 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#重温事件驱动">重温事件驱动</a>
+          <ul>
+            <li><a href="#基于事件的程序设计guiweb">基于事件的程序设计：GUI、Web</a></li>
+          </ul>
+        </li>
+        <li><a href="#几种-io-模型和线程模型设计">几种 I/O 模型和线程模型设计</a>
+          <ul>
+            <li><a href="#fork">fork</a></li>
+            <li><a href="#pthread">pthread</a></li>
+            <li><a href="#single-reactor-thread">single reactor thread</a></li>
+            <li><a href="#single-reactor-thread--worker-threads">single reactor thread + worker threads</a></li>
+          </ul>
+        </li>
+        <li><a href="#样例程序">样例程序</a></li>
+        <li><a href="#样例程序结果">样例程序结果</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 27 讲，欢迎回来。</p>
+<p>我在前面两讲里，分别使用了 fork 进程和 pthread 线程来处理多并发，这两种技术使用简单，但是性能却会随着并发数的上涨而快速下降，并不能满足极端高并发的需求。就像第 24 讲中讲到的一样，这个时候我们需要寻找更好的解决之道，这个解决之道基本的思想就是 I/O 事件分发。</p>
+<p>关于文稿中的代码，你可以去<a href="./yolanda.md">GitHub</a>上查看或下载完整代码。</p>
+<h2 id="重温事件驱动">重温事件驱动</h2>
+<h3 id="基于事件的程序设计guiweb">基于事件的程序设计：GUI、Web</h3>
+<p>事件驱动的好处是占用资源少，效率高，可扩展性强，是支持高性能高并发的不二之选。</p>
+<p>如果你熟悉 GUI 编程的话，你就会知道，GUI 设定了一系列的控件，如 Button、Label、文本框等，当我们设计基于控件的程序时，一般都会给 Button 的点击安排一个函数，类似这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 按钮点击的事件处理
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void onButtonClick(){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个设计的思想是，一个无限循环的事件分发线程在后台运行，一旦用户在界面上产生了某种操作，例如点击了某个 Button，或者点击了某个文本框，一个事件会被产生并放置到事件队列中，这个事件会有一个类似前面的 onButtonClick 回调函数。事件分发线程的任务，就是为每个发生的事件找到对应的事件回调函数并执行它。这样，一个基于事件驱动的 GUI 程序就可以完美地工作了。</p>
+<p>还有一个类似的例子是 Web 编程领域。同样的，Web 程序会在 Web 界面上放置各种界面元素，例如 Label、文本框、按钮等，和 GUI 程序类似，给感兴趣的界面元素设计 JavaScript 回调函数，当用户操作时，对应的 JavaScript 回调函数会被执行，完成某个计算或操作。这样，一个基于事件驱动的 Web 程序就可以在浏览器中完美地工作了。</p>
+<p>在第 24 讲中，我们已经提到，通过使用 poll、epoll 等 I/O 分发技术，可以设计出基于套接字的事件驱动程序，从而满足高性能、高并发的需求。</p>
+<p>事件驱动模型，也被叫做反应堆模型（reactor），或者是 Event loop 模型。这个模型的核心有两点。</p>
+<p>第一，它存在一个无限循环的事件分发线程，或者叫做 reactor 线程、Event loop 线程。这个事件分发线程的背后，就是 poll、epoll 等 I/O 分发技术的使用。</p>
+<p>第二，所有的 I/O 操作都可以抽象成事件，每个事件必须有回调函数来处理。acceptor 上有连接建立成功、已连接套接字上发送缓冲区空出可以写、通信管道 pipe 上有数据可以读，这些都是一个个事件，通过事件分发，这些事件都可以一一被检测，并调用对应的回调函数加以处理。</p>
+<h2 id="几种-io-模型和线程模型设计">几种 I/O 模型和线程模型设计</h2>
+<p>任何一个网络程序，所做的事情可以总结成下面几种：</p>
+<ul>
+<li>read：从套接字收取数据；</li>
+<li>decode：对收到的数据进行解析；</li>
+<li>compute：根据解析之后的内容，进行计算和处理；</li>
+<li>encode：将处理之后的结果，按照约定的格式进行编码；</li>
+<li>send：最后，通过套接字把结果发送出去。</li>
+</ul>
+<p>这几个过程和套接字最相关的是 read 和 send 这两种。接下来，我们总结一下已经学过的几种支持多并发的网络编程技术，引出我们今天的话题，使用 poll 单线程处理所有 I/O。</p>
+<h3 id="fork">fork</h3>
+<p>第 25 讲中，我们使用 fork 来创建子进程，为每个到达的客户连接服务。文稿中的这张图很好地解释了这个设计模式，可想而知的是，随着客户数的变多，fork 的子进程也越来越多，即使客户和服务器之间的交互比较少，这样的子进程也不能被销毁，一直需要存在。使用 fork 的方式处理非常简单，它的缺点是处理效率不高，fork 子进程的开销太大。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/b2ad4388320db83983087486737f6268.png" alt=""></p>
+<h3 id="pthread">pthread</h3>
+<p>第 26 讲中，我们使用了 pthread_create 创建子线程，因为线程是比进程更轻量级的执行单位，所以它的效率相比 fork 的方式，有一定的提高。但是，每次创建一个线程的开销仍然是不小的，因此，引入了线程池的概念，预先创建出一个线程池，在每次新连接达到时，从线程池挑选出一个线程为之服务，很好地解决了线程创建的开销。但是，这个模式还是没有解决空闲连接占用资源的问题，如果一个连接在一定时间内没有数据交互，这个连接还是要占用一定的线程资源，直到这个连接消亡为止。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/024376afe016dab4546df1aefc1cf665.png" alt=""></p>
+<h3 id="single-reactor-thread">single reactor thread</h3>
+<p>前面讲到，事件驱动模式是解决高性能、高并发比较好的一种模式。为什么呢？</p>
+<p>因为这种模式是符合大规模生产的需求的。我们的生活中遍地都是类似的模式。比如你去咖啡店喝咖啡，你点了一杯咖啡在一旁喝着，服务员也不会管你，等你有续杯需求的时候，再去和服务员提（触发事件）, 服务员满足了你的需求，你就继续可以喝着咖啡玩手机。整个柜台的服务方式就是一个事件驱动的方式。</p>
+<p>我在文稿中放了一张图解释了这一讲的设计模式。一个 reactor 线程上同时负责分发 acceptor 的事件、已连接套接字的 I/O 事件。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/a0a5e4d27c59460766b0ccca0c8cebae.png" alt=""></p>
+<h3 id="single-reactor-thread--worker-threads">single reactor thread + worker threads</h3>
+<p>但是上述的设计模式有一个问题，和 I/O 事件处理相比，应用程序的业务逻辑处理是比较耗时的，比如 XML 文件的解析、数据库记录的查找、文件资料的读取和传输、计算型工作的处理等，这些工作相对而言比较独立，它们会拖慢整个反应堆模式的执行效率。</p>
+<p>所以，将这些 decode、compute、enode 型工作放置到另外的线程池中，和反应堆线程解耦，是一个比较明智的选择。我在文稿中放置了这样的一张图。反应堆线程只负责处理 I/O 相关的工作，业务逻辑相关的工作都被裁剪成一个一个的小任务，放到线程池里由空闲的线程来执行。当结果完成后，再交给反应堆线程，由反应堆线程通过套接字将结果发送出去。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/8c51417d669d99ce281eda310a0899cc.png" alt=""></p>
+<h2 id="样例程序">样例程序</h2>
+<p>从今天开始，我们会接触到为本课程量身定制的网络编程框架。使用这个网络编程框架的样例程序已经放到文稿中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &lt;lib/acceptor.h&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/common.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/event_loop.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/tcp_server.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> char rot13_char(char c) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if ((c &gt;= &#39;a&#39; &amp;&amp; c &lt;= &#39;m&#39;) || (c &gt;= &#39;A&#39; &amp;&amp; c &lt;= &#39;M&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c + 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else if ((c &gt;= &#39;n&#39; &amp;&amp; c &lt;= &#39;z&#39;) || (c &gt;= &#39;N&#39; &amp;&amp; c &lt;= &#39;Z&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c - 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 连接建立之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onConnectionCompleted(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;connection completed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 数据读到 buffer 之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onMessage(struct buffer *input, struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;get message from tcp connection %s\n&#34;, tcpConnection-&gt;name);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;%s&#34;, input-&gt;data);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     struct buffer *output = buffer_new();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int size = buffer_readable_size(input);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (int i = 0; i &lt; size; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        buffer_append_char(output, rot13_char(buffer_read_char(input)));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    tcp_connection_send_buffer(tcpConnection, output);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 数据通过 buffer 写完之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onWriteCompleted(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;write completed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 连接关闭之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onConnectionClosed(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;connection closed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int c, char **v) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 主线程 event_loop
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct event_loop *eventLoop = event_loop_init();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始化 acceptor
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct acceptor *acceptor = acceptor_init(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始 tcp_server，可以指定线程数目，如果线程是 0，就只有一个线程，既负责 acceptor，也负责 I/O
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct TCPserver *tcpServer = tcp_server_init(eventLoop, acceptor, onConnectionCompleted, onMessage,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                                  onWriteCompleted, onConnectionClosed, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    tcp_server_start(tcpServer);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // main thread for acceptor
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    event_loop_run(eventLoop);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个程序的 main 函数部分只有几行，因为是第一次接触到，稍微展开介绍一下。</p>
+<p>第 49 行创建了一个 event_loop，即 reactor 对象，这个 event_loop 和线程相关联，每个 event_loop 在线程里执行的是一个无限循环，以便完成事件的分发。</p>
+<p>第 52 行初始化了 acceptor，用来监听在某个端口上。</p>
+<p>第 55 行创建了一个 TCPServer，创建的时候可以指定线程数目，这里线程是 0，就只有一个线程，既负责 acceptor 的连接处理，也负责已连接套接字的 I/O 处理。这里比较重要的是传入了几个回调函数，分别对应了连接建立完成、数据读取完成、数据发送完成、连接关闭完成几种操作，通过回调函数，让业务程序可以聚焦在业务层开发。</p>
+<p>第 57 行开启监听。</p>
+<p>第 60 行运行 event_loop 无限循环，等待 acceptor 上有连接建立、新连接上有数据可读等。</p>
+<h2 id="样例程序结果">样例程序结果</h2>
+<p>运行这个服务器程序，开启两个 telnet 客户端，我们看到服务器端的输出如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> $./poll-server-onethread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] set poll as dispatcher
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 4, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll added channel fd==4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 5, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll added channel fd==5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] event loop run, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==1, fd==5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 5, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 6, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll added channel fd==6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==2, fd==6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">afadsfaf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==2, fd==6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">afadsfaf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fdafasf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==1, fd==5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 5, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 7, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll added channel fd==7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==3, fd==7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 7, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">sfasggwqe
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==3, fd==7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 7, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll delete channel fd==7
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel i==2, fd==6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] poll delete channel fd==6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里自始至终都只有一个 main thread 在工作，可见，单线程的 reactor 处理多个连接时也可以表现良好。</p>
+<h2 id="总结">总结</h2>
+<p>这一讲我们总结了几种不同的 I/O 模型和线程模型设计，并比较了各自不同的优缺点。从这一讲开始，我们将使用自己编写的编程框架来完成业务开发，这一讲使用了 poll 来处理所有的 I/O 事件，在下一讲里，我们将会看到如何把 acceptor 的连接事件和已连接套接字的 I/O 事件交由不同的线程处理，而这个分离，不过是在应用程序层简单的参数配置而已。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，给大家留两道思考题：</p>
+<ol>
+<li>你可以试着修改一下 onMessage 方法，把它变为期中作业中提到的 cd、ls 等 command 实现。</li>
+<li>文章里服务器端的 decode-compute-encode 是在哪里实现的？你有什么办法来解决业务逻辑和 I/O 逻辑混在一起么？</li>
+</ol>
+<p>欢迎你在评论区写下你的思考，或者在 GitHub 上上传你的代码，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%8E%B0%E4%BB%A3c&#43;&#43;%E5%AE%9E%E6%88%9830%E8%AE%B2/27__c&#43;&#43;_rest_sdk%E4%BD%BF%E7%94%A8%E7%8E%B0%E4%BB%A3c&#43;&#43;%E5%BC%80%E5%8F%91%E7%BD%91%E7%BB%9C%E5%BA%94%E7%94%A8/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">27__C&#43;&#43;_REST_SDK：使用现代C&#43;&#43;开发网络应用</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%BB%84%E5%8B%87%E7%9A%84okr%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/27__okr%E5%A4%A7%E5%92%96%E8%AF%B4%E5%9C%A8%E7%A1%85%E8%B0%B7%E5%85%AC%E5%8F%B8%E4%BD%BF%E7%94%A8okr%E6%97%B6%E4%B8%80%E4%B8%AA%E8%B5%84%E6%B7%B1%E5%91%98%E5%B7%A5%E7%9A%84%E4%BD%93%E9%AA%8C%E5%92%8C%E6%84%9F%E6%82%9F/">
+            <span class="next-text nav-default">27__OKR大咖说：在硅谷公司使用OKR时，一个资深员工的体验和感悟</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

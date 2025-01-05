@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>第10讲__如何保证集合是线程安全的_ConcurrentHashMap如何实现高效地线程安全？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="我在之前两讲介绍了 Java 集合框架的典型容器类，它们绝大部分都不是线程安全的，仅有的线程安全实现，比如 Vector、Stack，在性能方面也远不尽如人意。幸好 Java 语言提供了并发包（java.util.concurrent），为高度并发需求提供了更加全面的工具支持。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E9%9D%A2%E8%AF%95%E7%B2%BE%E8%AE%B2/%E7%AC%AC10%E8%AE%B2__%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E9%9B%86%E5%90%88%E6%98%AF%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8%E7%9A%84_concurrenthashmap%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%AB%98%E6%95%88%E5%9C%B0%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E9%9D%A2%E8%AF%95%E7%B2%BE%E8%AE%B2/%E7%AC%AC10%E8%AE%B2__%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E9%9B%86%E5%90%88%E6%98%AF%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8%E7%9A%84_concurrenthashmap%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%AB%98%E6%95%88%E5%9C%B0%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="第10讲__如何保证集合是线程安全的_ConcurrentHashMap如何实现高效地线程安全？">
+  <meta property="og:description" content="我在之前两讲介绍了 Java 集合框架的典型容器类，它们绝大部分都不是线程安全的，仅有的线程安全实现，比如 Vector、Stack，在性能方面也远不尽如人意。幸好 Java 语言提供了并发包（java.util.concurrent），为高度并发需求提供了更加全面的工具支持。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java核心技术面试精讲">
+
+  <meta itemprop="name" content="第10讲__如何保证集合是线程安全的_ConcurrentHashMap如何实现高效地线程安全？">
+  <meta itemprop="description" content="我在之前两讲介绍了 Java 集合框架的典型容器类，它们绝大部分都不是线程安全的，仅有的线程安全实现，比如 Vector、Stack，在性能方面也远不尽如人意。幸好 Java 语言提供了并发包（java.util.concurrent），为高度并发需求提供了更加全面的工具支持。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4651">
+  <meta itemprop="keywords" content="Java核心技术面试精讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="第10讲__如何保证集合是线程安全的_ConcurrentHashMap如何实现高效地线程安全？">
+  <meta name="twitter:description" content="我在之前两讲介绍了 Java 集合框架的典型容器类，它们绝大部分都不是线程安全的，仅有的线程安全实现，比如 Vector、Stack，在性能方面也远不尽如人意。幸好 Java 语言提供了并发包（java.util.concurrent），为高度并发需求提供了更加全面的工具支持。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">第10讲__如何保证集合是线程安全的_ConcurrentHashMap如何实现高效地线程安全？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4651 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#典型回答">典型回答</a></li>
+        <li><a href="#考点分析">考点分析</a></li>
+        <li><a href="#知识扩展">知识扩展</a></li>
+        <li><a href="#一课一练">一课一练</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>我在之前两讲介绍了 Java 集合框架的典型容器类，它们绝大部分都不是线程安全的，仅有的线程安全实现，比如 Vector、Stack，在性能方面也远不尽如人意。幸好 Java 语言提供了并发包（java.util.concurrent），为高度并发需求提供了更加全面的工具支持。</p>
+<p>今天我要问你的问题是，如何保证容器是线程安全的？ConcurrentHashMap 如何实现高效地线程安全？</p>
+<h2 id="典型回答">典型回答</h2>
+<p>Java 提供了不同层面的线程安全支持。在传统集合框架内部，除了 Hashtable 等同步容器，还提供了所谓的同步包装器（Synchronized Wrapper），我们可以调用 Collections 工具类提供的包装方法，来获取一个同步的包装容器（如 Collections.synchronizedMap），但是它们都是利用非常粗粒度的同步方式，在高并发情况下，性能比较低下。</p>
+<p>另外，更加普遍的选择是利用并发包提供的线程安全容器类，它提供了：</p>
+<ul>
+<li>各种并发容器，比如 ConcurrentHashMap、CopyOnWriteArrayList。</li>
+<li>各种线程安全队列（Queue/Deque），如 ArrayBlockingQueue、SynchronousQueue。</li>
+<li>各种有序容器的线程安全版本等。</li>
+</ul>
+<p>具体保证线程安全的方式，包括有从简单的 synchronize 方式，到基于更加精细化的，比如基于分离锁实现的 ConcurrentHashMap 等并发实现等。具体选择要看开发的场景需求，总体来说，并发包内提供的容器通用场景，远优于早期的简单同步实现。</p>
+<h2 id="考点分析">考点分析</h2>
+<p>谈到线程安全和并发，可以说是 Java 面试中必考的考点，我上面给出的回答是一个相对宽泛的总结，而且 ConcurrentHashMap 等并发容器实现也在不断演进，不能一概而论。</p>
+<p>如果要深入思考并回答这个问题及其扩展方面，至少需要：</p>
+<ul>
+<li>理解基本的线程安全工具。</li>
+<li>理解传统集合框架并发编程中 Map 存在的问题，清楚简单同步方式的不足。</li>
+<li>梳理并发包内，尤其是 ConcurrentHashMap 采取了哪些方法来提高并发表现。</li>
+<li>最好能够掌握 ConcurrentHashMap 自身的演进，目前的很多分析资料还是基于其早期版本。</li>
+</ul>
+<p>今天我主要是延续专栏之前两讲的内容，重点解读经常被同时考察的 HashMap 和 ConcurrentHashMap。今天这一讲并不是对并发方面的全面梳理，毕竟这也不是专栏一讲可以介绍完整的，算是个开胃菜吧，类似 CAS 等更加底层的机制，后面会在 Java 进阶模块中的并发主题有更加系统的介绍。</p>
+<h2 id="知识扩展">知识扩展</h2>
+<p>1. 为什么需要 ConcurrentHashMap？</p>
+<p>Hashtable 本身比较低效，因为它的实现基本就是将 put、get、size 等各种方法加上“synchronized”。简单来说，这就导致了所有并发操作都要竞争同一把锁，一个线程在进行同步操作时，其他线程只能等待，大大降低了并发操作的效率。</p>
+<p>前面已经提过 HashMap 不是线程安全的，并发情况会导致类似 CPU 占用 100% 等一些问题，那么能不能利用 Collections 提供的同步包装器来解决问题呢？</p>
+<p>看看下面的代码片段，我们发现同步包装器只是利用输入 Map 构造了另一个同步版本，所有操作虽然不再声明成为 synchronized 方法，但是还是利用了“this”作为互斥的 mutex，没有真正意义上的改进！</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">private static class SynchronizedMap&lt;K,V&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    implements Map&lt;K,V&gt;, Serializable {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Map&lt;K,V&gt; m;     // Backing Map
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final Object      mutex;        // Object on which to synchronize
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // …
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public int size() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        synchronized (mutex) {return m.size();}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // … 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>所以，Hashtable 或者同步包装版本，都只是适合在非高度并发的场景下。</p>
+<p>2.ConcurrentHashMap 分析</p>
+<p>我们再来看看 ConcurrentHashMap 是如何设计实现的，为什么它能大大提高并发效率。</p>
+<p>首先，我这里强调，<strong>ConcurrentHashMap 的设计实现其实一直在演化</strong>，比如在 Java 8 中就发生了非常大的变化（Java 7 其实也有不少更新），所以，我这里将比较分析结构、实现机制等方面，对比不同版本的主要区别。</p>
+<p>早期 ConcurrentHashMap，其实现是基于：</p>
+<ul>
+<li>分离锁，也就是将内部进行分段（Segment），里面则是 HashEntry 的数组，和 HashMap 类似，哈希相同的条目也是以链表形式存放。</li>
+<li>HashEntry 内部使用 volatile 的 value 字段来保证可见性，也利用了不可变对象的机制以改进利用 Unsafe 提供的底层能力，比如 volatile access，去直接完成部分操作，以最优化性能，毕竟 Unsafe 中的很多操作都是 JVM intrinsic 优化过的。</li>
+</ul>
+<p>你可以参考下面这个早期 ConcurrentHashMap 内部结构的示意图，其核心是利用分段设计，在进行并发操作的时候，只需要锁定相应段，这样就有效避免了类似 Hashtable 整体同步的问题，大大提高了性能。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E9%9D%A2%E8%AF%95%E7%B2%BE%E8%AE%B2/c63b55f6c721e8bc0745b0e562c7a521.png" alt=""></p>
+<p>在构造的时候，Segment 的数量由所谓的 concurrentcyLevel 决定，默认是 16，也可以在相应构造函数直接指定。注意，Java 需要它是 2 的幂数值，如果输入是类似 15 这种非幂值，会被自动调整到 16 之类 2 的幂数值。</p>
+<p>具体情况，我们一起看看一些 Map 基本操作的<a href="./ConcurrentHashMap.java.md">源码</a>，这是 JDK 7 比较新的 get 代码。针对具体的优化部分，为方便理解，我直接注释在代码段里，get 操作需要保证的是可见性，所以并没有什么同步逻辑。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public V get(Object key) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Segment&lt;K,V&gt; s; // manually integrate access methods to reduce overhead
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        HashEntry&lt;K,V&gt;[] tab;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int h = hash(key.hashCode());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       // 利用位操作替换普通数学运算
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       long u = (((h &gt;&gt;&gt; segmentShift) &amp; segmentMask) &lt;&lt; SSHIFT) + SBASE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 以 Segment 为单位，进行定位
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 利用 Unsafe 直接进行 volatile access
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if ((s = (Segment&lt;K,V&gt;)UNSAFE.getObjectVolatile(segments, u)) != null &amp;&amp;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            (tab = s.table) != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           // 省略
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而对于 put 操作，首先是通过二次哈希避免哈希冲突，然后以 Unsafe 调用方式，直接获取相应的 Segment，然后进行线程安全的 put 操作：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> public V put(K key, V value) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Segment&lt;K,V&gt; s;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (value == null)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            throw new NullPointerException();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 二次哈希，以保证数据的分散性，避免哈希冲突
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int hash = hash(key.hashCode());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int j = (hash &gt;&gt;&gt; segmentShift) &amp; segmentMask;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if ((s = (Segment&lt;K,V&gt;)UNSAFE.getObject          // nonvolatile; recheck
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             (segments, (j &lt;&lt; SSHIFT) + SBASE)) == null) //  in ensureSegment
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            s = ensureSegment(j);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return s.put(key, hash, value, false);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其核心逻辑实现在下面的内部方法中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final V put(K key, int hash, V value, boolean onlyIfAbsent) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // scanAndLockForPut 会去查找是否有 key 相同 Node
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 无论如何，确保获取锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            HashEntry&lt;K,V&gt; node = tryLock() ? null :
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                scanAndLockForPut(key, hash, value);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            V oldValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                HashEntry&lt;K,V&gt;[] tab = table;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                int index = (tab.length - 1) &amp; hash;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                HashEntry&lt;K,V&gt; first = entryAt(tab, index);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                for (HashEntry&lt;K,V&gt; e = first;;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (e != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        K k;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        // 更新已有 value...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        // 放置 HashEntry 到特定位置，如果超过阈值，进行 rehash
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                unlock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            return oldValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>所以，从上面的源码清晰的看出，在进行并发写操作时：</p>
+<ul>
+<li>ConcurrentHashMap 会获取再入锁，以保证数据一致性，Segment 本身就是基于 ReentrantLock 的扩展实现，所以，在并发修改期间，相应 Segment 是被锁定的。</li>
+<li>在最初阶段，进行重复性的扫描，以确定相应 key 值是否已经在数组里面，进而决定是更新还是放置操作，你可以在代码里看到相应的注释。重复扫描、检测冲突是 ConcurrentHashMap 的常见技巧。</li>
+<li>我在专栏上一讲介绍 HashMap 时，提到了可能发生的扩容问题，在 ConcurrentHashMap 中同样存在。不过有一个明显区别，就是它进行的不是整体的扩容，而是单独对 Segment 进行扩容，细节就不介绍了。</li>
+</ul>
+<p>另外一个 Map 的 size 方法同样需要关注，它的实现涉及分离锁的一个副作用。</p>
+<p>试想，如果不进行同步，简单的计算所有 Segment 的总值，可能会因为并发 put，导致结果不准确，但是直接锁定所有 Segment 进行计算，就会变得非常昂贵。其实，分离锁也限制了 Map 的初始化等操作。</p>
+<p>所以，ConcurrentHashMap 的实现是通过重试机制（RETRIES_BEFORE_LOCK，指定重试次数 2），来试图获得可靠值。如果没有监控到发生变化（通过对比 Segment.modCount），就直接返回，否则获取锁进行操作。</p>
+<p>下面我来对比一下，<strong>在 Java 8 和之后的版本中，ConcurrentHashMap 发生了哪些变化呢？</strong></p>
+<ul>
+<li>总体结构上，它的内部存储变得和我在专栏上一讲介绍的 HashMap 结构非常相似，同样是大的桶（bucket）数组，然后内部也是一个个所谓的链表结构（bin），同步的粒度要更细致一些。</li>
+<li>其内部仍然有 Segment 定义，但仅仅是为了保证序列化时的兼容性而已，不再有任何结构上的用处。</li>
+<li>因为不再使用 Segment，初始化操作大大简化，修改为 lazy-load 形式，这样可以有效避免初始开销，解决了老版本很多人抱怨的这一点。</li>
+<li>数据存储利用 volatile 来保证可见性。</li>
+<li>使用 CAS 等操作，在特定场景进行无锁并发操作。</li>
+<li>使用 Unsafe、LongAdder 之类底层手段，进行极端情况的优化。</li>
+</ul>
+<p>先看看现在的数据存储内部实现，我们可以发现 Key 是 final 的，因为在生命周期中，一个条目的 Key 发生变化是不可能的；与此同时 val，则声明为 volatile，以保证可见性。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> static class Node&lt;K,V&gt; implements Map.Entry&lt;K,V&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        final int hash;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        final K key;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        volatile V val;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        volatile Node&lt;K,V&gt; next;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // … 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我这里就不再介绍 get 方法和构造函数了，相对比较简单，直接看并发的 put 是如何实现的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final V putVal(K key, V value, boolean onlyIfAbsent) { if (key == null || value == null) throw new NullPointerException();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int hash = spread(key.hashCode());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int binCount = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (Node&lt;K,V&gt;[] tab = table;;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Node&lt;K,V&gt; f; int n, i, fh; K fk; V fv;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (tab == null || (n = tab.length) == 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            tab = initTable();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else if ((f = tabAt(tab, i = (n - 1) &amp; hash)) == null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 利用 CAS 去进行无锁线程安全操作，如果 bin 是空的
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (casTabAt(tab, i, null, new Node&lt;K,V&gt;(hash, key, value)))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                break; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else if ((fh = f.hash) == MOVED)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            tab = helpTransfer(tab, f);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else if (onlyIfAbsent // 不加锁，进行检查
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 &amp;&amp; fh == hash
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 &amp;&amp; ((fk = f.key) == key || (fk != null &amp;&amp; key.equals(fk)))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 &amp;&amp; (fv = f.val) != null)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            return fv;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            V oldVal = null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            synchronized (f) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                   // 细粒度的同步修改操作... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // Bin 超过阈值，进行树化
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (binCount != 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (binCount &gt;= TREEIFY_THRESHOLD)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    treeifyBin(tab, i);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (oldVal != null)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    return oldVal;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    addCount(1L, binCount);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>初始化操作实现在 initTable 里面，这是一个典型的 CAS 使用场景，利用 volatile 的 sizeCtl 作为互斥手段：如果发现竞争性的初始化，就 spin 在那里，等待条件恢复；否则利用 CAS 设置排他标志。如果成功则进行初始化；否则重试。</p>
+<p>请参考下面代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">private final Node&lt;K,V&gt;[] initTable() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Node&lt;K,V&gt;[] tab; int sc;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while ((tab = table) == null || tab.length == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 如果发现冲突，进行 spin 等待
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if ((sc = sizeCtl) &lt; 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Thread.yield(); 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // CAS 成功返回 true，则进入真正的初始化逻辑
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else if (U.compareAndSetInt(this, SIZECTL, sc, -1)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if ((tab = table) == null || tab.length == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    int n = (sc &gt; 0) ? sc : DEFAULT_CAPACITY;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    @SuppressWarnings(&#34;unchecked&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    Node&lt;K,V&gt;[] nt = (Node&lt;K,V&gt;[])new Node&lt;?,?&gt;[n];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    table = tab = nt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    sc = n - (n &gt;&gt;&gt; 2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                sizeCtl = sc;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return tab;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当 bin 为空时，同样是没有必要锁定，也是以 CAS 操作去放置。</p>
+<p>你有没有注意到，在同步逻辑上，它使用的是 synchronized，而不是通常建议的 ReentrantLock 之类，这是为什么呢？现代 JDK 中，synchronized 已经被不断优化，可以不再过分担心性能差异，另外，相比于 ReentrantLock，它可以减少内存消耗，这是个非常大的优势。</p>
+<p>与此同时，更多细节实现通过使用 Unsafe 进行了优化，例如 tabAt 就是直接利用 getObjectAcquire，避免间接调用的开销。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static final &lt;K,V&gt; Node&lt;K,V&gt; tabAt(Node&lt;K,V&gt;[] tab, int i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return (Node&lt;K,V&gt;)U.getObjectAcquire(tab, ((long)i &lt;&lt; ASHIFT) + ABASE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再看看，现在是如何实现 size 操作的。<a href="./ConcurrentHashMap.java.md">阅读代码</a>你会发现，真正的逻辑是在 sumCount 方法中，那么 sumCount 做了什么呢？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final long sumCount() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    CounterCell[] as = counterCells; CounterCell a;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    long sum = baseCount;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (as != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        for (int i = 0; i &lt; as.length; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if ((a = as[i]) != null)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                sum += a.value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return sum;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们发现，虽然思路仍然和以前类似，都是分而治之的进行计数，然后求和处理，但实现却基于一个奇怪的 CounterCell。难道它的数值，就更加准确吗？数据一致性是怎么保证的？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static final class CounterCell {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    volatile long value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    CounterCell(long x) { value = x; }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其实，对于 CounterCell 的操作，是基于 java.util.concurrent.atomic.LongAdder 进行的，是一种 JVM 利用空间换取更高效率的方法，利用了<a href="./Striped64.java.md">Striped64</a>内部的复杂逻辑。这个东西非常小众，大多数情况下，建议还是使用 AtomicLong，足以满足绝大部分应用的性能需求。</p>
+<p>今天我从线程安全问题开始，概念性的总结了基本容器工具，分析了早期同步容器的问题，进而分析了 Java 7 和 Java 8 中 ConcurrentHashMap 是如何设计实现的，希望 ConcurrentHashMap 的并发技巧对你在日常开发可以有所帮助。</p>
+<h2 id="一课一练">一课一练</h2>
+<p>关于今天我们讨论的题目你做到心中有数了吗？留一个道思考题给你，在产品代码中，有没有典型的场景需要使用类似 ConcurrentHashMap 这样的并发容器呢？</p>
+<p>请你在留言区写写你对这个问题的思考，我会选出经过认真思考的留言，送给你一份学习鼓励金，欢迎你与我一起讨论。</p>
+<p>你的朋友是不是也在准备面试呢？你可以“请朋友读”，把今天的题目分享给好友，或许你能帮到他。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E9%9D%A2%E8%AF%95%E7%B2%BE%E8%AE%B2/ad11e858c146d898be1a6f5d5838732b.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E9%9D%A2%E8%AF%95%E7%B2%BE%E8%AE%B2/">Java核心技术面试精讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8A%80%E6%9C%AF%E9%A2%86%E5%AF%BC%E5%8A%9B300%E8%AE%B2/%E7%AC%AC10%E8%AE%B2__%E5%88%9B%E4%B8%9A%E5%85%AC%E5%8F%B8cto%E7%9A%84%E8%AE%A4%E7%9F%A5%E5%8D%87%E7%BA%A7/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">第10讲__创业公司CTO的认知升级</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BA%E5%8C%BA%E5%9D%97%E9%93%BE/%E7%AC%AC10%E8%AE%B2__%E6%B7%B1%E5%85%A5%E5%8C%BA%E5%9D%97%E9%93%BE%E6%8A%80%E6%9C%AF%E4%BA%8Cp2p%E7%BD%91%E7%BB%9C/">
+            <span class="next-text nav-default">第10讲__深入区块链技术（二）：P2P网络</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

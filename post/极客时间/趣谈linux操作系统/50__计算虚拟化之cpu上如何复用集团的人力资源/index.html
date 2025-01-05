@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>50__计算虚拟化之CPU（上）：如何复用集团的人力资源？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="上一节，我们讲了一下虚拟化的基本原理，以及 qemu、kvm 之间的关系。这一节，我们就来看一下，用户态的 qemu 和内核态的 kvm 如何一起协作，来创建虚拟机，实现 CPU 和内存虚拟化。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/50__%E8%AE%A1%E7%AE%97%E8%99%9A%E6%8B%9F%E5%8C%96%E4%B9%8Bcpu%E4%B8%8A%E5%A6%82%E4%BD%95%E5%A4%8D%E7%94%A8%E9%9B%86%E5%9B%A2%E7%9A%84%E4%BA%BA%E5%8A%9B%E8%B5%84%E6%BA%90/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/50__%E8%AE%A1%E7%AE%97%E8%99%9A%E6%8B%9F%E5%8C%96%E4%B9%8Bcpu%E4%B8%8A%E5%A6%82%E4%BD%95%E5%A4%8D%E7%94%A8%E9%9B%86%E5%9B%A2%E7%9A%84%E4%BA%BA%E5%8A%9B%E8%B5%84%E6%BA%90/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="50__计算虚拟化之CPU（上）：如何复用集团的人力资源？">
+  <meta property="og:description" content="上一节，我们讲了一下虚拟化的基本原理，以及 qemu、kvm 之间的关系。这一节，我们就来看一下，用户态的 qemu 和内核态的 kvm 如何一起协作，来创建虚拟机，实现 CPU 和内存虚拟化。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="趣谈Linux操作系统">
+
+  <meta itemprop="name" content="50__计算虚拟化之CPU（上）：如何复用集团的人力资源？">
+  <meta itemprop="description" content="上一节，我们讲了一下虚拟化的基本原理，以及 qemu、kvm 之间的关系。这一节，我们就来看一下，用户态的 qemu 和内核态的 kvm 如何一起协作，来创建虚拟机，实现 CPU 和内存虚拟化。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6710">
+  <meta itemprop="keywords" content="趣谈Linux操作系统">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="50__计算虚拟化之CPU（上）：如何复用集团的人力资源？">
+  <meta name="twitter:description" content="上一节，我们讲了一下虚拟化的基本原理，以及 qemu、kvm 之间的关系。这一节，我们就来看一下，用户态的 qemu 和内核态的 kvm 如何一起协作，来创建虚拟机，实现 CPU 和内存虚拟化。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">50__计算虚拟化之CPU（上）：如何复用集团的人力资源？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6710 字 </span>
+          <span class="more-meta"> 预计阅读 14 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#1-初始化所有的-module">1. 初始化所有的 Module</a></li>
+        <li><a href="#2-解析-qemu-的命令行">2. 解析 qemu 的命令行</a></li>
+        <li><a href="#3-初始化-machine">3. 初始化 machine</a></li>
+        <li><a href="#总结时刻">总结时刻</a></li>
+        <li><a href="#课堂练习">课堂练习</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>上一节，我们讲了一下虚拟化的基本原理，以及 qemu、kvm 之间的关系。这一节，我们就来看一下，用户态的 qemu 和内核态的 kvm 如何一起协作，来创建虚拟机，实现 CPU 和内存虚拟化。</p>
+<p>这里是上一节我们讲的 qemu 启动时候的命令。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">qemu-system-x86_64 -enable-kvm -name ubuntutest  -m 2048 -hda ubuntutest.qcow2 -vnc :19 -net nic,model=virtio -nettap,ifname=tap0,script=no,downscript=no
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接下来，我们在<a href="./www.qemu.org.md">这里下载</a>qemu 的代码。qemu 的 main 函数在 vl.c 下面。这是一个非常非常长的函数，我们来慢慢地解析它。</p>
+<h2 id="1-初始化所有的-module">1. 初始化所有的 Module</h2>
+<p>第一步，初始化所有的 Module，调用下面的函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">module_call_init(MODULE_INIT_QOM);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上一节我们讲过，qemu 作为中间人其实挺累的，对上面的虚拟机需要模拟各种各样的外部设备。当虚拟机真的要使用物理资源的时候，对下面的物理机上的资源要进行请求，所以它的工作模式有点儿类似操作系统对接驱动。驱动要符合一定的格式，才能算操作系统的一个模块。同理，qemu 为了模拟各种各样的设备，也需要管理各种各样的模块，这些模块也需要符合一定的格式。</p>
+<p>定义一个 qemu 模块会调用 type_init。例如，kvm 的模块要在 accel/kvm/kvm-all.c 文件里面实现。在这个文件里面，有一行下面的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">type_init</span><span class="p">(</span><span class="n">kvm_type_init</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="c1">#define type_init(function) module_init(function, MODULE_INIT_QOM)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="c1">#define module_init(function, type)                                         \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">void</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">constructor</span><span class="p">))</span> <span class="n">do_qemu_init_</span> <span class="c1">## function(void)    \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>                                                                           \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">register_module_init</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">type</span><span class="p">);</span>                                   \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">void</span> <span class="n">register_module_init</span><span class="p">(</span><span class="n">void</span> <span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)(</span><span class="n">void</span><span class="p">),</span> <span class="n">module_init_type</span> <span class="n">type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ModuleEntry</span> <span class="o">*</span><span class="n">e</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ModuleTypeList</span> <span class="o">*</span><span class="n">l</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">e</span> <span class="o">=</span> <span class="n">g_malloc0</span><span class="p">(</span><span class="n">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">e</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">e</span><span class="o">-&gt;</span><span class="n">init</span> <span class="o">=</span> <span class="n">fn</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">l</span> <span class="o">=</span> <span class="n">find_type</span><span class="p">(</span><span class="n">type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">QTAILQ_INSERT_TAIL</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">node</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从代码里面的定义我们可以看出来，type_init 后面的参数是一个函数，调用 type_init 就相当于调用 module_init，在这里函数就是 kvm_type_init，类型就是 MODULE_INIT_QOM。是不是感觉和驱动有点儿像？</p>
+<p>module_init 最终要调用 register_module_init。属于 MODULE_INIT_QOM 这种类型的，有一个 Module 列表 ModuleTypeList，列表里面是一项一项的 ModuleEntry。KVM 就是其中一项，并且会初始化每一项的 init 函数为参数表示的函数 fn，也即 KVM 这个 module 的 init 函数就是 kvm_type_init。</p>
+<p>当然，MODULE_INIT_QOM 这种类型会有很多很多的 module，从后面的代码我们可以看到，所有调用 type_init 的地方都注册了一个 MODULE_INIT_QOM 类型的 Module。</p>
+<p>了解了 Module 的注册机制，我们继续回到 main 函数中 module_call_init 的调用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void module_call_init(module_init_type type)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ModuleTypeList *l;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ModuleEntry *e;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    l = find_type(type);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    QTAILQ_FOREACH(e, l, node) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        e-&gt;init();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 module_call_init 中，我们会找到 MODULE_INIT_QOM 这种类型对应的 ModuleTypeList，找出列表中所有的 ModuleEntry，然后调用每个 ModuleEntry 的 init 函数。这里需要注意的是，在 module_call_init 调用的这一步，所有 Module 的 init 函数都已经被调用过了。</p>
+<p>后面我们会看到很多的 Module，当你看到它们的时候，你需要意识到，它的 init 函数在这里也被调用过了。这里我们还是以对于 kvm 这个 module 为例子，看看它的 init 函数都做了哪些事情。你会发现，其实它调用的是 kvm_type_init。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">void</span> <span class="n">kvm_type_init</span><span class="p">(</span><span class="n">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">type_register_static</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kvm_accel_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">type_register_static</span><span class="p">(</span><span class="k">const</span> <span class="n">TypeInfo</span> <span class="o">*</span><span class="n">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">type_register</span><span class="p">(</span><span class="n">info</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">type_register</span><span class="p">(</span><span class="k">const</span> <span class="n">TypeInfo</span> <span class="o">*</span><span class="n">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="nb">assert</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">parent</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">type_register_internal</span><span class="p">(</span><span class="n">info</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">type_register_internal</span><span class="p">(</span><span class="k">const</span> <span class="n">TypeInfo</span> <span class="o">*</span><span class="n">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">ti</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span> <span class="o">=</span> <span class="n">type_new</span><span class="p">(</span><span class="n">info</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">type_table_add</span><span class="p">(</span><span class="n">ti</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">ti</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">type_new</span><span class="p">(</span><span class="k">const</span> <span class="n">TypeInfo</span> <span class="o">*</span><span class="n">info</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">ti</span> <span class="o">=</span> <span class="n">g_malloc0</span><span class="p">(</span><span class="n">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">ti</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">i</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="p">(</span><span class="n">type_table_lookup</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">)</span> <span class="o">!=</span> <span class="n">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ti</span><span class="o">-&gt;</span><span class="n">name</span> <span class="o">=</span> <span class="n">g_strdup</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">=</span> <span class="n">g_strdup</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">parent</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ti</span><span class="o">-&gt;</span><span class="n">class_size</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">class_size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">instance_size</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">instance_size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ti</span><span class="o">-&gt;</span><span class="n">class_init</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">class_init</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">class_base_init</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">class_base_init</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">class_data</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">class_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ti</span><span class="o">-&gt;</span><span class="n">instance_init</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">instance_init</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">instance_post_init</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">instance_post_init</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">instance_finalize</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">instance_finalize</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ti</span><span class="o">-&gt;</span><span class="n">abstract</span> <span class="o">=</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">abstract</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">interfaces</span> <span class="o">&amp;&amp;</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">interfaces</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">type</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">ti</span><span class="o">-&gt;</span><span class="n">interfaces</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">typename</span> <span class="o">=</span> <span class="n">g_strdup</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">interfaces</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ti</span><span class="o">-&gt;</span><span class="n">num_interfaces</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">return</span> <span class="n">ti</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">void</span> <span class="n">type_table_add</span><span class="p">(</span><span class="n">TypeImpl</span> <span class="o">*</span><span class="n">ti</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="nb">assert</span><span class="p">(</span><span class="o">!</span><span class="n">enumerating_types</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">g_hash_table_insert</span><span class="p">(</span><span class="n">type_table_get</span><span class="p">(),</span> <span class="p">(</span><span class="n">void</span> <span class="o">*</span><span class="p">)</span><span class="n">ti</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">ti</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">GHashTable</span> <span class="o">*</span><span class="n">type_table_get</span><span class="p">(</span><span class="n">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">static</span> <span class="n">GHashTable</span> <span class="o">*</span><span class="n">type_table</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="p">(</span><span class="n">type_table</span> <span class="o">==</span> <span class="n">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">type_table</span> <span class="o">=</span> <span class="n">g_hash_table_new</span><span class="p">(</span><span class="n">g_str_hash</span><span class="p">,</span> <span class="n">g_str_equal</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">return</span> <span class="n">type_table</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="k">const</span> <span class="n">TypeInfo</span> <span class="n">kvm_accel_type</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">TYPE_KVM_ACCEL</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="n">TYPE_ACCEL</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">.</span><span class="n">class_init</span> <span class="o">=</span> <span class="n">kvm_accel_class_init</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">.</span><span class="n">instance_size</span> <span class="o">=</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">KVMState</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每一个 Module 既然要模拟某种设备，那应该定义一种类型 TypeImpl 来表示这些设备，这其实是一种面向对象编程的思路，只不过这里用的是纯 C 语言的实现，所以需要变相实现一下类和对象。</p>
+<p>kvm_type_init 会注册 kvm_accel_type，定义上面的代码，我们可以认为这样动态定义了一个类。这个类的名字是 TYPE_KVM_ACCEL，这个类有父类 TYPE_ACCEL，这个类的初始化应该调用函数 kvm_accel_class_init（看，这里已经直接叫类 class 了）。如果用这个类声明一个对象，对象的大小应该是 instance_size。是不是有点儿 Java 语言反射的意思，根据一些名称的定义，一个类就定义好了。</p>
+<p>这里的调用链为：kvm_type_init-&gt;type_register_static-&gt;type_register-&gt;type_register_internal。</p>
+<p>在 type_register_internal 中，我们会根据 kvm_accel_type 这个 TypeInfo，创建一个 TypeImpl 来表示这个新注册的类，也就是说，TypeImpl 才是我们想要声明的那个 class。在 qemu 里面，有一个全局的哈希表 type_table，用来存放所有定义的类。在 type_new 里面，我们先从全局表里面根据名字找这个类。如果找到，说明这个类曾经被注册过，就报错；如果没有找到，说明这是一个新的类，则将 TypeInfo 里面信息填到 TypeImpl 里面。type_table_add 会将这个类注册到全局的表里面。到这里，我们注意，class_init 还没有被调用，也即这个类现在还处于纸面的状态。</p>
+<p>这点更加像 Java 的反射机制了。在 Java 里面，对于一个类，首先我们写代码的时候要写一个 class xxx 的定义，编译好就放在.class 文件中，这也是出于纸面的状态。然后，Java 会有一个 Class 对象，用于读取和表示这个纸面上的 class xxx，可以生成真正的对象。</p>
+<p>相同的过程在后面的代码中我们也可以看到，class_init 会生成 XXXClass，就相当于 Java 里面的 Class 对象，TypeImpl 还会有一个 instance_init 函数，相当于构造函数，用于根据 XXXClass 生成 Object，这就相当于 Java 反射里面最终创建的对象。和构造函数对应的还有 instance_finalize，相当于析构函数。</p>
+<p>这一套反射机制放在 qom 文件夹下面，全称 QEMU Object Model，也即用 C 实现了一套面向对象的反射机制。</p>
+<p>说完了初始化 Module，我们还回到 main 函数接着分析。</p>
+<h2 id="2-解析-qemu-的命令行">2. 解析 qemu 的命令行</h2>
+<p>第二步我们就要开始解析 qemu 的命令行了。qemu 的命令行解析，就是下面这样一长串。还记得咱们自己写过一个解析命令行参数的程序吗？这里的 opts 是差不多的意思。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_drive_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_chardev_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_device_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_netdev_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_nic_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_net_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_rtc_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_machine_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_accel_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_mem_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_smp_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_boot_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_name_opts);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    qemu_add_opts(&amp;qemu_numa_opts);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>为什么有这么多的 opts 呢？这是因为，我们上一节给的参数都是简单的参数，实际运行中创建的 kvm 参数会复杂 N 倍。这里我们贴一个开源云平台软件 OpenStack 创建出来的 KVM 的参数，如下所示。不要被吓坏，你不需要全部看懂，只需要看懂一部分就行了。具体我来给你解析。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">qemu</span><span class="o">-</span><span class="n">system</span><span class="o">-</span><span class="n">x86_64</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">enable</span><span class="o">-</span><span class="n">kvm</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">name</span> <span class="n">instance</span><span class="o">-</span><span class="mi">00000024</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">machine</span> <span class="n">pc</span><span class="o">-</span><span class="n">i440fx</span><span class="o">-</span><span class="n">trusty</span><span class="p">,</span><span class="n">accel</span><span class="o">=</span><span class="n">kvm</span><span class="p">,</span><span class="n">usb</span><span class="o">=</span><span class="n">off</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">cpu</span> <span class="n">SandyBridge</span><span class="p">,</span><span class="o">+</span><span class="n">erms</span><span class="p">,</span><span class="o">+</span><span class="n">smep</span><span class="p">,</span><span class="o">+</span><span class="n">fsgsbase</span><span class="p">,</span><span class="o">+</span><span class="n">pdpe1gb</span><span class="p">,</span><span class="o">+</span><span class="n">rdrand</span><span class="p">,</span><span class="o">+</span><span class="n">f16c</span><span class="p">,</span><span class="o">+</span><span class="n">osxsave</span><span class="p">,</span><span class="o">+</span><span class="n">dca</span><span class="p">,</span><span class="o">+</span><span class="n">pcid</span><span class="p">,</span><span class="o">+</span><span class="n">pdcm</span><span class="p">,</span><span class="o">+</span><span class="n">xtpr</span><span class="p">,</span><span class="o">+</span><span class="n">tm2</span><span class="p">,</span><span class="o">+</span><span class="n">est</span><span class="p">,</span><span class="o">+</span><span class="n">smx</span><span class="p">,</span><span class="o">+</span><span class="n">vmx</span><span class="p">,</span><span class="o">+</span><span class="n">ds_cpl</span><span class="p">,</span><span class="o">+</span><span class="n">monitor</span><span class="p">,</span><span class="o">+</span><span class="n">dtes64</span><span class="p">,</span><span class="o">+</span><span class="n">pbe</span><span class="p">,</span><span class="o">+</span><span class="n">tm</span><span class="p">,</span><span class="o">+</span><span class="n">ht</span><span class="p">,</span><span class="o">+</span><span class="n">ss</span><span class="p">,</span><span class="o">+</span><span class="n">acpi</span><span class="p">,</span><span class="o">+</span><span class="n">ds</span><span class="p">,</span><span class="o">+</span><span class="n">vme</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">m</span> <span class="mi">2048</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">smp</span> <span class="mi">1</span><span class="p">,</span><span class="n">sockets</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">cores</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">threads</span><span class="o">=</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">rtc</span> <span class="n">base</span><span class="o">=</span><span class="n">utc</span><span class="p">,</span><span class="n">driftfix</span><span class="o">=</span><span class="n">slew</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">drive</span> <span class="n">file</span><span class="o">=/</span><span class="k">var</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">nova</span><span class="o">/</span><span class="n">instances</span><span class="o">/</span><span class="mi">1</span><span class="n">f8e6f7e</span><span class="o">-</span><span class="mi">5</span><span class="n">a70</span><span class="o">-</span><span class="mi">4780</span><span class="o">-</span><span class="mi">89</span><span class="n">c1</span><span class="o">-</span><span class="mi">464</span><span class="n">dc0e7f308</span><span class="o">/</span><span class="n">disk</span><span class="p">,</span><span class="k">if</span><span class="o">=</span><span class="n">none</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">drive</span><span class="o">-</span><span class="n">virtio</span><span class="o">-</span><span class="n">disk0</span><span class="p">,</span><span class="n">format</span><span class="o">=</span><span class="n">qcow2</span><span class="p">,</span><span class="n">cache</span><span class="o">=</span><span class="n">none</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">device</span> <span class="n">virtio</span><span class="o">-</span><span class="n">blk</span><span class="o">-</span><span class="n">pci</span><span class="p">,</span><span class="n">scsi</span><span class="o">=</span><span class="n">off</span><span class="p">,</span><span class="n">bus</span><span class="o">=</span><span class="n">pci</span><span class="o">.</span><span class="mi">0</span><span class="p">,</span><span class="n">addr</span><span class="o">=</span><span class="mh">0x4</span><span class="p">,</span><span class="n">drive</span><span class="o">=</span><span class="n">drive</span><span class="o">-</span><span class="n">virtio</span><span class="o">-</span><span class="n">disk0</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">virtio</span><span class="o">-</span><span class="n">disk0</span><span class="p">,</span><span class="n">bootindex</span><span class="o">=</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">netdev</span> <span class="n">tap</span><span class="p">,</span><span class="n">fd</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">hostnet0</span><span class="p">,</span><span class="n">vhost</span><span class="o">=</span><span class="n">on</span><span class="p">,</span><span class="n">vhostfd</span><span class="o">=</span><span class="mi">37</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">device</span> <span class="n">virtio</span><span class="o">-</span><span class="n">net</span><span class="o">-</span><span class="n">pci</span><span class="p">,</span><span class="n">netdev</span><span class="o">=</span><span class="n">hostnet0</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">net0</span><span class="p">,</span><span class="n">mac</span><span class="o">=</span><span class="n">fa</span><span class="p">:</span><span class="mi">16</span><span class="p">:</span><span class="mi">3</span><span class="n">e</span><span class="p">:</span><span class="n">d1</span><span class="p">:</span><span class="mi">2</span><span class="n">d</span><span class="p">:</span><span class="mi">99</span><span class="p">,</span><span class="n">bus</span><span class="o">=</span><span class="n">pci</span><span class="o">.</span><span class="mi">0</span><span class="p">,</span><span class="n">addr</span><span class="o">=</span><span class="mh">0x3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">chardev</span> <span class="n">file</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">charserial0</span><span class="p">,</span><span class="n">path</span><span class="o">=/</span><span class="k">var</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">nova</span><span class="o">/</span><span class="n">instances</span><span class="o">/</span><span class="mi">1</span><span class="n">f8e6f7e</span><span class="o">-</span><span class="mi">5</span><span class="n">a70</span><span class="o">-</span><span class="mi">4780</span><span class="o">-</span><span class="mi">89</span><span class="n">c1</span><span class="o">-</span><span class="mi">464</span><span class="n">dc0e7f308</span><span class="o">/</span><span class="n">console</span><span class="o">.</span><span class="n">log</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">vnc</span> <span class="mf">0.0</span><span class="o">.</span><span class="mf">0.0</span><span class="p">:</span><span class="mi">12</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">-</span><span class="n">device</span> <span class="n">cirrus</span><span class="o">-</span><span class="n">vga</span><span class="p">,</span><span class="n">id</span><span class="o">=</span><span class="n">video0</span><span class="p">,</span><span class="n">bus</span><span class="o">=</span><span class="n">pci</span><span class="o">.</span><span class="mi">0</span><span class="p">,</span><span class="n">addr</span><span class="o">=</span><span class="mh">0x2</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>-enable-kvm：表示启用硬件辅助虚拟化。</li>
+<li>-name instance-00000024：表示虚拟机的名称。</li>
+<li>-machine pc-i440fx-trusty,accel=kvm,usb=off：machine 是什么呢？其实就是计算机体系结构。不知道什么是体系结构的话，可以订阅极客时间的另一个专栏《深入浅出计算机组成原理》。<br>
+qemu 会模拟多种体系结构，常用的有普通 PC 机，也即 x86 的 32 位或者 64 位的体系结构、Mac 电脑 PowerPC 的体系结构、Sun 的体系结构、MIPS 的体系结构，精简指令集。如果使用 KVM hardware-assisted virtualization，也即 BIOS 中 VD-T 是打开的，则参数中 accel=kvm。如果不使用 hardware-assisted virtualization，用的是纯模拟，则有参数 accel = tcg，-no-kvm。</li>
+<li>-cpu SandyBridge,+erms,+smep,+fsgsbase,+pdpe1gb,+rdrand,+f16c,+osxsave,+dca,+pcid,+pdcm,+xtpr,+tm2,+est,+smx,+vmx,+ds_cpl,+monitor,+dtes64,+pbe,+tm,+ht,+ss,+acpi,+ds,+vme：表示设置 CPU，SandyBridge 是 Intel 处理器，后面的加号都是添加的 CPU 的参数，这些参数会显示在 /proc/cpuinfo 里面。</li>
+<li>-m 2048：表示内存。</li>
+<li>-smp 1,sockets=1,cores=1,threads=1：SMP 我们解析过，叫对称多处理器，和 NUMA 对应。qemu 仿真了一个具有 1 个 vcpu，一个 socket，一个 core，一个 threads 的处理器。<br>
+socket、core、threads 是什么概念呢？socket 就是主板上插 cpu 的槽的数目，也即常说的“路”，core 就是我们平时说的“核”，即双核、4 核等。thread 就是每个 core 的硬件线程数，即超线程。举个具体的例子，某个服务器是：2 路 4 核超线程（一般默认为 2 个线程），通过 cat /proc/cpuinfo，我们看到的是 2_4_2=16 个 processor，很多人也习惯成为 16 核了。</li>
+<li>-rtc base=utc,driftfix=slew：表示系统时间由参数 -rtc 指定。</li>
+<li>-device cirrus-vga,id=video0,bus=pci.0,addr=0x2：表示显示器用参数 -vga 设置，默认为 cirrus，它模拟了 CL-GD5446PCI VGA card。</li>
+<li>有关网卡，使用 -net 参数和 -device。</li>
+<li>从 HOST 角度：-netdev tap,fd=32,id=hostnet0,vhost=on,vhostfd=37。</li>
+<li>从 GUEST 角度：-device virtio-net-pci,netdev=hostnet0,id=net0,mac=fa:16:3e:d1:2d:99,bus=pci.0,addr=0x3。</li>
+<li>有关硬盘，使用 -hda -hdb，或者使用 -drive 和 -device。</li>
+<li>从 HOST 角度：-drive file=/var/lib/nova/instances/1f8e6f7e-5a70-4780-89c1-464dc0e7f308/disk,if=none,id=drive-virtio-disk0,format=qcow2,cache=none</li>
+<li>从 GUEST 角度：-device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x4,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1</li>
+<li>-vnc 0.0.0.0:12：设置 VNC。</li>
+</ul>
+<p>在 main 函数中，接下来的 for 循环和大量的 switch case 语句，就是对于这些参数的解析，我们不一一解析，后面真的用到这些参数的时候，我们再仔细看。</p>
+<h2 id="3-初始化-machine">3. 初始化 machine</h2>
+<p>回到 main 函数，接下来是初始化 machine。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">machine_class = select_machine();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">current_machine = MACHINE(object_new(object_class_get_name(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                          OBJECT_CLASS(machine_class))));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里面的 machine_class 是什么呢？这还得从 machine 参数说起。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-machine pc-i440fx-trusty,accel=kvm,usb=off
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的 pc-i440fx 是 x86 机器默认的体系结构。在 hw/i386/pc_piix.c 中，它定义了对应的 machine_class。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">DEFINE_I440FX_MACHINE</span><span class="p">(</span><span class="n">v4_0</span><span class="p">,</span> <span class="s2">&#34;pc-i440fx-4.0&#34;</span><span class="p">,</span> <span class="n">NULL</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                      <span class="n">pc_i440fx_4_0_machine_options</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="c1">#define DEFINE_I440FX_MACHINE(suffix, name, compatfn, optionfn) \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">static</span> <span class="n">void</span> <span class="n">pc_init_</span><span class="c1">##suffix(MachineState *machine) \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">{</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pc_init1</span><span class="p">(</span><span class="n">machine</span><span class="p">,</span> <span class="n">TYPE_I440FX_PCI_HOST_BRIDGE</span><span class="p">,</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 <span class="n">TYPE_I440FX_PCI_DEVICE</span><span class="p">);</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">DEFINE_PC_MACHINE</span><span class="p">(</span><span class="n">suffix</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">pc_init_</span><span class="c1">##suffix, optionfn)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="c1">#define DEFINE_PC_MACHINE(suffix, namestr, initfn, optsfn) \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">static</span> <span class="n">void</span> <span class="n">pc_machine_</span><span class="c1">##suffix##_class_init(ObjectClass *oc, void *data</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">)</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">{</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">MachineClass</span> <span class="o">*</span><span class="n">mc</span> <span class="o">=</span> <span class="n">MACHINE_CLASS</span><span class="p">(</span><span class="n">oc</span><span class="p">);</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">optsfn</span><span class="p">(</span><span class="n">mc</span><span class="p">);</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">mc</span><span class="o">-&gt;</span><span class="n">init</span> <span class="o">=</span> <span class="n">initfn</span><span class="p">;</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">static</span> <span class="k">const</span> <span class="n">TypeInfo</span> <span class="n">pc_machine_type_</span><span class="c1">##suffix = { \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">name</span>       <span class="o">=</span> <span class="n">namestr</span> <span class="n">TYPE_MACHINE_SUFFIX</span><span class="p">,</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">parent</span>     <span class="o">=</span> <span class="n">TYPE_PC_MACHINE</span><span class="p">,</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">class_init</span> <span class="o">=</span> <span class="n">pc_machine_</span><span class="c1">##suffix##_class_init, \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">};</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">static</span> <span class="n">void</span> <span class="n">pc_machine_init_</span><span class="c1">##suffix(void) \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">{</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">type_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pc_machine_type_</span><span class="c1">##suffix); \</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">type_init</span><span class="p">(</span><span class="n">pc_machine_init_</span><span class="c1">##suffix)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>为了定义 machine_class，这里有一系列的宏定义。入口是 DEFINE_I440FX_MACHINE。这个宏有几个参数，v4_0 是后缀，&ldquo;pc-i440fx-4.0&quot;是名字，pc_i440fx_4_0_machine_options 是一个函数，用于定义 machine_class 相关的选项。这个函数定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static void pc_i440fx_4_0_machine_options(MachineClass *m)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pc_i440fx_machine_options(m);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    m-&gt;alias = &#34;pc&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    m-&gt;is_default = 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> static void pc_i440fx_machine_options(MachineClass *m)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pcmc-&gt;default_nic_model = &#34;e1000&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     m-&gt;family = &#34;pc_piix&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    m-&gt;desc = &#34;Standard PC (i440FX + PIIX, 1996)&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    m-&gt;default_machine_opts = &#34;firmware=bios-256k.bin&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    m-&gt;default_display = &#34;std&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    machine_class_allow_dynamic_sysbus_dev(m, TYPE_RAMFB_DEVICE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们先不看 pc_i440fx_4_0_machine_options，先来看 DEFINE_I440FX_MACHINE。</p>
+<p>这里面定义了一个 pc_init_##suffix，也就是 pc_init_v4_0。这里面转而调用 pc_init1。注意这里这个函数只是定义了一下，没有被调用。</p>
+<p>接下来，DEFINE_I440FX_MACHINE 里面又定义了 DEFINE_PC_MACHINE。它有四个参数，除了 DEFINE_I440FX_MACHINE 传进来的三个参数以外，多了一个 initfn，也即初始化函数，指向刚才定义的 pc_init_##suffix。</p>
+<p>在 DEFINE_PC_MACHINE 中，我们定义了一个函数 pc_machine_##suffix##<em>class_init。从函数的名字 class_init 可以看出，这是 machine_class 从纸面上的 class 初始化为 Class 对象的方法。在这个函数里面，我们可以看到，它创建了一个 MachineClass 对象，这个就是 Class 对象。MachineClass 对象的 init 函数指向上面定义的 pc_init</em>##suffix，说明这个函数是 machine 这种类型初始化的一个函数，后面会被调用。</p>
+<p>接着，我们看 DEFINE_PC_MACHINE。它定义了一个 pc_machine_type_##suffix 的 TypeInfo。这是用于生成纸面上的 class 的原材料，果真后面调用了 type_init。</p>
+<p>看到了 type_init，我们应该能够想到，既然它定义了一个纸面上的 class，那上面的那句 module_call_init，会和我们上面解析的 type_init 是一样的，在全局的表里面注册了一个全局的名字是&quot;pc-i440fx-4.0&quot;的纸面上的 class，也即 TypeImpl。</p>
+<p>现在全局表中有这个纸面上的 class 了。我们回到 select_machine。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">MachineClass</span> <span class="o">*</span><span class="n">select_machine</span><span class="p">(</span><span class="n">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">MachineClass</span> <span class="o">*</span><span class="n">machine_class</span> <span class="o">=</span> <span class="n">find_default_machine</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">optarg</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">QemuOpts</span> <span class="o">*</span><span class="n">opts</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">opts</span> <span class="o">=</span> <span class="n">qemu_get_machine_opts</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">qemu_opts_loc_restore</span><span class="p">(</span><span class="n">opts</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">optarg</span> <span class="o">=</span> <span class="n">qemu_opt_get</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="s2">&#34;type&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">optarg</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">machine_class</span> <span class="o">=</span> <span class="n">machine_parse</span><span class="p">(</span><span class="n">optarg</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">machine_class</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">MachineClass</span> <span class="o">*</span><span class="n">find_default_machine</span><span class="p">(</span><span class="n">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">GSList</span> <span class="o">*</span><span class="n">el</span><span class="p">,</span> <span class="o">*</span><span class="n">machines</span> <span class="o">=</span> <span class="n">object_class_get_list</span><span class="p">(</span><span class="n">TYPE_MACHINE</span><span class="p">,</span> <span class="bp">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">MachineClass</span> <span class="o">*</span><span class="n">mc</span> <span class="o">=</span> <span class="n">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">for</span> <span class="p">(</span><span class="n">el</span> <span class="o">=</span> <span class="n">machines</span><span class="p">;</span> <span class="n">el</span><span class="p">;</span> <span class="n">el</span> <span class="o">=</span> <span class="n">el</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">MachineClass</span> <span class="o">*</span><span class="n">temp</span> <span class="o">=</span> <span class="n">el</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">temp</span><span class="o">-&gt;</span><span class="n">is_default</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">mc</span> <span class="o">=</span> <span class="n">temp</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">g_slist_free</span><span class="p">(</span><span class="n">machines</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">mc</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">MachineClass</span> <span class="o">*</span><span class="n">machine_parse</span><span class="p">(</span><span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">name</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">MachineClass</span> <span class="o">*</span><span class="n">mc</span> <span class="o">=</span> <span class="n">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">GSList</span> <span class="o">*</span><span class="n">el</span><span class="p">,</span> <span class="o">*</span><span class="n">machines</span> <span class="o">=</span> <span class="n">object_class_get_list</span><span class="p">(</span><span class="n">TYPE_MACHINE</span><span class="p">,</span> <span class="bp">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">mc</span> <span class="o">=</span> <span class="n">find_machine</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">mc</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">g_slist_free</span><span class="p">(</span><span class="n">machines</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">mc</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 select_machine 中，有两种方式可以生成 MachineClass。一种方式是 find_default_machine，找一个默认的；另一种方式是 machine_parse，通过解析参数生成 MachineClass。无论哪种方式，都会调用 object_class_get_list 获得一个 MachineClass 的列表，然后在里面找。object_class_get_list 定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">GSList</span> <span class="o">*</span><span class="n">object_class_get_list</span><span class="p">(</span><span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">implements_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                              <span class="ne">bool</span> <span class="n">include_abstract</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">GSList</span> <span class="o">*</span><span class="n">list</span> <span class="o">=</span> <span class="n">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">object_class_foreach</span><span class="p">(</span><span class="n">object_class_get_list_tramp</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                         <span class="n">implements_type</span><span class="p">,</span> <span class="n">include_abstract</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">list</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">list</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">void</span> <span class="n">object_class_foreach</span><span class="p">(</span><span class="n">void</span> <span class="p">(</span><span class="o">*</span><span class="n">fn</span><span class="p">)(</span><span class="n">ObjectClass</span> <span class="o">*</span><span class="n">klass</span><span class="p">,</span> <span class="n">void</span> <span class="o">*</span><span class="n">opaque</span><span class="p">),</span> <span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">implements_type</span><span class="p">,</span> <span class="ne">bool</span> <span class="n">include_abstract</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                          <span class="n">void</span> <span class="o">*</span><span class="n">opaque</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">OCFData</span> <span class="n">data</span> <span class="o">=</span> <span class="p">{</span> <span class="n">fn</span><span class="p">,</span> <span class="n">implements_type</span><span class="p">,</span> <span class="n">include_abstract</span><span class="p">,</span> <span class="n">opaque</span> <span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">enumerating_types</span> <span class="o">=</span> <span class="bp">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">g_hash_table_foreach</span><span class="p">(</span><span class="n">type_table_get</span><span class="p">(),</span> <span class="n">object_class_foreach_tramp</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">enumerating_types</span> <span class="o">=</span> <span class="bp">false</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在全局表 type_table_get() 中，对于每一项 TypeImpl，我们都执行 object_class_foreach_tramp。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static void object_class_foreach_tramp(gpointer key, gpointer value,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                       gpointer opaque)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    OCFData *data = opaque;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    TypeImpl *type = value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ObjectClass *k;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     type_initialize(type);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    k = type-&gt;class;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    data-&gt;fn(k, data-&gt;opaque);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> static void type_initialize(TypeImpl *ti)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    TypeImpl *parent;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ti-&gt;class_size = type_class_get_size(ti);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ti-&gt;instance_size = type_object_get_size(ti);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (ti-&gt;instance_size == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ti-&gt;abstract = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ti-&gt;class = g_malloc0(ti-&gt;class_size);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ti-&gt;class-&gt;type = ti;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while (parent) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (parent-&gt;class_base_init) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            parent-&gt;class_base_init(ti-&gt;class, ti-&gt;class_data);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        parent = type_get_parent(parent);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     if (ti-&gt;class_init) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ti-&gt;class_init(ti-&gt;class, ti-&gt;class_data);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 object_class_foreach_tramp 中，会调用将 type_initialize，这里面会调用 class_init 将纸面上的 class 也即 TypeImpl 变为 ObjectClass，ObjectClass 是所有 Class 类的祖先，MachineClass 是它的子类。</p>
+<p>因为在 machine 的命令行里面，我们指定了名字为&quot;pc-i440fx-4.0&rdquo;，就肯定能够找到我们注册过了的 TypeImpl，并调用它的 class_init 函数。</p>
+<p>因而 pc_machine_##suffix##<em>class_init 会被调用，在这里面，pc_i440fx_machine_options 才真正被调用初始化 MachineClass，并且将 MachineClass 的 init 函数设置为 pc_init</em>##suffix。也即，当 select_machine 执行完毕后，就有一个 MachineClass 了。</p>
+<p>接着，我们回到 object_new。这就很好理解了，MachineClass 是一个 Class 类，接下来应该通过它生成一个 Instance，也即对象，这就是 object_new 的作用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">Object</span> <span class="o">*</span><span class="n">object_new</span><span class="p">(</span><span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">typename</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">TypeImpl</span> <span class="o">*</span><span class="n">ti</span> <span class="o">=</span> <span class="n">type_get_by_name</span><span class="p">(</span><span class="n">typename</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">return</span> <span class="n">object_new_with_type</span><span class="p">(</span><span class="n">ti</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="ne">Object</span> <span class="o">*</span><span class="n">object_new_with_type</span><span class="p">(</span><span class="n">Type</span> <span class="n">type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">Object</span> <span class="o">*</span><span class="n">obj</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">type_initialize</span><span class="p">(</span><span class="n">type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">obj</span> <span class="o">=</span> <span class="n">g_malloc</span><span class="p">(</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">instance_size</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">object_initialize_with_type</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">type</span><span class="o">-&gt;</span><span class="n">instance_size</span><span class="p">,</span> <span class="n">type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">obj</span><span class="o">-&gt;</span><span class="n">free</span> <span class="o">=</span> <span class="n">g_free</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">return</span> <span class="n">obj</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>object_new 中，TypeImpl 的 instance_init 会被调用，创建一个对象。current_machine 就是这个对象，它的类型是 MachineState。</p>
+<p>至此，绕了这么大一圈，有关体系结构的对象才创建完毕，接下来很多的设备的初始化，包括 CPU 和内存的初始化，都是围绕着体系结构的对象来的，后面我们会常常看到 current_machine。</p>
+<h2 id="总结时刻">总结时刻</h2>
+<p>这一节，我们学到，虚拟机对于设备的模拟是一件非常复杂的事情，需要用复杂的参数模拟各种各样的设备。为了能够适配这些设备，qemu 定义了自己的模块管理机制，只有了解了这种机制，后面看每一种设备的虚拟化的时候，才有一个整体的思路。</p>
+<p>这里的 MachineClass 是我们遇到的第一个，我们需要掌握它里面各种定义之间的关系。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/d56fa5e69a38ed70506292b56b141ce5.png" alt=""></p>
+<p>每个模块都会有一个定义 TypeInfo，会通过 type_init 变为全局的 TypeImpl。TypeInfo 以及生成的 TypeImpl 有以下成员：</p>
+<ul>
+<li>name 表示当前类型的名称</li>
+<li>parent 表示父类的名称</li>
+<li>class_init 用于将 TypeImpl 初始化为 MachineClass</li>
+<li>instance_init 用于将 MachineClass 初始化为 MachineState</li>
+</ul>
+<p>所以，以后遇到任何一个类型的时候，将父类和子类之间的关系，以及对应的初始化函数都要看好，这样就一目了然了。</p>
+<h2 id="课堂练习">课堂练习</h2>
+<p>你可能会问，这么复杂的 qemu 命令，我是怎么找到的，当然不是我一个字一个字打的，这是著名的云平台管理软件 OpenStack 创建虚拟机的时候自动生成的命令行。所以，给你留一道课堂练习题，请你看一下 OpenStack 的基本原理，看它是通过什么工具来管理如此复杂的命令行的。</p>
+<p>欢迎留言和我分享你的疑惑和见解，也欢迎可以收藏本节内容，反复研读。你也可以把今天的内容分享给你的朋友，和他一起学习和进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/1a5564dd4e1c9f25d4772c7f844ca84a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/">趣谈Linux操作系统</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/50__%E5%BC%B9%E5%8A%9B%E8%AE%BE%E8%AE%A1%E7%AF%87%E4%B9%8B%E9%99%8D%E7%BA%A7%E8%AE%BE%E8%AE%A1/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">50__弹力设计篇之“降级设计”</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/50__%E8%AE%A9%E6%97%A5%E5%BF%97%E6%97%A0%E5%A4%84%E5%8F%AF%E9%80%83%E5%AE%B9%E5%99%A8%E6%97%A5%E5%BF%97%E6%94%B6%E9%9B%86%E4%B8%8E%E7%AE%A1%E7%90%86/">
+            <span class="next-text nav-default">50__让日志无处可逃：容器日志收集与管理</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

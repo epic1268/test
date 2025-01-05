@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>06__Stream如何提高遍历集合效率？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是刘超。
+上一讲中，我在讲 List 集合类，那我想你一定也知道集合的顶端接口 Collection。在 Java8 中，Collection 新增了两个流方法，分别是 Stream() 和 parallelStream()。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/06__stream%E5%A6%82%E4%BD%95%E6%8F%90%E9%AB%98%E9%81%8D%E5%8E%86%E9%9B%86%E5%90%88%E6%95%88%E7%8E%87/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/06__stream%E5%A6%82%E4%BD%95%E6%8F%90%E9%AB%98%E9%81%8D%E5%8E%86%E9%9B%86%E5%90%88%E6%95%88%E7%8E%87/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="06__Stream如何提高遍历集合效率？">
+  <meta property="og:description" content="你好，我是刘超。
+上一讲中，我在讲 List 集合类，那我想你一定也知道集合的顶端接口 Collection。在 Java8 中，Collection 新增了两个流方法，分别是 Stream() 和 parallelStream()。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java性能调优实战">
+
+  <meta itemprop="name" content="06__Stream如何提高遍历集合效率？">
+  <meta itemprop="description" content="你好，我是刘超。
+上一讲中，我在讲 List 集合类，那我想你一定也知道集合的顶端接口 Collection。在 Java8 中，Collection 新增了两个流方法，分别是 Stream() 和 parallelStream()。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5248">
+  <meta itemprop="keywords" content="Java性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="06__Stream如何提高遍历集合效率？">
+  <meta name="twitter:description" content="你好，我是刘超。
+上一讲中，我在讲 List 集合类，那我想你一定也知道集合的顶端接口 Collection。在 Java8 中，Collection 新增了两个流方法，分别是 Stream() 和 parallelStream()。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">06__Stream如何提高遍历集合效率？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5248 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#什么是-stream">什么是 Stream？</a></li>
+        <li><a href="#stream-如何优化遍历">Stream 如何优化遍历？</a>
+          <ul>
+            <li><a href="#1stream-操作分类">1.Stream 操作分类</a></li>
+            <li><a href="#2stream-源码实现">2.Stream 源码实现</a></li>
+            <li><a href="#3stream-操作叠加">3.Stream 操作叠加</a></li>
+            <li><a href="#4stream-并行处理">4.Stream 并行处理</a></li>
+          </ul>
+        </li>
+        <li><a href="#合理使用-stream">合理使用 Stream</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是刘超。</p>
+<p>上一讲中，我在讲 List 集合类，那我想你一定也知道集合的顶端接口 Collection。在 Java8 中，Collection 新增了两个流方法，分别是 Stream() 和 parallelStream()。</p>
+<p>通过英文名不难猜测，这两个方法肯定和 Stream 有关，那进一步猜测，是不是和我们熟悉的 InputStream 和 OutputStream 也有关系呢？集合类中新增的两个 Stream 方法到底有什么作用？今天，我们就来深入了解下 Stream。</p>
+<h2 id="什么是-stream">什么是 Stream？</h2>
+<p>现在很多大数据量系统中都存在分表分库的情况。</p>
+<p>例如，电商系统中的订单表，常常使用用户 ID 的 Hash 值来实现分表分库，这样是为了减少单个表的数据量，优化用户查询订单的速度。</p>
+<p>但在后台管理员审核订单时，他们需要将各个数据源的数据查询到应用层之后进行合并操作。</p>
+<p>例如，当我们需要查询出过滤条件下的所有订单，并按照订单的某个条件进行排序，单个数据源查询出来的数据是可以按照某个条件进行排序的，但多个数据源查询出来已经排序好的数据，并不代表合并后是正确的排序，所以我们需要在应用层对合并数据集合重新进行排序。</p>
+<p>在 Java8 之前，我们通常是通过 for 循环或者 Iterator 迭代来重新排序合并数据，又或者通过重新定义 Collections.sorts 的 Comparator 方法来实现，这两种方式对于大数据量系统来说，效率并不是很理想。</p>
+<p>Java8 中添加了一个新的接口类 Stream，他和我们之前接触的字节流概念不太一样，Java8 集合中的 Stream 相当于高级版的 Iterator，他可以通过 Lambda 表达式对集合进行各种非常便利、高效的聚合操作（Aggregate Operation），或者大批量数据操作 (Bulk Data Operation)。</p>
+<p>Stream 的聚合操作与数据库 SQL 的聚合操作 sorted、filter、map 等类似。我们在应用层就可以高效地实现类似数据库 SQL 的聚合操作了，而在数据操作方面，Stream 不仅可以通过串行的方式实现数据操作，还可以通过并行的方式处理大批量数据，提高数据的处理效率。</p>
+<p><strong>接下来我们就用一个简单的例子来体验下 Stream 的简洁与强大。</strong></p>
+<p>这个 Demo 的需求是过滤分组一所中学里身高在 160cm 以上的男女同学，我们先用传统的迭代方式来实现，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Map&lt;String, List&lt;Student&gt;&gt; stuMap = new HashMap&lt;String, List&lt;Student&gt;&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        for (Student stu: studentsList) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (stu.getHeight() &gt; 160) { // 如果身高大于 160
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (stuMap.get(stu.getSex()) == null) { // 该性别还没分类
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    List&lt;Student&gt; list = new ArrayList&lt;Student&gt;(); // 新建该性别学生的列表
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    list.add(stu);// 将学生放进去列表
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    stuMap.put(stu.getSex(), list);// 将列表放到 map 中
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else { // 该性别分类已存在
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    stuMap.get(stu.getSex()).add(stu);// 该性别分类已存在，则直接放进去即可
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们再使用 Java8 中的 Stream API 进行实现：</p>
+<p>1. 串行实现</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Map&lt;String, List&lt;Student&gt;&gt; stuMap = stuList.stream().filter((Student s) -&gt; s.getHeight() &gt; 160) .collect(Collectors.groupingBy(Student ::getSex)); 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>2. 并行实现</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Map&lt;String, List&lt;Student&gt;&gt; stuMap = stuList.parallelStream().filter((Student s) -&gt; s.getHeight() &gt; 160) .collect(Collectors.groupingBy(Student ::getSex)); 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过上面两个简单的例子，我们可以发现，Stream 结合 Lambda 表达式实现遍历筛选功能非常得简洁和便捷。</p>
+<h2 id="stream-如何优化遍历">Stream 如何优化遍历？</h2>
+<p>上面我们初步了解了 Java8 中的 Stream API，那 Stream 是如何做到优化迭代的呢？并行又是如何实现的？下面我们就透过 Stream 源码剖析 Stream 的实现原理。</p>
+<h3 id="1stream-操作分类">1.Stream 操作分类</h3>
+<p>在了解 Stream 的实现原理之前，我们先来了解下 Stream 的操作分类，因为他的操作分类其实是实现高效迭代大数据集合的重要原因之一。为什么这样说，分析完你就清楚了。</p>
+<p>官方将 Stream 中的操作分为两大类：中间操作（Intermediate operations）和终结操作（Terminal operations）。中间操作只对操作进行了记录，即只会返回一个流，不会进行计算操作，而终结操作是实现了计算操作。</p>
+<p>中间操作又可以分为无状态（Stateless）与有状态（Stateful）操作，前者是指元素的处理不受之前元素的影响，后者是指该操作只有拿到所有元素之后才能继续下去。</p>
+<p>终结操作又可以分为短路（Short-circuiting）与非短路（Unshort-circuiting）操作，前者是指遇到某些符合条件的元素就可以得到最终结果，后者是指必须处理完所有元素才能得到最终结果。操作分类详情如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/39dc526ae360067ad63657d19870fd03.png" alt=""></p>
+<p>我们通常还会将中间操作称为懒操作，也正是由这种懒操作结合终结操作、数据源构成的处理管道（Pipeline），实现了 Stream 的高效。</p>
+<h3 id="2stream-源码实现">2.Stream 源码实现</h3>
+<p>在了解 Stream 如何工作之前，我们先来了解下 Stream 包是由哪些主要结构类组合而成的，各个类的职责是什么。参照下图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/53b6b779404e092edc162ff38f445421.png" alt=""></p>
+<p>BaseStream 和 Stream 为最顶端的接口类。BaseStream 主要定义了流的基本接口方法，例如，spliterator、isParallel 等；Stream 则定义了一些流的常用操作方法，例如，map、filter 等。</p>
+<p>ReferencePipeline 是一个结构类，他通过定义内部类组装了各种操作流。他定义了 Head、StatelessOp、StatefulOp 三个内部类，实现了 BaseStream 与 Stream 的接口方法。</p>
+<p>Sink 接口是定义每个 Stream 操作之间关系的协议，他包含 begin()、end()、cancellationRequested()、accpt() 四个方法。ReferencePipeline 最终会将整个 Stream 流操作组装成一个调用链，而这条调用链上的各个 Stream 操作的上下关系就是通过 Sink 接口协议来定义实现的。</p>
+<h3 id="3stream-操作叠加">3.Stream 操作叠加</h3>
+<p>我们知道，一个 Stream 的各个操作是由处理管道组装，并统一完成数据处理的。在 JDK 中每次的中断操作会以使用阶段（Stage）命名。</p>
+<p>管道结构通常是由 ReferencePipeline 类实现的，前面讲解 Stream 包结构时，我提到过 ReferencePipeline 包含了 Head、StatelessOp、StatefulOp 三种内部类。</p>
+<p>Head 类主要用来定义数据源操作，在我们初次调用 names.stream() 方法时，会初次加载 Head 对象，此时为加载数据源操作；接着加载的是中间操作，分别为无状态中间操作 StatelessOp 对象和有状态操作 StatefulOp 对象，此时的 Stage 并没有执行，而是通过 AbstractPipeline 生成了一个中间操作 Stage 链表；当我们调用终结操作时，会生成一个最终的 Stage，通过这个 Stage 触发之前的中间操作，从最后一个 Stage 开始，递归产生一个 Sink 链。如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/18e836023fdc811a435bc3c7ff53c594.png" alt=""></p>
+<p><strong>下面我们再通过一个例子来感受下 Stream 的操作分类是如何实现高效迭代大数据集合的。</strong></p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">List&lt;String&gt; names = Arrays.asList(&#34; 张三 &#34;, &#34; 李四 &#34;, &#34; 王老五 &#34;, &#34; 李三 &#34;, &#34; 刘老四 &#34;, &#34; 王小二 &#34;, &#34; 张四 &#34;, &#34; 张五六七 &#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> String maxLenStartWithZ = names.stream()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .filter(name -&gt; name.startsWith(&#34; 张 &#34;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .mapToInt(String::length)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .max()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .toString();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个例子的需求是查找出一个长度最长，并且以张为姓氏的名字。从代码角度来看，你可能会认为是这样的操作流程：首先遍历一次集合，得到以“张”开头的所有名字；然后遍历一次 filter 得到的集合，将名字转换成数字长度；最后再从长度集合中找到最长的那个名字并且返回。</p>
+<p>这里我要很明确地告诉你，实际情况并非如此。我们来逐步分析下这个方法里所有的操作是如何执行的。</p>
+<p>首先，因为 names 是 ArrayList 集合，所以 names.stream() 方法将会调用集合类基础接口 Collection 的 Stream 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    default Stream&lt;E&gt; stream() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return StreamSupport.stream(spliterator(), false);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后，Stream 方法就会调用 StreamSupport 类的 Stream 方法，方法中初始化了一个 ReferencePipeline 的 Head 内部类对象：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> public static &lt;T&gt; Stream&lt;T&gt; stream(Spliterator&lt;T&gt; spliterator, boolean parallel) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Objects.requireNonNull(spliterator);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return new ReferencePipeline.Head&lt;&gt;(spliterator,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                            StreamOpFlag.fromCharacteristics(spliterator),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                            parallel);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再调用 filter 和 map 方法，这两个方法都是无状态的中间操作，所以执行 filter 和 map 操作时，并没有进行任何的操作，而是分别创建了一个 Stage 来标识用户的每一次操作。</p>
+<p>而通常情况下 Stream 的操作又需要一个回调函数，所以一个完整的 Stage 是由数据来源、操作、回调函数组成的三元组来表示。如下图所示，分别是 ReferencePipeline 的 filter 方法和 map 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public final Stream&lt;P_OUT&gt; filter(Predicate&lt;? super P_OUT&gt; predicate) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Objects.requireNonNull(predicate);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return new StatelessOp&lt;P_OUT, P_OUT&gt;(this, StreamShape.REFERENCE,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                     StreamOpFlag.NOT_SIZED) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Sink&lt;P_OUT&gt; opWrapSink(int flags, Sink&lt;P_OUT&gt; sink) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                return new Sink.ChainedReference&lt;P_OUT, P_OUT&gt;(sink) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    public void begin(long size) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        downstream.begin(-1);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                     @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    public void accept(P_OUT u) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        if (predicate.test(u))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            downstream.accept(u);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @SuppressWarnings(&#34;unchecked&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public final &lt;R&gt; Stream&lt;R&gt; map(Function&lt;? super P_OUT, ? extends R&gt; mapper) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Objects.requireNonNull(mapper);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return new StatelessOp&lt;P_OUT, R&gt;(this, StreamShape.REFERENCE,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                     StreamOpFlag.NOT_SORTED | StreamOpFlag.NOT_DISTINCT) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Sink&lt;P_OUT&gt; opWrapSink(int flags, Sink&lt;R&gt; sink) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                return new Sink.ChainedReference&lt;P_OUT, R&gt;(sink) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    public void accept(P_OUT u) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        downstream.accept(mapper.apply(u));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>new StatelessOp 将会调用父类 AbstractPipeline 的构造函数，这个构造函数将前后的 Stage 联系起来，生成一个 Stage 链表：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> AbstractPipeline(AbstractPipeline&lt;?, E_IN, ?&gt; previousStage, int opFlags) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (previousStage.linkedOrConsumed)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            throw new IllegalStateException(MSG_STREAM_LINKED);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        previousStage.linkedOrConsumed = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        previousStage.nextStage = this;// 将当前的 stage 的 next 指针指向之前的 stage
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         this.previousStage = previousStage;// 赋值当前 stage 当全局变量 previousStage 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.sourceOrOpFlags = opFlags &amp; StreamOpFlag.OP_MASK;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.combinedFlags = StreamOpFlag.combineOpFlags(opFlags, previousStage.combinedFlags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.sourceStage = previousStage.sourceStage;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (opIsStateful())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            sourceStage.sourceAnyStateful = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.depth = previousStage.depth + 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>因为在创建每一个 Stage 时，都会包含一个 opWrapSink() 方法，该方法会把一个操作的具体实现封装在 Sink 类中，Sink 采用（处理 -&gt; 转发）的模式来叠加操作。</p>
+<p>当执行 max 方法时，会调用 ReferencePipeline 的 max 方法，此时由于 max 方法是终结操作，所以会创建一个 TerminalOp 操作，同时创建一个 ReducingSink，并且将操作封装在 Sink 类中。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public final Optional&lt;P_OUT&gt; max(Comparator&lt;? super P_OUT&gt; comparator) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return reduce(BinaryOperator.maxBy(comparator));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最后，调用 AbstractPipeline 的 wrapSink 方法，该方法会调用 opWrapSink 生成一个 Sink 链表，Sink 链表中的每一个 Sink 都封装了一个操作的具体实现。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @SuppressWarnings(&#34;unchecked&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final &lt;P_IN&gt; Sink&lt;P_IN&gt; wrapSink(Sink&lt;E_OUT&gt; sink) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Objects.requireNonNull(sink);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         for ( @SuppressWarnings(&#34;rawtypes&#34;) AbstractPipeline p=AbstractPipeline.this; p.depth &gt; 0; p=p.previousStage) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            sink = p.opWrapSink(p.previousStage.combinedFlags, sink);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return (Sink&lt;P_IN&gt;) sink;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当 Sink 链表生成完成后，Stream 开始执行，通过 spliterator 迭代集合，执行 Sink 链表中的具体操作。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final &lt;P_IN&gt; void copyInto(Sink&lt;P_IN&gt; wrappedSink, Spliterator&lt;P_IN&gt; spliterator) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Objects.requireNonNull(wrappedSink);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (!StreamOpFlag.SHORT_CIRCUIT.isKnown(getStreamAndOpFlags())) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            wrappedSink.begin(spliterator.getExactSizeIfKnown());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            spliterator.forEachRemaining(wrappedSink);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            wrappedSink.end();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            copyIntoWithCancel(wrappedSink, spliterator);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Java8 中的 Spliterator 的 forEachRemaining 会迭代集合，每迭代一次，都会执行一次 filter 操作，如果 filter 操作通过，就会触发 map 操作，然后将结果放入到临时数组 object 中，再进行下一次的迭代。完成中间操作后，就会触发终结操作 max。</p>
+<p>这就是串行处理方式了，那么 Stream 的另一种处理数据的方式又是怎么操作的呢？</p>
+<h3 id="4stream-并行处理">4.Stream 并行处理</h3>
+<p>Stream 处理数据的方式有两种，串行处理和并行处理。要实现并行处理，我们只需要在例子的代码中新增一个 Parallel() 方法，代码如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">List&lt;String&gt; names = Arrays.asList(&#34; 张三 &#34;, &#34; 李四 &#34;, &#34; 王老五 &#34;, &#34; 李三 &#34;, &#34; 刘老四 &#34;, &#34; 王小二 &#34;, &#34; 张四 &#34;, &#34; 张五六七 &#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> String maxLenStartWithZ = names.stream()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    .parallel()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .filter(name -&gt; name.startsWith(&#34; 张 &#34;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .mapToInt(String::length)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .max()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    	            .toString();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Stream 的并行处理在执行终结操作之前，跟串行处理的实现是一样的。而在调用终结方法之后，实现的方式就有点不太一样，会调用 TerminalOp 的 evaluateParallel 方法进行并行处理。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> final &lt;R&gt; R evaluate(TerminalOp&lt;E_OUT, R&gt; terminalOp) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        assert getOutputShape() == terminalOp.inputShape();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (linkedOrConsumed)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            throw new IllegalStateException(MSG_STREAM_LINKED);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        linkedOrConsumed = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         return isParallel()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               ? terminalOp.evaluateParallel(this, sourceSpliterator(terminalOp.getOpFlags()))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               : terminalOp.evaluateSequential(this, sourceSpliterator(terminalOp.getOpFlags()));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的并行处理指的是，Stream 结合了 ForkJoin 框架，对 Stream 处理进行了分片，Splititerator 中的 estimateSize 方法会估算出分片的数据量。</p>
+<p>ForkJoin 框架和估算算法，在这里我就不具体讲解了，如果感兴趣，你可以深入源码分析下该算法的实现。</p>
+<p>通过预估的数据量获取最小处理单元的阀值，如果当前分片大小大于最小处理单元的阀值，就继续切分集合。每个分片将会生成一个 Sink 链表，当所有的分片操作完成后，ForkJoin 框架将会合并分片任何结果集。</p>
+<h2 id="合理使用-stream">合理使用 Stream</h2>
+<p>看到这里，你应该对 Stream API 是如何优化集合遍历有个清晰的认知了。Stream API 用起来简洁，还能并行处理，那是不是使用 Stream API，系统性能就更好呢？通过一组测试，我们一探究竟。</p>
+<p>我们将对常规的迭代、Stream 串行迭代以及 Stream 并行迭代进行性能测试对比，迭代循环中，我们将对数据进行过滤、分组等操作。分别进行以下几组测试：</p>
+<ul>
+<li>多核 CPU 服务器配置环境下，对比长度 100 的 int 数组的性能；</li>
+<li>多核 CPU 服务器配置环境下，对比长度 1.00E+8 的 int 数组的性能；</li>
+<li>多核 CPU 服务器配置环境下，对比长度 1.00E+8 对象数组过滤分组的性能；</li>
+<li>单核 CPU 服务器配置环境下，对比长度 1.00E+8 对象数组过滤分组的性能。</li>
+</ul>
+<p>由于篇幅有限，我这里直接给出统计结果，你也可以自己去验证一下，具体的测试代码可以在<a href="./stream.md">Github</a>上查看。通过以上测试，我统计出的测试结果如下（迭代使用时间）：</p>
+<ul>
+<li>常规的迭代 &lt;Stream 并行迭代 &lt;Stream 串行迭代</li>
+<li>Stream 并行迭代 &lt; 常规的迭代 &lt;Stream 串行迭代</li>
+<li>Stream 并行迭代 &lt; 常规的迭代 &lt;Stream 串行迭代</li>
+<li>常规的迭代 &lt;Stream 串行迭代 &lt;Stream 并行迭代</li>
+</ul>
+<p>通过以上测试结果，我们可以看到：在循环迭代次数较少的情况下，常规的迭代方式性能反而更好；在单核 CPU 服务器配置环境中，也是常规迭代方式更有优势；而在大数据循环迭代中，如果服务器是多核 CPU 的情况下，Stream 的并行迭代优势明显。所以我们在平时处理大数据的集合时，应该尽量考虑将应用部署在多核 CPU 环境下，并且使用 Stream 的并行迭代方式进行处理。</p>
+<p>用事实说话，我们看到其实使用 Stream 未必可以使系统性能更佳，还是要结合应用场景进行选择，也就是合理地使用 Stream。</p>
+<h2 id="总结">总结</h2>
+<p>纵观 Stream 的设计实现，非常值得我们学习。从大的设计方向上来说，Stream 将整个操作分解为了链式结构，不仅简化了遍历操作，还为实现了并行计算打下了基础。</p>
+<p>从小的分类方向上来说，Stream 将遍历元素的操作和对元素的计算分为中间操作和终结操作，而中间操作又根据元素之间状态有无干扰分为有状态和无状态操作，实现了链结构中的不同阶段。</p>
+<p>**在串行处理操作中，**Stream 在执行每一步中间操作时，并不会做实际的数据操作处理，而是将这些中间操作串联起来，最终由终结操作触发，生成一个数据处理链表，通过 Java8 中的 Spliterator 迭代器进行数据处理；此时，每执行一次迭代，就对所有的无状态的中间操作进行数据处理，而对有状态的中间操作，就需要迭代处理完所有的数据，再进行处理操作；最后就是进行终结操作的数据处理。</p>
+<p>**在并行处理操作中，**Stream 对中间操作基本跟串行处理方式是一样的，但在终结操作中，Stream 将结合 ForkJoin 框架对集合进行切片处理，ForkJoin 框架将每个切片的处理结果 Join 合并起来。最后就是要注意 Stream 的使用场景。</p>
+<h2 id="思考题">思考题</h2>
+<p>这里有一个简单的并行处理案例，请你找出其中存在的问题。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 使用一个容器装载 100 个数字，通过 Stream 并行处理的方式将容器中为单数的数字转移到容器 parallelList
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">List&lt;Integer&gt; integerList= new ArrayList&lt;Integer&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> for (int i = 0; i &lt;100; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      integerList.add(i);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> List&lt;Integer&gt; parallelList = new ArrayList&lt;Integer&gt;() ;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">integerList.stream()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           .parallel()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           .filter(i-&gt;i%2==1)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           .forEach(i-&gt;parallelList.add(i));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>期待在留言区看到你的答案。也欢迎你点击“请朋友读”，把今天的内容分享给身边的朋友，邀请他一起学习。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/b7c462671ae86891c7f8ac1941814e21.png" alt="unpreview"></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Java性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E8%AE%BE%E8%AE%A1%E4%B9%8B%E7%BE%8E/06__ruby_on_rails%E5%A6%82%E4%BD%95%E5%88%86%E6%9E%90%E4%B8%80%E4%B8%AA%E8%BD%AF%E4%BB%B6%E7%9A%84%E6%8E%A5%E5%8F%A3/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">06__Ruby_on_Rails：如何分析一个软件的接口？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/06__waitgroup%E5%8D%8F%E5%90%8C%E7%AD%89%E5%BE%85%E4%BB%BB%E5%8A%A1%E7%BC%96%E6%8E%92%E5%88%A9%E5%99%A8/">
+            <span class="next-text nav-default">06__WaitGroup：协同等待，任务编排利器</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

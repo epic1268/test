@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>第21讲：你的代码到底是怎么编译的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/%E7%AC%AC21%E8%AE%B2%E4%BD%A0%E7%9A%84%E4%BB%A3%E7%A0%81%E5%88%B0%E5%BA%95%E6%98%AF%E6%80%8E%E4%B9%88%E7%BC%96%E8%AF%91%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/%E7%AC%AC21%E8%AE%B2%E4%BD%A0%E7%9A%84%E4%BB%A3%E7%A0%81%E5%88%B0%E5%BA%95%E6%98%AF%E6%80%8E%E4%B9%88%E7%BC%96%E8%AF%91%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="第21讲：你的代码到底是怎么编译的？">
+  <meta property="og:description" content="Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="前端高手进阶">
+
+  <meta itemprop="name" content="第21讲：你的代码到底是怎么编译的？">
+  <meta itemprop="description" content="Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3278">
+  <meta itemprop="keywords" content="前端高手进阶">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="第21讲：你的代码到底是怎么编译的？">
+  <meta name="twitter:description" content="Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">第21讲：你的代码到底是怎么编译的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3278 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。</p>
+<p>webpack 有两个执行入口，分别是通过命令行调用的 bin/webpack.js，以及直接在代码中引用的 lib/webpack.js。我们避开命令参数解析以及进程调用的过程来分析 lib/webpack.js，下面是部分源码（省去了数组型配置及 watch 功能）。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">webpack</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">webpack</span> <span class="o">=</span> <span class="p">((</span> <span class="n">options</span><span class="p">,</span> <span class="n">callback</span> <span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">validateSchema</span><span class="p">(</span><span class="n">webpackOptionsSchema</span><span class="p">,</span> <span class="n">options</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">compiler</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compiler</span> <span class="o">=</span> <span class="n">createCompiler</span><span class="p">(</span><span class="n">options</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">callback</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">compiler</span><span class="o">.</span><span class="n">run</span><span class="p">((</span><span class="n">err</span><span class="p">,</span> <span class="n">stats</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">compiler</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">err2</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">callback</span><span class="p">(</span><span class="n">err</span> <span class="o">||</span> <span class="n">err2</span><span class="p">,</span> <span class="n">stats</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">});</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">});</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">compiler</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl"><span class="p">});</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从源码中可以看到，webpack() 函数内部有 3 个重要的操作：校验配置项、创建编译器、执行编译。</p>
+<p>校验配置项</p>
+<p>校验配置项是通过调用 validateSchema() 函数来实现的，这个函数的内部其实是调用的 schema-utils 模块的 validate () 函数 ，validate() 函数支持通过 JSONSchema 规则来校验 json 对象。这些 JSONSchema 规则保存在 schemas/WebpackOptions.json 文件中，对应代码中的 webpackOptionsSchema 变量。</p>
+<p>这里简单介绍一下 JSONSchema，它是通过 JSON 文件来描述 JSON 文件 ，可以用来校验 JSON 对象、生成 mock 数据及描述 JSON 对象结构。下面是一个对 output 参数的部分校验规则。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-mysql" data-lang="mysql"><span class="line"><span class="cl"><span class="s2">&#34;Output&#34;</span><span class="p">:</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s2">&#34;description&#34;</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;Options affecting the output of the compilation. `output` options tell webpack how to write the compiled files to disk.&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s2">&#34;type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;object&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="s2">&#34;properties&#34;</span><span class="p">:</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="p">...</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s2">&#34;path&#34;</span><span class="p">:</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="s2">&#34;$ref&#34;</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;#/definitions/Path&#34;</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="err">}</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="err">}</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">...</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="s2">&#34;definitions&#34;</span><span class="p">:</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="s2">&#34;Path&#34;</span><span class="p">:</span><span class="w"> </span><span class="err">{</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s2">&#34;description&#34;</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;The output directory as **absolute path** (required).&#34;</span><span class="p">,</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="s2">&#34;type&#34;</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;string&#34;</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="err">}</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w"> 
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>从 &ldquo;type&rdquo;: &ldquo;object&rdquo; 可以看到 Output 是一个对象，它拥有属性 Path，而这个 P ath 类型定义在 definitions 对象的 Path 属性中，通过 &ldquo;type&rdquo;: &ldquo;string&rdquo; 可以看到，它是一个字符串类型。WebpackOptions.json 文件内容比较多，有 3000 多行，这里就不多介绍了，有兴趣的同学可以仔细研究。</p>
+<p>一句话概括，validateSchema() 函数通过 JSONSchema 对 options 进行校验，如果不符合配置规则，则退出并在控制台输出格式化的错误信息。这样就能避免因为选项参数不正确而导致程序运行出错。</p>
+<p>创建编译器</p>
+<p>创建编译器操作是在 compiler.compile() 函数中调用 createCompiler() 函数来实现的，该函数会返回一个 Compiler 实例。createCompiler() 函数源码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">webpack</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">createCompiler</span> <span class="o">=</span> <span class="n">rawOptions</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">options</span> <span class="o">=</span> <span class="n">getNormalizedWebpackOptions</span><span class="p">(</span><span class="n">rawOptions</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">applyWebpackOptionsBaseDefaults</span><span class="p">(</span><span class="n">options</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">compiler</span> <span class="o">=</span> <span class="n">new</span> <span class="n">Compiler</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">context</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compiler</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">options</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">new</span> <span class="n">NodeEnvironmentPlugin</span><span class="p">({</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">infrastructureLogging</span><span class="p">:</span> <span class="n">options</span><span class="o">.</span><span class="n">infrastructureLogging</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">})</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="ne">Array</span><span class="o">.</span><span class="n">isArray</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">plugins</span><span class="p">))</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="k">for</span> <span class="p">(</span><span class="k">const</span> <span class="n">plugin</span> <span class="n">of</span> <span class="n">options</span><span class="o">.</span><span class="n">plugins</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="p">(</span><span class="nb">typeof</span> <span class="n">plugin</span> <span class="o">===</span> <span class="s2">&#34;function&#34;</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">plugin</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">compiler</span><span class="p">,</span> <span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">plugin</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">applyWebpackOptionsDefaults</span><span class="p">(</span><span class="n">options</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compiler</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">call</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compiler</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">afterEnvironment</span><span class="o">.</span><span class="n">call</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">new</span> <span class="n">WebpackOptionsApply</span><span class="p">()</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compiler</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">initialize</span><span class="o">.</span><span class="n">call</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">compiler</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 createCompiler() 函数内部可以看到，首先会通过 getNormalizedWebpackOptions() 函数将默认的配置参数与自定义的配置参数 rawOptions 进行合成，赋值给变量 options。applyWebpackOptionsBaseDefaults() 函数则将程序当前执行路径赋值给 options.context 属性。</p>
+<p>经过以上处理之后，变量 options 才会作为参数传递给类 Compiler 来生成实例。在构造函数中，实例的很多属性进行了初始化操作，其中比较重要的是 hooks 属性。下面是截取的部分源码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">Compiler</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="n">constructor</span><span class="p">(</span><span class="n">context</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">this</span><span class="o">.</span><span class="n">hooks</span> <span class="o">=</span> <span class="ne">Object</span><span class="o">.</span><span class="n">freeze</span><span class="p">({</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">initialize</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">shouldEmit</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncBailHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">done</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;stats&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterDone</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;stats&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">additionalPass</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">beforeRun</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compiler&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">run</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compiler&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">emit</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">assetEmitted</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;file&#34;</span><span class="p">,</span> <span class="s2">&#34;info&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterEmit</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">thisCompilation</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">,</span> <span class="s2">&#34;params&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">compilation</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">,</span> <span class="s2">&#34;params&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">normalModuleFactory</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;normalModuleFactory&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">contextModuleFactory</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;contextModuleFactory&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">beforeCompile</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;params&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">compile</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;params&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">make</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncParallelHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">finishMake</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterCompile</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compilation&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">watchRun</span><span class="p">:</span> <span class="n">new</span> <span class="n">AsyncSeriesHook</span><span class="p">([</span><span class="s2">&#34;compiler&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">failed</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;error&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">invalid</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;filename&#34;</span><span class="p">,</span> <span class="s2">&#34;changeTime&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">watchClose</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">infrastructureLog</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncBailHook</span><span class="p">([</span><span class="s2">&#34;origin&#34;</span><span class="p">,</span> <span class="s2">&#34;type&#34;</span><span class="p">,</span> <span class="s2">&#34;args&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">environment</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterEnvironment</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterPlugins</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;compiler&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">afterResolvers</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s2">&#34;compiler&#34;</span><span class="p">]),</span> 
+</span></span><span class="line"><span class="cl">      <span class="n">entryOption</span><span class="p">:</span> <span class="n">new</span> <span class="n">SyncBailHook</span><span class="p">([</span><span class="s2">&#34;context&#34;</span><span class="p">,</span> <span class="s2">&#34;entry&#34;</span><span class="p">])</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">});</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>为了防止 hooks 属性被修改，这里使用 Object.freeze() 函数来创建对象。简单介绍一下 object.freeze() 函数，它可以冻结一个对象。一个被冻结的对象再也不能被修改了；冻结了一个对象则不能向这个对象添加新的属性，不能删除已有属性，不能修改该对象已有属性的可枚举性、可配置性、可写性，以及不能修改已有属性的值。此外，冻结一个对象后该对象的原型也不能被修改。</p>
+<p>这里一共创建了 4 种类型的钩子（hook），它们的名称和作用如下：</p>
+<p>SyncHook（同步钩子），当钩子触发时，会依次调用钩子队列中的回调函数；</p>
+<p>SyncBailHook（同步钩子），当钩子触发时，会依次调用钩子队列中的回调函数，如果遇到有返回值的函数则停止继续调用；</p>
+<p>AsyncSeriesHook（异步串行钩子），如果钩子队列中有异步回调函数，则会等其执行完成后再执行剩余的回调函数；</p>
+<p>AsyncParallelHook（异步并行钩子），可以异步执行钩子队列中的所有异步回调函数。</p>
+<p>下面一段代码是钩子函数的简单用法。通过 new 关键字创建钩子实例，然后调用 tap() 函数来监听钩子，向 hook 的钩子队列中添加一个回调函数 。 当执行 hook.call() 函数时，会依次调用队列中的回调函数，并将参数传递给这些回调函数 。 需要注意的是， 参数的数量必须与实例化的数组长度一致。在下面的例子中，只能传递 1 个参数。</p>
+<p>tapable 模块提供了十多种钩子，这里就不一一详细介绍了，我们只要知道它实现了一些特殊的订阅机制即可，对钩子有兴趣的同学可以参看其 文档。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="p">{</span> <span class="n">SyncHook</span> <span class="p">}</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;tapable&#39;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">hook</span> <span class="o">=</span> <span class="n">new</span> <span class="n">SyncHook</span><span class="p">([</span><span class="s1">&#39;whatever&#39;</span><span class="p">]);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">hook</span><span class="o">.</span><span class="n">tap</span><span class="p">(</span><span class="s1">&#39;1&#39;</span><span class="p">,</span> <span class="n">function</span> <span class="p">(</span><span class="n">arg1</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">arg1</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="p">});</span> 
+</span></span><span class="line"><span class="cl"><span class="n">hook</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;lagou&#39;</span><span class="p">);</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接着继续往下看，会发现这样一行代码。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">// lib/webpack.js 
+</span></span><span class="line"><span class="cl">new NodeEnvironmentPlugin({ 
+</span></span><span class="line"><span class="cl">  infrastructureLogging: options.infrastructureLogging 
+</span></span><span class="line"><span class="cl">}).apply(compiler); 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这种调用插件（plugin）的 apply() 函数的写法在 webpack 中很常见，主要作用就是监听 compiler 钩子事件，或者说是向钩子队列中插入一个回调函数，当对应的钩子事件触发时调用。</p>
+<p>钩子初始化完成后会调用 3 个钩子事件：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">// lib/webpack.js 
+</span></span><span class="line"><span class="cl">compiler.hooks.environment.call(); 
+</span></span><span class="line"><span class="cl">compiler.hooks.afterEnvironment.call(); 
+</span></span><span class="line"><span class="cl">new WebpackOptionsApply().process(options, compiler); 
+</span></span><span class="line"><span class="cl">compiler.hooks.initialize.call(); 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其中，process() 函数会根据不同的执行环境引入一些默认的插件并调用它的 apply() 函数，比如 Node 环境下会引入下面的插件：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">WebpackOptionsApply</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">NodeTemplatePlugin</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;./node/NodeTemplatePlugin&#34;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">ReadFileCompileWasmPlugin</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;./node/ReadFileCompileWasmPlugin&#34;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">ReadFileCompileAsyncWasmPlugin</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;./node/ReadFileCompileAsyncWasmPlugin&#34;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">NodeTargetPlugin</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;./node/NodeTargetPlugin&#34;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">new</span> <span class="n">NodeTemplatePlugin</span><span class="p">({</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">asyncChunkLoading</span><span class="p">:</span> <span class="n">options</span><span class="o">.</span><span class="n">target</span> <span class="o">===</span> <span class="s2">&#34;async-node&#34;</span> 
+</span></span><span class="line"><span class="cl"><span class="p">})</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">new</span> <span class="n">ReadFileCompileWasmPlugin</span><span class="p">({</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">mangleImports</span><span class="p">:</span> <span class="n">options</span><span class="o">.</span><span class="n">optimization</span><span class="o">.</span><span class="n">mangleWasmImports</span> 
+</span></span><span class="line"><span class="cl"><span class="p">})</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">new</span> <span class="n">ReadFileCompileAsyncWasmPlugin</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">new</span> <span class="n">NodeTargetPlugin</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="n">new</span> <span class="n">LoaderTargetPlugin</span><span class="p">(</span><span class="s2">&#34;node&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">);</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>至此，编译器已经创建完成。小结一下创建编译器步骤的主要逻辑，首先会将配置参数进行修改，比如加入一些默认配置项；然后创建一个编译器实例 compiler，这个实例的构造函数会初始化一些钩子；最后就是调用插件的 apply() 函数来监听钩子，同时也会主动触发一些钩子事件。</p>
+<p>执行编译</p>
+<p>调用 compiler.compile() 函数标志着进入编译阶段，该阶段非常依赖钩子， 代码跳跃比较大，理解起来会有一定难度 。下面是 compile() 函数的部分代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">Compiler</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="n">compile</span><span class="p">(</span><span class="n">callback</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">params</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">newCompilationParams</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">this</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">beforeCompile</span><span class="o">.</span><span class="n">callAsync</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">err</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="k">return</span> <span class="n">callback</span><span class="p">(</span><span class="n">err</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">this</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">compile</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">params</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">compilation</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">newCompilation</span><span class="p">(</span><span class="n">params</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">this</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">make</span><span class="o">.</span><span class="n">callAsync</span><span class="p">(</span><span class="n">compilation</span><span class="p">,</span> <span class="n">err</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">})</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">})</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>首先是触发了 compiler.hooks.compile 钩子，触发后，一些插件将进行初始化操作，为编译做好准备，比如 LoaderTargetPlugin 插件将会加载需要的加载器。</p>
+<p>调用 newCompilation() 函数则会创建了一个 Compilation 实例。注意，这里的 Compilation 和前面创建的 Compiler 是有区别的：Compiler 是全局唯一的，包含了配置参数、加载器、插件这些信息，它会一直存在 webpack 的生命周期中；而 Compilation 包含了当前模块的信息，只是代表一次编译过程。</p>
+<p>在创建 compilation 完成后会触发 compiler.hooks.thisCompilation 钩子和 compiler.hooks.compilation，激活 JavaScriptModulesPlugin 插件的监听函数，从而加载 JavaScript 的解析模块 acorn 。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">Compiler</span><span class="o">.</span><span class="n">j</span> <span class="n">s</span> 
+</span></span><span class="line"><span class="cl"><span class="n">newCompilation</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">compilation</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">createCompilation</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compilation</span><span class="o">.</span><span class="n">fileTimestamps</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">fileTimestamps</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compilation</span><span class="o">.</span><span class="n">contextTimestamps</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">contextTimestamps</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compilation</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">name</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compilation</span><span class="o">.</span><span class="n">records</span> <span class="o">=</span> <span class="n">this</span><span class="o">.</span><span class="n">records</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">compilation</span><span class="o">.</span><span class="n">compilationDependencies</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">compilationDependencies</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">this</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">thisCompilation</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">compilation</span><span class="p">,</span> <span class="n">params</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">this</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">compilation</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">compilation</span><span class="p">,</span> <span class="n">params</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">compilation</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 compiler.compile() 函数中触发 compiler.hooks.make 钩子标志着编译操作正式开始。那么哪些函数监听了 make 钩子呢？通过搜索代码可以发现有 7 个插件监听了它。</p>
+<p>监听了 make 钩子的插件</p>
+<p>其中 EntryPlugin 插件负责分析入口文件，下面是截取的部分代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">lib</span><span class="o">/</span><span class="n">EntryPlugin</span><span class="o">.</span><span class="n">js</span> 
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="n">EntryPlugin</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">apply</span><span class="p">(</span><span class="n">compiler</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">compiler</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">make</span><span class="o">.</span><span class="n">tapAsync</span><span class="p">(</span><span class="s2">&#34;EntryPlugin&#34;</span><span class="p">,</span> <span class="p">(</span><span class="n">compilation</span><span class="p">,</span> <span class="n">callback</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    	<span class="k">const</span> <span class="p">{</span> <span class="n">entry</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">context</span> <span class="p">}</span> <span class="o">=</span> <span class="n">this</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    	<span class="k">const</span> <span class="n">dep</span> <span class="o">=</span> <span class="n">EntryPlugin</span><span class="o">.</span><span class="n">createDependency</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">options</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">        <span class="o">//</span> <span class="err">开始入口解析</span> 
+</span></span><span class="line"><span class="cl">    	<span class="n">compilation</span><span class="o">.</span><span class="n">addEntry</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">dep</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">err</span> <span class="o">=&gt;</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    		<span class="n">callback</span><span class="p">(</span><span class="n">err</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    	<span class="p">});</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">});</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>EntryPlugin 插件中调用了 compilation 对象的 addEntry() 函数，该函数中又调用了 _addEntryItem() 函数将入口模块添加到模块依赖列表中，部分源码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">_addEntryItem(context, entry, target, options, callback) { 
+</span></span><span class="line"><span class="cl">  this.addModuleChain(context, entry, (err, module) =&gt; { 
+</span></span><span class="line"><span class="cl">    if (err) { 
+</span></span><span class="line"><span class="cl">      this.hooks.failedEntry.call(entry, options, err); 
+</span></span><span class="line"><span class="cl">      return callback(err); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    this.hooks.succeedEntry.call(entry, options, module); 
+</span></span><span class="line"><span class="cl">    return callback(null, module); 
+</span></span><span class="line"><span class="cl">  }); 
+</span></span><span class="line"><span class="cl">} 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 addModuleChain() 函数中会调用 compilation 的 handleModuleCreation() 函数，该函数代码比较多，其中会调用 compilation 的 buildModule() 函数来构建模块。</p>
+<p>模块构建完成过后，通过 acorn 生成模块代码的抽象语法树，根据抽象语法树分析这个模块是否还有依赖的模块，如果有则继续解析每个依赖的模块，直到所有依赖解析完成，最后合并生成输出文件。这个过程和前面几讲提到的编译器执行过程类似，就不再赘述了。</p>
+<p>总结</p>
+<p>这一课时从源码层面分析了 webpack 的工作原理，webpack 的执行过程大体上可以分为 3 个步骤，包括：检验配置项、创建编译器、执行编译。</p>
+<p>在 检验 配置项时使用了 JSONSchema 来校验配置参数。在创建编译器时，用到了 tapable 模块提供的钩子机制，通过触发适当的钩子事件来让对应的插件进行初始化。</p>
+<p>在执行编译阶段，以 compiler.hooks.make 钩子事件为起始点，触发入口文件的解析工作，并调用加载器对资源进行处理，然后构建成抽象语法树，将最终的抽象语法树转换成目标文件并输出到配置项指定的目录。</p>
+<p>最后布置一道思考题：尝试一下 tapable 模块的各种钩子事件，分析比较一下它们的使用区别。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/">前端高手进阶</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E6%95%88%E6%95%8F%E6%8D%B7%E6%B5%8B%E8%AF%9549%E8%AE%B2/%E7%AC%AC21%E8%AE%B2%E4%BA%A7%E5%93%81%E4%BB%B7%E5%80%BC%E5%88%86%E6%9E%90%E5%95%86%E4%B8%9A%E7%94%BB%E5%B8%83%E5%BD%B1%E5%93%8D%E5%9C%B0%E5%9B%BE%E6%95%85%E4%BA%8B%E5%9C%B0%E5%9B%BE/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">第21讲：产品价值分析：商业画布、影响地图、故事地图</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E6%88%9845%E8%AE%B2/%E7%AC%AC21%E8%AE%B2%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E5%88%86%E5%BA%93%E5%88%86%E8%A1%A8%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0/">
+            <span class="next-text nav-default">第21讲：为什么需要分库分表，如何实现？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

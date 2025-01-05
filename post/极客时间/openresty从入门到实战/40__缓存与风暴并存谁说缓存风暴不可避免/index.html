@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>40__缓存与风暴并存，谁说缓存风暴不可避免？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是温铭。
+在前面缓存的那节课中，我为你介绍了，共享字典和 lru 缓存在高性能方面的一些优化技巧。其实，我们还遗留了一个非常重要的问题，也值得我们今天用单独的一节课来介绍，那就是“缓存风暴”。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/40__%E7%BC%93%E5%AD%98%E4%B8%8E%E9%A3%8E%E6%9A%B4%E5%B9%B6%E5%AD%98%E8%B0%81%E8%AF%B4%E7%BC%93%E5%AD%98%E9%A3%8E%E6%9A%B4%E4%B8%8D%E5%8F%AF%E9%81%BF%E5%85%8D/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/40__%E7%BC%93%E5%AD%98%E4%B8%8E%E9%A3%8E%E6%9A%B4%E5%B9%B6%E5%AD%98%E8%B0%81%E8%AF%B4%E7%BC%93%E5%AD%98%E9%A3%8E%E6%9A%B4%E4%B8%8D%E5%8F%AF%E9%81%BF%E5%85%8D/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="40__缓存与风暴并存，谁说缓存风暴不可避免？">
+  <meta property="og:description" content="你好，我是温铭。
+在前面缓存的那节课中，我为你介绍了，共享字典和 lru 缓存在高性能方面的一些优化技巧。其实，我们还遗留了一个非常重要的问题，也值得我们今天用单独的一节课来介绍，那就是“缓存风暴”。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="OpenResty从入门到实战">
+
+  <meta itemprop="name" content="40__缓存与风暴并存，谁说缓存风暴不可避免？">
+  <meta itemprop="description" content="你好，我是温铭。
+在前面缓存的那节课中，我为你介绍了，共享字典和 lru 缓存在高性能方面的一些优化技巧。其实，我们还遗留了一个非常重要的问题，也值得我们今天用单独的一节课来介绍，那就是“缓存风暴”。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2694">
+  <meta itemprop="keywords" content="OpenResty从入门到实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="40__缓存与风暴并存，谁说缓存风暴不可避免？">
+  <meta name="twitter:description" content="你好，我是温铭。
+在前面缓存的那节课中，我为你介绍了，共享字典和 lru 缓存在高性能方面的一些优化技巧。其实，我们还遗留了一个非常重要的问题，也值得我们今天用单独的一节课来介绍，那就是“缓存风暴”。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">40__缓存与风暴并存，谁说缓存风暴不可避免？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2694 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#什么是缓存风暴">什么是缓存风暴？</a></li>
+        <li><a href="#如何避免缓存风暴">如何避免缓存风暴？</a>
+          <ul>
+            <li><a href="#主动更新缓存">主动更新缓存</a></li>
+            <li><a href="#lua-resty-lock">lua-resty-lock</a></li>
+            <li><a href="#lua-resty-shcache">lua-resty-shcache</a></li>
+            <li><a href="#nginx-配置指令">Nginx 配置指令</a></li>
+          </ul>
+        </li>
+        <li><a href="#写在最后">写在最后</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是温铭。</p>
+<p>在前面缓存的那节课中，我为你介绍了，共享字典和 lru 缓存在高性能方面的一些优化技巧。其实，我们还遗留了一个非常重要的问题，也值得我们今天用单独的一节课来介绍，那就是“缓存风暴”。</p>
+<h2 id="什么是缓存风暴">什么是缓存风暴？</h2>
+<p>什么是缓存风暴呢？让我们先来设想下面这么一个场景。</p>
+<p>数据源在 MySQL 数据库中，缓存的数据放在共享字典中，超时时间为 60 秒。在这 60 秒内的时间里，所有的请求都从缓存中获取数据，MySQL 没有任何的压力。但是，一旦到达 60 秒，也就是缓存数据失效的那一刻，如果正好有大量的并发请求进来，在缓存中没有查询到结果，就要触发查询数据源的函数，那么这些请求全部都将去查询 MySQL 数据库，直接造成数据库服务器卡顿，甚至卡死。</p>
+<p>这种现象就叫做“缓存风暴”，它也有一个对应的英文名字<code>Dog-Pile</code>。很明显，我们之前出现的缓存相关的代码，都没有做过对应的处理。比如下面这段代码，就是有缓存风暴隐患的伪代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local value = get_from_cache(key)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if not value then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    value = query_db(sql)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set_to_cache(value, timeout ＝ 60)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">return value
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段伪代码看上去逻辑都是正常的，你使用单元测试或者端对端测试，都不会触发缓存风暴。只有长时间的压力测试才会发现这个问题，每隔 60 秒的时间，数据库就会出现一次查询的峰值，非常有规律。不过，如果你这里的缓存失效时间设置得比较长，那么缓存风暴问题被发现的几率就会降低。</p>
+<h2 id="如何避免缓存风暴">如何避免缓存风暴？</h2>
+<p>现在明白了什么是缓存风暴，我们的下一步就是要搞清楚如何避免它了。下面，让我们分为几个不同的情况来讨论一下。</p>
+<h3 id="主动更新缓存">主动更新缓存</h3>
+<p>在上面的伪代码中，缓存是被动更新的。只有在终端请求发现缓存失效时，它才会去数据库查询新的数据。那么，如果我们把缓存的更新，从被动改为主动，也就可以直接绕开缓存风暴的问题了。</p>
+<p>在 OpenResty 中，我们可以这样来实现。首先，使用 <code>ngx.timer.every</code> 来创建一个定时任务，每分钟运行一次，去 MySQL 数据库中获取最新的数据，并放入共享字典中:</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local function query_db(premature, sql)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    local value = query_db(sql)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set_to_cache(value, timeout ＝ 60)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> local ok, err = ngx.timer.every(60, query_db, sql)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后，在终端请求的代码逻辑中，去掉查询 MySQL 的部分，只保留获取共享字典缓存的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local value = get_from_cache(key)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">return value
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过这样两段伪码的操作，缓存风暴的问题就被绕过去了。但这种方式也并非完美，因为这样的每一个缓存都要对应一个周期性的任务（OpenResty 中 timer 是有上限的，不能太多）；而且缓存过期时间和计划任务的周期时间还要对应好，如果这中间出现了什么纰漏，终端就可能一直获取到的都是空数据。</p>
+<p>所以，在实际的项目中，我们一般都是使用加锁的方式来解决缓存风暴问题。接下来，我将为你讲解几种不同的加锁方式，你可以根据需要自行选择。</p>
+<h3 id="lua-resty-lock">lua-resty-lock</h3>
+<p>我知道，一提到加锁，很多人可能会眉头一皱，觉得这是一个比较重的操作。而且，如果发生死锁了该怎么办呢？这显然还要处理不少异常情况。</p>
+<p>但是，使用 OpenResty 中的 <code>lua-resty-lock</code> 这个库来加锁，这样的担心就大可不必了。<code>lua-resty-lock</code> 是 OpenResty 自带的 resty 库，它底层是基于共享字典，提供非阻塞的 lock API。我们先来看一个简单的示例：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">resty --shdict=&#39;locks 1m&#39; -e &#39;local resty_lock = require &#34;resty.lock&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            local lock, err = resty_lock:new(&#34;locks&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            local elapsed, err = lock:lock(&#34;my_key&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            -- query db and update cache
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            local ok, err = lock:unlock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            ngx.say(&#34;unlock: &#34;, ok)&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>因为 <code>lua-resty-lock</code> 是基于共享字典来实现的，所以我们需要事先声明 shdict 的名字和大小；然后，再使用 <code>new</code> 方法来新建 lock 对象。你可以看到，这段代码中，我们只传了第一个参数 <code>shdict</code> 的名字。其实， <code>new</code> 方法还有第二个参数，可以用来指定锁的过期时间、等待锁的超时时间等多个参数。不过这里，我们使用的是默认值，它们就是用来避免死锁等各种异常问题的。</p>
+<p>接着，我们就可以调用 <code>lock</code> 方法尝试获取锁。如果成功获取到锁的话，那就可以保证只有一个请求去数据源更新数据；而如果因为锁已经被抢占、超时等导致加锁失败，那就需要从陈旧的缓存中获取数据，返回给终端。这个过程是不是听起来很熟悉？没错，这里就正好用到了我们上节课介绍过的的 <code>get_stale</code> API：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local elapsed, err = lock:lock(&#34;my_key&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># elapsed 为 nil 表示加锁失败，err 的返回值是 timeout、 locked 中的一个
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if not elapsed and err then 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    dict:get_stale(&#34;my_key&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果 <code>lock</code> 成功，那么就可以安全地去查询数据库，并把结果更新到缓存中。最后，我们再调用 <code>unlock</code> 接口，把锁释放掉就可以了。</p>
+<p>结合 <code>lua-resty-lock</code> 和 <code>get_stale</code>，我们就完美地解决了缓存风暴的问题。在 <code>lua-resty-lock</code> 的文档中，给出了非常完整的处理代码，推荐你可以点击<a href="./lua-resty-lock.md#for-cache-locks">链接</a>查看。</p>
+<p>不过，每当遇到一些有趣的实现，我们总是希望能够看看它的源码是如何实现的，这也是开源的好处之一。这里，我们再深入一步，看看 <code>lock</code> 这个接口是如何加锁的，下面便是它的源码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local ok, err = dict:add(key, true, exptime)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if ok then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    cdata.key_id = ref_obj(key)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    self.key = key
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在共享字典章节中，我曾经提到过，shared dict 的所有 API 都是原子操作，不用担心出现竞争，所以用 shared dict 来标记锁的状态是个不错的主意。</p>
+<p>这里 <code>lock</code> 接口的实现，便使用了 <code>dict:add</code> 接口来尝试设置 key。如果 key 在共享内存中不存在，<code>add</code> 接口就会返回成功，表示加锁成功；其他并发的请求走到 <code>dict:add</code> 这一行的代码逻辑时，就会返回失败，然后根据返回的 err 信息，选择是直接返回，还是多次重试。</p>
+<h3 id="lua-resty-shcache">lua-resty-shcache</h3>
+<p>不过，在上面 <code>lua-resty-lock</code> 的实现中，你需要自己来处理加锁、解锁、获取过期数据、重试、异常处理等各种问题，还是相当繁琐的。所以，这里我再给你介绍一个简单的封装：<code>lua-resty-shcache</code>。</p>
+<p><code>lua-resty-shcache</code>是 CloudFlare 开源的一个 lua-resty 库，它在共享字典和外部存储之上，做了一层封装；并且额外提供了序列化和反序列化的接口，让你不用去关心上述的各种细节:</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">shcache</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;shcache&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">local</span> <span class="n">my_cache_table</span> <span class="o">=</span> <span class="n">shcache</span><span class="p">:</span><span class="n">new</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">ngx</span><span class="o">.</span><span class="n">shared</span><span class="o">.</span><span class="n">cache_dict</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">{</span> <span class="n">external_lookup</span> <span class="o">=</span> <span class="n">lookup</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">encode</span> <span class="o">=</span> <span class="n">cmsgpack</span><span class="o">.</span><span class="n">pack</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">decode</span> <span class="o">=</span> <span class="n">cmsgpack</span><span class="o">.</span><span class="n">decode</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">},</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">{</span> <span class="n">positive_ttl</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>           <span class="o">--</span> <span class="n">cache</span> <span class="n">good</span> <span class="n">data</span> <span class="k">for</span> <span class="mi">10</span><span class="n">s</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">negative_ttl</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>            <span class="o">--</span> <span class="n">cache</span> <span class="n">failed</span> <span class="n">lookup</span> <span class="k">for</span> <span class="mi">3</span><span class="n">s</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;my_cache&#39;</span><span class="p">,</span>     <span class="o">--</span> <span class="s2">&#34;named&#34;</span> <span class="n">cache</span><span class="p">,</span> <span class="n">useful</span> <span class="k">for</span> <span class="n">debug</span> <span class="o">/</span> <span class="n">report</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">local</span> <span class="n">my_table</span><span class="p">,</span> <span class="n">from_cache</span> <span class="o">=</span> <span class="n">my_cache_table</span><span class="p">:</span><span class="nb">load</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段示例代码摘自官方的示例，不过，我已经把细节都隐藏了，方便你更好地把握重点。事实上，这个缓存封装的库并非是我们的最佳选择，但比较适合初学者去学习，所以我首先介绍的是它。在下一节课中，我会给你介绍其他的几个更好、更常用的封装，方便我们选择最合适的来使用。</p>
+<h3 id="nginx-配置指令">Nginx 配置指令</h3>
+<p>另外，即使你没有使用 OpenResty 的 lua-resty 库，你也可以用 Nginx 的配置指令，来实现加锁和获取过期数据——即<code>proxy_cache_lock</code> 和 <code>proxy_cache_use_stale</code>。不过，这里我并不推荐使用 Nginx 指令这种方式，它显然不够灵活，性能也比不上 Lua 代码。</p>
+<h2 id="写在最后">写在最后</h2>
+<p>这节课，我主要为你介绍了缓存风暴和相应的几种应对方式。不得不说，缓存风暴，和之前我们反复提到的 race 问题一样，通过 code review 和测试都很难被发现，最好的方法还是提升我们本身的编码水平，或者使用封装好的类库来解决这类问题。</p>
+<p>最后，给你留一个作业题。在你熟悉的语言和平台中，都是如何处理缓存风暴之类问题的呢？是否有比 OpenResty 更好的解决思想和方法呢？欢迎留言和我讨论这个问题，也欢迎你把这篇文章分享给你的同事朋友，一起学习和进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/OpenResty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/12bf8dad402b50769d64b4fa7ee66191.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/">OpenResty从入门到实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/40__%E8%A1%A1%E9%87%8Fflutter_app%E7%BA%BF%E4%B8%8A%E8%B4%A8%E9%87%8F%E6%88%91%E4%BB%AC%E9%9C%80%E8%A6%81%E5%85%B3%E6%B3%A8%E8%BF%99%E4%B8%89%E4%B8%AA%E6%8C%87%E6%A0%87/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">40__衡量Flutter_App线上质量，我们需要关注这三个指标</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A040%E8%AE%B2/40__%E7%BB%93%E6%9E%84%E5%AD%A6%E4%B9%A0%E5%9F%BA%E4%BA%8E%E7%BA%A6%E6%9D%9F%E4%B8%8E%E5%9F%BA%E4%BA%8E%E8%AF%84%E5%88%86/">
+            <span class="next-text nav-default">40__结构学习：基于约束与基于评分</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

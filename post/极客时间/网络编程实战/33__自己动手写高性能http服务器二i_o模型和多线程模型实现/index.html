@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>33__自己动手写高性能HTTP服务器（二）：I_O模型和多线程模型实现 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 33 讲，欢迎回来。
+这一讲，我们延续第 32 讲的话题，继续解析高性能网络编程框架的 I/O 模型和多线程模型设计部分。
+多线程设计的几个考虑 在我们的设计中，main reactor 线程是一个 acceptor 线程，这个线程一旦创建，会以 event_loop 形式阻塞在 event_dispatcher 的 dispatch 方法上，实际上，它在等待监听套接字上的事件发生，也就是已完成的连接，一旦有连接完成，就会创建出连接对象 tcp_connection，以及 channel 对象等。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/33__%E8%87%AA%E5%B7%B1%E5%8A%A8%E6%89%8B%E5%86%99%E9%AB%98%E6%80%A7%E8%83%BDhttp%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%BA%8Ci_o%E6%A8%A1%E5%9E%8B%E5%92%8C%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%AE%9E%E7%8E%B0/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/33__%E8%87%AA%E5%B7%B1%E5%8A%A8%E6%89%8B%E5%86%99%E9%AB%98%E6%80%A7%E8%83%BDhttp%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%BA%8Ci_o%E6%A8%A1%E5%9E%8B%E5%92%8C%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%AE%9E%E7%8E%B0/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="33__自己动手写高性能HTTP服务器（二）：I_O模型和多线程模型实现">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 33 讲，欢迎回来。
+这一讲，我们延续第 32 讲的话题，继续解析高性能网络编程框架的 I/O 模型和多线程模型设计部分。
+多线程设计的几个考虑 在我们的设计中，main reactor 线程是一个 acceptor 线程，这个线程一旦创建，会以 event_loop 形式阻塞在 event_dispatcher 的 dispatch 方法上，实际上，它在等待监听套接字上的事件发生，也就是已完成的连接，一旦有连接完成，就会创建出连接对象 tcp_connection，以及 channel 对象等。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="33__自己动手写高性能HTTP服务器（二）：I_O模型和多线程模型实现">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 33 讲，欢迎回来。
+这一讲，我们延续第 32 讲的话题，继续解析高性能网络编程框架的 I/O 模型和多线程模型设计部分。
+多线程设计的几个考虑 在我们的设计中，main reactor 线程是一个 acceptor 线程，这个线程一旦创建，会以 event_loop 形式阻塞在 event_dispatcher 的 dispatch 方法上，实际上，它在等待监听套接字上的事件发生，也就是已完成的连接，一旦有连接完成，就会创建出连接对象 tcp_connection，以及 channel 对象等。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3856">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="33__自己动手写高性能HTTP服务器（二）：I_O模型和多线程模型实现">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 33 讲，欢迎回来。
+这一讲，我们延续第 32 讲的话题，继续解析高性能网络编程框架的 I/O 模型和多线程模型设计部分。
+多线程设计的几个考虑 在我们的设计中，main reactor 线程是一个 acceptor 线程，这个线程一旦创建，会以 event_loop 形式阻塞在 event_dispatcher 的 dispatch 方法上，实际上，它在等待监听套接字上的事件发生，也就是已完成的连接，一旦有连接完成，就会创建出连接对象 tcp_connection，以及 channel 对象等。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">33__自己动手写高性能HTTP服务器（二）：I_O模型和多线程模型实现</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3856 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#多线程设计的几个考虑">多线程设计的几个考虑</a></li>
+        <li><a href="#主线程等待多个-sub-reactor-子线程初始化完">主线程等待多个 sub-reactor 子线程初始化完</a></li>
+        <li><a href="#增加已连接套接字事件到-sub-reactor-线程中">增加已连接套接字事件到 sub-reactor 线程中</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 33 讲，欢迎回来。</p>
+<p>这一讲，我们延续第 32 讲的话题，继续解析高性能网络编程框架的 I/O 模型和多线程模型设计部分。</p>
+<h2 id="多线程设计的几个考虑">多线程设计的几个考虑</h2>
+<p>在我们的设计中，main reactor 线程是一个 acceptor 线程，这个线程一旦创建，会以 event_loop 形式阻塞在 event_dispatcher 的 dispatch 方法上，实际上，它在等待监听套接字上的事件发生，也就是已完成的连接，一旦有连接完成，就会创建出连接对象 tcp_connection，以及 channel 对象等。</p>
+<p>当用户期望使用多个 sub-reactor 子线程时，主线程会创建多个子线程，每个子线程在创建之后，按照主线程指定的启动函数立即运行，并进行初始化。随之而来的问题是，<strong>主线程如何判断子线程已经完成初始化并启动，继续执行下去呢？这是一个需要解决的重点问题。</strong></p>
+<p>在设置了多个线程的情况下，需要将新创建的已连接套接字对应的读写事件交给一个 sub-reactor 线程处理。所以，这里从 thread_pool 中取出一个线程，<strong>通知这个线程有新的事件加入。而这个线程很可能是处于事件分发的阻塞调用之中，如何协调主线程数据写入给子线程，这是另一个需要解决的重点问题。</strong></p>
+<p>子线程是一个 event_loop 线程，它阻塞在 dispatch 上，一旦有事件发生，它就会查找 channel_map，找到对应的处理函数并执行它。之后它就会增加、删除或修改 pending 事件，再次进入下一轮的 dispatch。</p>
+<p>文稿中放置了一张图，阐述了线程的运行关系。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/ef56a032f2c2f2a26a2d7d73a45d16a0.png" alt=""></p>
+<p>为了方便你理解，我把对应的函数实现列在了另外一张图中。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/68c78a11ec7cb78c0ebdb8e65e0afedc.png" alt=""></p>
+<h2 id="主线程等待多个-sub-reactor-子线程初始化完">主线程等待多个 sub-reactor 子线程初始化完</h2>
+<p>主线程需要等待子线程完成初始化，也就是需要获取子线程对应数据的反馈，而子线程初始化也是对这部分数据进行初始化，实际上这是一个多线程的通知问题。采用的做法在前面讲多线程的时候也提到过，使用 mutex 和 condition 两个主要武器。</p>
+<p>下面这段代码是主线程发起的子线程创建，调用 event_loop_thread_init 对每个子线程初始化，之后调用 event_loop_thread_start 来启动子线程。注意，如果应用程序指定的线程池大小为 0，则直接返回，这样 acceptor 和 I/O 事件都会在同一个主线程里处理，就退化为单 reactor 模式。</p>
+<p>// 一定是 main thread 发起<br>
+void thread_pool_start(struct thread_pool *threadPool) {<br>
+assert(!threadPool-&gt;started);<br>
+assertInSameThread(threadPool-&gt;mainLoop);</p>
+<pre><code>threadPool-&gt;started = 1;  
+void *tmp;  
+
+if (threadPool-&gt;thread_number &lt;= 0) {  
+    return;  
+}  
+
+threadPool-&gt;eventLoopThreads = malloc(threadPool-&gt;thread_number * sizeof(struct event_loop_thread));  
+for (int i = 0; i &lt; threadPool-&gt;thread_number; ++i) {  
+    event_loop_thread_init(&amp;threadPool-&gt;eventLoopThreads[i], i);  
+    event_loop_thread_start(&amp;threadPool-&gt;eventLoopThreads[i]);  
+}  
+</code></pre>
+<p>}</p>
+<p>我们再看一下 event_loop_thread_start 这个方法，这个方法一定是主线程运行的。这里我使用了 pthread_create 创建了子线程，子线程一旦创建，立即执行 event_loop_thread_run，我们稍后将看到，event_loop_thread_run 进行了子线程的初始化工作。这个函数最重要的部分是使用了 pthread_mutex_lock 和 pthread_mutex_unlock 进行了加锁和解锁，并使用了 pthread_cond_wait 来守候 eventLoopThread 中的 eventLoop 的变量。</p>
+<p>// 由主线程调用，初始化一个子线程，并且让子线程开始运行 event_loop<br>
+struct event_loop *event_loop_thread_start(struct event_loop_thread *eventLoopThread) {<br>
+pthread_create(&amp;eventLoopThread-&gt;thread_tid, NULL, &amp;event_loop_thread_run, eventLoopThread);</p>
+<pre><code>assert(pthread_mutex_lock(&amp;eventLoopThread-&gt;mutex) == 0);  
+
+while (eventLoopThread-&gt;eventLoop == NULL) {  
+    assert(pthread_cond_wait(&amp;eventLoopThread-&gt;cond, &amp;eventLoopThread-&gt;mutex) == 0);  
+}  
+assert(pthread_mutex_unlock(&amp;eventLoopThread-&gt;mutex) == 0);  
+
+yolanda_msgx(&quot;event loop thread started, %s&quot;, eventLoopThread-&gt;thread_name);  
+return eventLoopThread-&gt;eventLoop;  
+</code></pre>
+<p>}</p>
+<p>为什么要这么做呢？看一下子线程的代码你就会大致明白。子线程执行函数 event_loop_thread_run 一上来也是进行了加锁，之后初始化 event_loop 对象，当初始化完成之后，调用了 pthread_cond_signal 函数来通知此时阻塞在 pthread_cond_wait 上的主线程。这样，主线程就会从 wait 中苏醒，代码得以往下执行。子线程本身也通过调用 event_loop_run 进入了一个无限循环的事件分发执行体中，等待子线程 reator 上注册过的事件发生。</p>
+<p>void *event_loop_thread_run(void *arg) {<br>
+struct event_loop_thread *eventLoopThread = (struct event_loop_thread *) arg;</p>
+<pre><code>pthread_mutex_lock(&amp;eventLoopThread-&gt;mutex);  
+
+// 初始化化 event loop，之后通知主线程  
+eventLoopThread-&gt;eventLoop = event_loop_init();  
+yolanda_msgx(&quot;event loop thread init and signal, %s&quot;, eventLoopThread-&gt;thread_name);  
+pthread_cond_signal(&amp;eventLoopThread-&gt;cond);  
+
+pthread_mutex_unlock(&amp;eventLoopThread-&gt;mutex);  
+
+// 子线程 event loop run  
+eventLoopThread-&gt;eventLoop-&gt;thread_name = eventLoopThread-&gt;thread_name;  
+event_loop_run(eventLoopThread-&gt;eventLoop);  
+</code></pre>
+<p>}</p>
+<p>可以看到，这里主线程和子线程共享的变量正是每个 event_loop_thread 的 eventLoop 对象，这个对象在初始化的时候为 NULL，只有当子线程完成了初始化，才变成一个非 NULL 的值，这个变化是子线程完成初始化的标志，也是信号量守护的变量。通过使用锁和信号量，解决了主线程和子线程同步的问题。当子线程完成初始化之后，主线程才会继续往下执行。</p>
+<p>struct event_loop_thread {<br>
+struct event_loop <em>eventLoop;<br>
+pthread_t thread_tid;        /</em> thread ID <em>/<br>
+pthread_mutex_t mutex;<br>
+pthread_cond_t cond;<br>
+char * thread_name;<br>
+long thread_count;    /</em> # connections handled */<br>
+};</p>
+<p>你可能会问，主线程是循环在等待每个子线程完成初始化，如果进入第二个循环，等待第二个子线程完成初始化，而此时第二个子线程已经初始化完成了，该怎么办？</p>
+<p>注意我们这里一上来是加锁的，只要取得了这把锁，同时发现 event_loop_thread 的 eventLoop 对象已经变成非 NULL 值，可以肯定第二个线程已经初始化，就直接释放锁往下执行了。</p>
+<p>你可能还会问，在执行 pthread_cond_wait 的时候，需要持有那把锁么？这里，父线程在调用 pthread_cond_wait 函数之后，会立即进入睡眠，并释放持有的那把互斥锁。而当父线程再从 pthread_cond_wait 返回时（这是子线程通过 pthread_cond_signal 通知达成的），该线程再次持有那把锁。</p>
+<h2 id="增加已连接套接字事件到-sub-reactor-线程中">增加已连接套接字事件到 sub-reactor 线程中</h2>
+<p>前面提到，主线程是一个 main reactor 线程，这个线程负责检测监听套接字上的事件，当有事件发生时，也就是一个连接已完成建立，如果我们有多个 sub-reactor 子线程，我们期望的结果是，把这个已连接套接字相关的 I/O 事件交给 sub-reactor 子线程负责检测。这样的好处是，main reactor 只负责连接套接字的建立，可以一直维持在一个非常高的处理效率，在多核的情况下，多个 sub-reactor 可以很好地利用上多核处理的优势。</p>
+<p>不过，这里有一个令人苦恼的问题。</p>
+<p>我们知道，sub-reactor 线程是一个无限循环的 event loop 执行体，在没有已注册事件发生的情况下，这个线程阻塞在 event_dispatcher 的 dispatch 上。你可以简单地认为阻塞在 poll 调用或者 epoll_wait 上，这种情况下，主线程如何能把已连接套接字交给 sub-reactor 子线程呢？</p>
+<p>当然有办法。</p>
+<p>如果我们能让 sub-reactor 线程从 event_dispatcher 的 dispatch 上返回，再让 sub-reactor 线程返回之后能够把新的已连接套接字事件注册上，这件事情就算完成了。</p>
+<p>那如何让 sub-reactor 线程从 event_dispatcher 的 dispatch 上返回呢？答案是构建一个类似管道一样的描述字，让 event_dispatcher 注册该管道描述字，当我们想让 sub-reactor 线程苏醒时，往管道上发送一个字符就可以了。</p>
+<p>在 event_loop_init 函数里，调用了 socketpair 函数创建了套接字对，这个套接字对的作用就是我刚刚说过的，往这个套接字的一端写时，另外一端就可以感知到读的事件。其实，这里也可以直接使用 UNIX 上的 pipe 管道，作用是一样的。</p>
+<p>struct event_loop *event_loop_init() {<br>
+&hellip;<br>
+//add the socketfd to event 这里创建的是套接字对，目的是为了唤醒子线程<br>
+eventLoop-&gt;owner_thread_id = pthread_self();<br>
+if (socketpair(AF_UNIX, SOCK_STREAM, 0, eventLoop-&gt;socketPair) &lt; 0) {<br>
+LOG_ERR(&ldquo;socketpair set fialed&rdquo;);<br>
+}<br>
+eventLoop-&gt;is_handle_pending = 0;<br>
+eventLoop-&gt;pending_head = NULL;<br>
+eventLoop-&gt;pending_tail = NULL;<br>
+eventLoop-&gt;thread_name = &ldquo;main thread&rdquo;;</p>
+<pre><code>struct channel *channel = channel_new(eventLoop-&gt;socketPair[1], EVENT_READ, handleWakeup, NULL, eventLoop);  
+event_loop_add_channel_event(eventLoop, eventLoop-&gt;socketPair[0], channel);  
+
+return eventLoop;  
+</code></pre>
+<p>}</p>
+<p>要特别注意的是文稿中的这句代码，这告诉 event_loop 的，是注册了 socketPair[1] 描述字上的 READ 事件，如果有 READ 事件发生，就调用 handleWakeup 函数来完成事件处理。</p>
+<p>struct channel *channel = channel_new(eventLoop-&gt;socketPair[1], EVENT_READ, handleWakeup, NULL, eventLoop);</p>
+<p>我们来看看这个 handleWakeup 函数：</p>
+<p>事实上，这个函数就是简单的从 socketPair[1] 描述字上读取了一个字符而已，除此之外，它什么也没干。它的主要作用就是让子线程从 dispatch 的阻塞中苏醒。</p>
+<p>int handleWakeup(void * data) {<br>
+struct event_loop *eventLoop = (struct event_loop *) data;<br>
+char one;<br>
+ssize_t n = read(eventLoop-&gt;socketPair[1], &amp;one, sizeof one);<br>
+if (n != sizeof one) {<br>
+LOG_ERR(&ldquo;handleWakeup  failed&rdquo;);<br>
+}<br>
+yolanda_msgx(&ldquo;wakeup, %s&rdquo;, eventLoop-&gt;thread_name);<br>
+}</p>
+<p>现在，我们再回过头看看，如果有新的连接产生，主线程是怎么操作的？在 handle_connection_established 中，通过 accept 调用获取了已连接套接字，将其设置为非阻塞套接字（切记），接下来调用 thread_pool_get_loop 获取一个 event_loop。thread_pool_get_loop 的逻辑非常简单，从 thread_pool 线程池中按照顺序挑选出一个线程来服务。接下来是创建了 tcp_connection 对象。</p>
+<p>// 处理连接已建立的回调函数<br>
+int handle_connection_established(void *data) {<br>
+struct TCPserver *tcpServer = (struct TCPserver *) data;<br>
+struct acceptor *acceptor = tcpServer-&gt;acceptor;<br>
+int listenfd = acceptor-&gt;listen_fd;</p>
+<pre><code>struct sockaddr_in client_addr;  
+socklen_t client_len = sizeof(client_addr);  
+// 获取这个已建立的套集字，设置为非阻塞套集字  
+int connected_fd = accept(listenfd, (struct sockaddr *) &amp;client_addr, &amp;client_len);  
+make_nonblocking(connected_fd);  
+
+yolanda_msgx(&quot;new connection established, socket == %d&quot;, connected_fd);  
+
+// 从线程池里选择一个 eventloop 来服务这个新的连接套接字  
+struct event_loop *eventLoop = thread_pool_get_loop(tcpServer-&gt;threadPool);  
+
+// 为这个新建立套接字创建一个 tcp_connection 对象，并把应用程序的 callback 函数设置给这个 tcp_connection 对象  
+struct tcp_connection *tcpConnection = tcp_connection_new(connected_fd, eventLoop,tcpServer-&gt;connectionCompletedCallBack,tcpServer-&gt;connectionClosedCallBack,tcpServer-&gt;messageCallBack,tcpServer-&gt;writeCompletedCallBack);  
+//callback 内部使用  
+if (tcpServer-&gt;data != NULL) {  
+    tcpConnection-&gt;data = tcpServer-&gt;data;  
+}  
+return 0;  
+</code></pre>
+<p>}</p>
+<p>在调用 tcp_connection_new 创建 tcp_connection 对象的代码里，可以看到先是创建了一个 channel 对象，并注册了 READ 事件，之后调用 event_loop_add_channel_event 方法往子线程中增加 channel 对象。</p>
+<p>tcp_connection_new(int connected_fd, struct event_loop *eventLoop,<br>
+connection_completed_call_back connectionCompletedCallBack,<br>
+connection_closed_call_back connectionClosedCallBack,<br>
+message_call_back messageCallBack, write_completed_call_back writeCompletedCallBack) {<br>
+&hellip;<br>
+// 为新的连接对象创建可读事件<br>
+struct channel *channel1 = channel_new(connected_fd, EVENT_READ, handle_read, handle_write, tcpConnection);<br>
+tcpConnection-&gt;channel = channel1;</p>
+<pre><code>// 完成对 connectionCompleted 的函数回调  
+if (tcpConnection-&gt;connectionCompletedCallBack != NULL) {  
+    tcpConnection-&gt;connectionCompletedCallBack(tcpConnection);  
+}  
+
+// 把该套集字对应的 channel 对象注册到 event_loop 事件分发器上  
+event_loop_add_channel_event(tcpConnection-&gt;eventLoop, connected_fd, tcpConnection-&gt;channel);  
+return tcpConnection;  
+</code></pre>
+<p>}</p>
+<p>请注意，到现在为止的操作都是在主线程里执行的。下面的 event_loop_do_channel_event 也不例外，接下来的行为我期望你是熟悉的，那就是加解锁。</p>
+<p>如果能够获取锁，主线程就会调用 event_loop_channel_buffer_nolock 往子线程的数据中增加需要处理的 channel event 对象。所有增加的 channel 对象以列表的形式维护在子线程的数据结构中。</p>
+<p>接下来的部分是重点，如果当前增加 channel event 的不是当前 event loop 线程自己，就会调用 event_loop_wakeup 函数把 event_loop 子线程唤醒。唤醒的方法很简单，就是往刚刚的 socketPair[0] 上写一个字节，别忘了，event_loop 已经注册了 socketPair[1] 的可读事件。如果当前增加 channel event 的是当前 event loop 线程自己，则直接调用 event_loop_handle_pending_channel 处理新增加的 channel event 事件列表。</p>
+<p>int event_loop_do_channel_event(struct event_loop *eventLoop, int fd, struct channel *channel1, int type) {<br>
+//get the lock<br>
+pthread_mutex_lock(&amp;eventLoop-&gt;mutex);<br>
+assert(eventLoop-&gt;is_handle_pending == 0);<br>
+// 往该线程的 channel 列表里增加新的 channel<br>
+event_loop_channel_buffer_nolock(eventLoop, fd, channel1, type);<br>
+//release the lock<br>
+pthread_mutex_unlock(&amp;eventLoop-&gt;mutex);<br>
+// 如果是主线程发起操作，则调用 event_loop_wakeup 唤醒子线程<br>
+if (!isInSameThread(eventLoop)) {<br>
+event_loop_wakeup(eventLoop);<br>
+} else {<br>
+// 如果是子线程自己，则直接可以操作<br>
+event_loop_handle_pending_channel(eventLoop);<br>
+}</p>
+<pre><code>return 0;  
+</code></pre>
+<p>}</p>
+<p>如果是 event_loop 被唤醒之后，接下来也会执行 event_loop_handle_pending_channel 函数。你可以看到在循环体内从 dispatch 退出之后，也调用了 event_loop_handle_pending_channel 函数。</p>
+<p>int event_loop_run(struct event_loop *eventLoop) {<br>
+assert(eventLoop != NULL);</p>
+<pre><code>struct event_dispatcher *dispatcher = eventLoop-&gt;eventDispatcher;  
+
+if (eventLoop-&gt;owner_thread_id != pthread_self()) {  
+    exit(1);  
+}  
+
+yolanda_msgx(&quot;event loop run, %s&quot;, eventLoop-&gt;thread_name);  
+struct timeval timeval;  
+timeval.tv_sec = 1;  
+
+while (!eventLoop-&gt;quit) {  
+    //block here to wait I/O event, and get active channels  
+    dispatcher-&gt;dispatch(eventLoop, &amp;timeval);  
+
+    // 这里处理 pending channel，如果是子线程被唤醒，这个部分也会立即执行到  
+    event_loop_handle_pending_channel(eventLoop);  
+}  
+
+yolanda_msgx(&quot;event loop end, %s&quot;, eventLoop-&gt;thread_name);  
+return 0;  
+</code></pre>
+<p>}</p>
+<p>event_loop_handle_pending_channel 函数的作用是遍历当前 event loop 里 pending 的 channel event 列表，将它们和 event_dispatcher 关联起来，从而修改感兴趣的事件集合。</p>
+<p>这里有一个点值得注意，因为 event loop 线程得到活动事件之后，会回调事件处理函数，这样像 onMessage 等应用程序代码也会在 event loop 线程执行，如果这里的业务逻辑过于复杂，就会导致 event_loop_handle_pending_channel 执行的时间偏后，从而影响 I/O 的检测。所以，将 I/O 线程和业务逻辑线程隔离，让 I/O 线程只负责处理 I/O 交互，让业务线程处理业务，是一个比较常见的做法。</p>
+<h2 id="总结">总结</h2>
+<p>在这一讲里，我们重点讲解了框架中涉及多线程的两个重要问题，第一是主线程如何等待多个子线程完成初始化，第二是如何通知处于事件分发中的子线程有新的事件加入、删除、修改。第一个问题通过使用锁和信号量加以解决；第二个问题通过使用 socketpair，并将 sockerpair 作为 channel 注册到 event loop 中来解决。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，给你布置两道思考题：</p>
+<p>第一道，你可以修改一下代码，让 sub-reactor 默认的线程个数为 cpu*2。</p>
+<p>第二道，当前选择线程的算法是 round-robin 的算法，你觉得有没有改进的空间？如果改进的话，你可能会怎么做？</p>
+<p>欢迎在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流进步一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/33__%E5%AD%97%E7%AC%A6%E8%AE%BE%E5%A4%87%E4%B8%8B%E5%A6%82%E4%BD%95%E5%BB%BA%E7%AB%8B%E7%9B%B4%E9%94%80%E6%A8%A1%E5%BC%8F/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">33__字符设备（下）：如何建立直销模式？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/33__%E5%81%9A%E4%B8%80%E5%90%8D%E6%9C%89%E9%AB%98%E5%BA%A6%E7%9A%84%E7%A7%BB%E5%8A%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E7%A8%8B%E5%B8%88/">
+            <span class="next-text nav-default">33__做一名有高度的移动开发工程师</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

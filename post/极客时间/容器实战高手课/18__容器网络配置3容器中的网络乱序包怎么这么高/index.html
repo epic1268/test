@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>18__容器网络配置（3）：容器中的网络乱序包怎么这么高？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。这一讲，我们来聊一下容器中发包乱序的问题。
+这个问题也同样来自于工作实践，我们的用户把他们的应用程序从物理机迁移到容器之后，从网络监控中发现，容器中数据包的重传的数量要比在物理机里高了不少。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/18__%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E9%85%8D%E7%BD%AE3%E5%AE%B9%E5%99%A8%E4%B8%AD%E7%9A%84%E7%BD%91%E7%BB%9C%E4%B9%B1%E5%BA%8F%E5%8C%85%E6%80%8E%E4%B9%88%E8%BF%99%E4%B9%88%E9%AB%98/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/18__%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E9%85%8D%E7%BD%AE3%E5%AE%B9%E5%99%A8%E4%B8%AD%E7%9A%84%E7%BD%91%E7%BB%9C%E4%B9%B1%E5%BA%8F%E5%8C%85%E6%80%8E%E4%B9%88%E8%BF%99%E4%B9%88%E9%AB%98/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="18__容器网络配置（3）：容器中的网络乱序包怎么这么高？">
+  <meta property="og:description" content="你好，我是程远。这一讲，我们来聊一下容器中发包乱序的问题。
+这个问题也同样来自于工作实践，我们的用户把他们的应用程序从物理机迁移到容器之后，从网络监控中发现，容器中数据包的重传的数量要比在物理机里高了不少。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="18__容器网络配置（3）：容器中的网络乱序包怎么这么高？">
+  <meta itemprop="description" content="你好，我是程远。这一讲，我们来聊一下容器中发包乱序的问题。
+这个问题也同样来自于工作实践，我们的用户把他们的应用程序从物理机迁移到容器之后，从网络监控中发现，容器中数据包的重传的数量要比在物理机里高了不少。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4179">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="18__容器网络配置（3）：容器中的网络乱序包怎么这么高？">
+  <meta name="twitter:description" content="你好，我是程远。这一讲，我们来聊一下容器中发包乱序的问题。
+这个问题也同样来自于工作实践，我们的用户把他们的应用程序从物理机迁移到容器之后，从网络监控中发现，容器中数据包的重传的数量要比在物理机里高了不少。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">18__容器网络配置（3）：容器中的网络乱序包怎么这么高？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4179 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题重现">问题重现</a></li>
+      </ul>
+    </li>
+    <li><a href="#iperf3--c-19216814751">iperf3 -c 192.168.147.51</a>
+      <ul>
+        <li><a href="#问题分析">问题分析</a>
+          <ul>
+            <li><a href="#快速重传fast-retransmit">快速重传（fast retransmit）</a></li>
+            <li><a href="#veth-接口的数据包的发送">Veth 接口的数据包的发送</a></li>
+            <li><a href="#rss-和-rps">RSS 和 RPS</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#cat-sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus">cat /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</a></li>
+    <li><a href="#echo-fff--sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus">echo fff &gt; /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</a></li>
+    <li><a href="#cat-sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus-1">cat /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</a>
+      <ul>
+        <li><a href="#重点小结">重点小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。这一讲，我们来聊一下容器中发包乱序的问题。</p>
+<p>这个问题也同样来自于工作实践，我们的用户把他们的应用程序从物理机迁移到容器之后，从网络监控中发现，容器中数据包的重传的数量要比在物理机里高了不少。</p>
+<p>在网络的前面几讲里，我们已经知道了容器网络缺省的接口是 veth，veth 接口都是成对使用的。容器通过 veth 接口向外发送数据，首先需要从 veth 的一个接口发送给跟它成对的另一个接口。</p>
+<p>那么这种接口会不会引起更多的网络重传呢？如果会引起重传，原因是什么，我们又要如何解决呢？接下来我们就带着这三个问题开始今天的学习。</p>
+<h2 id="问题重现">问题重现</h2>
+<p>我们可以在容器里运行一下 <code>iperf3</code> 命令，向容器外部发送一下数据，从 iperf3 的输出&quot;Retr&quot;列里，我们可以看到有多少重传的数据包。</p>
+<p>比如下面的例子里，我们可以看到有 162 个重传的数据包。</p>
+<h1 id="iperf3--c-19216814751">iperf3 -c 192.168.147.51</h1>
+<p>Connecting to host 192.168.147.51, port 5201<br>
+[  5] local 192.168.225.12 port 51700 connected to 192.168.147.51 port 5201<br>
+[ ID] Interval           Transfer     Bitrate                        Retr    Cwnd<br>
+[  5]   0.00-1.00   sec  1001 MBytes  8.40 Gbits/sec  162    192 KBytes<br>
+…</p>
+<hr>
+<p>[ ID] Interval           Transfer     Bitrate         Retr<br>
+[  5]   0.00-10.00  sec  9.85 GBytes  8.46 Gbits/sec  162             sender<br>
+[  5]   0.00-10.04  sec  9.85 GBytes  8.42 Gbits/sec                  receiver</p>
+<p>iperf Done.</p>
+<p>**网络中发生了数据包的重传，有可能是数据包在网络中丢了，也有可能是数据包乱序导致的。**那么，我们怎么来判断到底是哪一种情况引起的重传呢？</p>
+<p>最直接的方法就是用 tcpdump 去抓包，不过对于大流量的网络，用 tcpdump 抓包瞬间就会有几个 GB 的数据。可是这样做的话，带来的额外系统开销比较大，特别是在生产环境中这个方法也不太好用。</p>
+<p>所以这里我们有一个简单的方法，那就是运行 netstat 命令来查看协议栈中的丢包和重传的情况。比如说，在运行上面的 iperf3 命令前后，我们都在容器的 Network Namespace 里运行一下 netstat 看看重传的情况。</p>
+<p>我们会发现，一共发生了 162 次（604-442）快速重传（fast retransmits），这个数值和 iperf3 中的 Retr 列里的数值是一样的。</p>
+<p>-bash-4.2# nsenter -t 51598 -n netstat -s | grep retran<br>
+454 segments retransmited<br>
+442 fast retransmits<br>
+-bash-4.2# nsenter -t 51598 -n netstat -s | grep retran<br>
+616 segments retransmited<br>
+604 fast retransmits</p>
+<h2 id="问题分析">问题分析</h2>
+<h3 id="快速重传fast-retransmit">快速重传（fast retransmit）</h3>
+<p>在刚才的问题重现里，我们运行 netstat 命令后，统计了快速重传的次数。那什么是快速重传（fast retransmit）呢？这里我给你解释一下。</p>
+<p>我们都知道 TCP 协议里，发送端（sender）向接受端（receiver）发送一个数据包，接受端（receiver）都回应 ACK。如果超过一个协议栈规定的时间（RTO），发送端没有收到 ACK 包，那么发送端就会重传（Retransmit）数据包，就像下面的示意图一样。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/1dbceb4bec3dc19c7560772cf3a0e328.png" alt=""></p>
+<p>不过呢，这样等待一个超时之后再重传数据，对于实际应用来说太慢了，所以 TCP 协议又定义了快速重传（fast retransmit）的概念。它的基本定义是这样的：<strong>如果发送端收到 3 个重复的 ACK，那么发送端就可以立刻重新发送 ACK 对应的下一个数据包。</strong></p>
+<p>就像下面示意图里描述的那样，接受端没有收到 Seq 2 这个包，但是收到了 Seq 3–5 的数据包，那么接收端在回应 Ack 的时候，Ack 的数值只能是 2。这是因为按顺序来说收到 Seq 1 的包之后，后面 Seq 2 一直没有到，所以接收端就只能一直发送 Ack 2。</p>
+<p>那么当发送端收到 3 个重复的 Ack 2 后，就可以马上重新发送 Seq 2 这个数据包了，而不用再等到重传超时之后了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/4d7982fc8432c2315113332c21701f5e.png" alt=""></p>
+<p>虽然 TCP 快速重传的标准定义是需要收到 3 个重复的 Ack，不过你会发现在 Linux 中常常收到一个 Dup Ack（重复的 Ack）后，就马上重传数据了。这是什么原因呢？</p>
+<p>这里先需要提到 <strong>SACK</strong> 这个概念，SACK 也就是选择性确认（Selective Acknowledgement）。其实跟普通的 ACK 相比呢，SACK 会把接收端收到的所有包的序列信息，都反馈给发送端。</p>
+<p>你看看下面这张图，就能明白这是什么意思了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/2d520e708051cb4b99049e172495986e.png" alt=""></p>
+<p>那有了 SACK，对于发送端来说，在收到 SACK 之后就已经知道接收端收到了哪些数据，没有收到哪些数据。</p>
+<p>在 Linux 内核中会有个判断（你可以看看下面的这个函数），大概意思是这样的：如果在接收端收到的数据和还没有收到的数据之间，两者数据量差得太大的话（超过了 reordering*mss_cache），也可以马上重传数据。</p>
+<p>这里你需要注意一下，<strong>这里的数据量差是根据 bytes 来计算的，而不是按照包的数目来计算的，所以你会看到即使只收到一个 SACK，Linux 也可以重发数据包。</strong></p>
+<p>static bool tcp_force_fast_retransmit(struct sock *sk)<br>
+{<br>
+struct tcp_sock *tp = tcp_sk(sk);</p>
+<pre><code>    return after(tcp_highest_sack_seq(tp),  
+                 tp-&gt;snd_una + tp-&gt;reordering * tp-&gt;mss_cache);  
+</code></pre>
+<p>}</p>
+<p>好了，了解了快速重传的概念之后，我们再来看看，如果 netstat 中有大量的&quot;fast retransmits&quot;意味着什么？</p>
+<p>如果你再用 netstat 查看&quot;reordering&quot;，就可以看到大量的 SACK 发现的乱序包。</p>
+<p>-bash-4.2# nsenter -t 51598 -n netstat -s  | grep reordering<br>
+Detected reordering 501067 times using SACK</p>
+<p><strong>其实在云平台的这种网络环境里，网络包乱序 +SACK 之后，产生的数据包重传的量要远远高于网络丢包引起的重传。</strong></p>
+<p>比如说像下面这张图里展示的这样，Seq 2 与 Seq 3 这两个包如果乱序的话，那么就会引起 Seq 2 的立刻重传。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/f3511e4f11f5d7bcae932b347d4e2726.png" alt=""></p>
+<h3 id="veth-接口的数据包的发送">Veth 接口的数据包的发送</h3>
+<p>现在我们知道了网络包乱序会造成数据包的重传，接着我们再来看看容器的 veth 接口配置有没有可能会引起数据包的乱序。</p>
+<p>在上一讲里，我们讲过通过 veth 接口从容器向外发送数据包，会触发 peer veth 设备去接收数据包，这个接收的过程就是一个网络的 softirq 的处理过程。</p>
+<p>在触发 softirq 之前，veth 接口会模拟硬件接收数据的过程，通过 enqueue_to_backlog() 函数把数据包放到某个 CPU 对应的数据包队列里（softnet_data）。</p>
+<p>static int netif_rx_internal(struct sk_buff *skb)<br>
+{<br>
+int ret;</p>
+<pre><code>    net_timestamp_check(netdev_tstamp_prequeue, skb);  
+
+    trace_netif_rx(skb);  
+</code></pre>
+<p>#ifdef CONFIG_RPS<br>
+if (static_branch_unlikely(&amp;rps_needed)) {<br>
+struct rps_dev_flow voidflow, *rflow = &amp;voidflow;<br>
+int cpu;</p>
+<pre><code>            preempt_disable();  
+            rcu_read_lock();  
+
+            cpu = get_rps_cpu(skb-&gt;dev, skb, &amp;rflow);  
+            if (cpu &lt; 0)  
+                    cpu = smp_processor_id();  
+
+            ret = enqueue_to_backlog(skb, cpu, &amp;rflow-&gt;last_qtail);  
+
+            rcu_read_unlock();  
+            preempt_enable();  
+    } else  
+</code></pre>
+<p>#endif<br>
+{<br>
+unsigned int qtail;</p>
+<pre><code>            ret = enqueue_to_backlog(skb, get_cpu(), &amp;qtail);  
+            put_cpu();  
+    }  
+    return ret;  
+</code></pre>
+<p>}</p>
+<p>从上面的代码，我们可以看到，在缺省的状况下（也就是没有 RPS 的情况下），enqueue_to_backlog() 把数据包放到了“当前运行的 CPU”（get_cpu()）对应的数据队列中。如果是从容器里通过 veth 对外发送数据包，那么这个“当前运行的 CPU”就是容器中发送数据的进程所在的 CPU。</p>
+<p>对于多核的系统，这个发送数据的进程可以在多个 CPU 上切换运行。进程在不同的 CPU 上把数据放入队列并且 raise softirq 之后，因为每个 CPU 上处理 softirq 是个异步操作，所以两个 CPU network softirq handler 处理这个进程的数据包时，处理的先后顺序并不能保证。</p>
+<p>所以，veth 对的这种发送数据方式增加了容器向外发送数据出现乱序的几率。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/b43534c08738c178324f7954e6f3675f.png" alt=""></p>
+<h3 id="rss-和-rps">RSS 和 RPS</h3>
+<p>那么对于 veth 接口的这种发包方式，有办法减少一下乱序的几率吗？</p>
+<p>其实，我们在上面 netif_rx_internal() 那段代码中，有一段在&quot;#ifdef CONFIG_RPS&quot;中的代码。</p>
+<p>我们看到这段代码中在调用 enqueue_to_backlog() 的时候，传入的 CPU 并不是当前运行的 CPU，而是通过 get_rps_cpu() 得到的 CPU，那么这会有什么不同呢？这里的 RPS 又是什么意思呢？</p>
+<p>要解释 RPS 呢，需要先看一下 RSS，这个 RSS 不是我们之前说的内存 RSS，而是和网卡硬件相关的一个概念，它是 Receive Side Scaling 的缩写。</p>
+<p>现在的网卡性能越来越强劲了，从原来一条 RX 队列扩展到了 N 条 RX 队列，而网卡的硬件中断也从一个硬件中断，变成了每条 RX 队列都会有一个硬件中断。</p>
+<p>每个硬件中断可以由一个 CPU 来处理，那么对于多核的系统，多个 CPU 可以并行的接收网络包，这样就大大地提高了系统的网络数据的处理能力.</p>
+<p>同时，在网卡硬件中，可以根据数据包的 4 元组或者 5 元组信息来保证同一个数据流，比如一个 TCP 流的数据始终在一个 RX 队列中，这样也能保证同一流不会出现乱序的情况。</p>
+<p>下面这张图，大致描述了一下 RSS 是怎么工作的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/cb625048ce5d257d49ea4492d811ed5f.png" alt=""></p>
+<p>RSS 的实现在网卡硬件和驱动里面，而 RPS（Receive Packet Steering）其实就是在软件层面实现类似的功能。它主要实现的代码框架就在上面的 netif_rx_internal() 代码里，原理也不难。</p>
+<p>就像下面的这张示意图里描述的这样：在硬件中断后，CPU2 收到了数据包，再一次对数据包计算一次四元组的 hash 值，得到这个数据包与 CPU1 的映射关系。接着会把这个数据包放到 CPU1 对应的 softnet_data 数据队列中，同时向 CPU1 发送一个 IPI 的中断信号。</p>
+<p>这样一来，后面 CPU1 就会继续按照 Netowrk softirq 的方式来处理这个数据包了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/ac14fc0f8fbea977fb33a1081163b278.png" alt=""></p>
+<p>RSS 和 RPS 的目的都是把数据包分散到更多的 CPU 上进行处理，使得系统有更强的网络包处理能力。在把数据包分散到各个 CPU 时，保证了同一个数据流在一个 CPU 上，这样就可以减少包的乱序。</p>
+<p>明白了 RPS 的概念之后，我们再回头来看 veth 对外发送数据时候，在 enqueue_to_backlog() 的时候选择 CPU 的问题。显然，如果对应的 veth 接口上打开了 RPS 的配置以后，那么对于同一个数据流，就可以始终选择同一个 CPU 了。</p>
+<p>其实我们打开 RPS 的方法挺简单的，只要去 /sys 目录下，在网络接口设备接收队列中修改队列里的 rps_cpus 的值，这样就可以了。rps_cpus 是一个 16 进制的数，每个 bit 代表一个 CPU。</p>
+<p>比如说，我们在一个 12CPU 的节点上，想让 host 上的 veth 接口在所有的 12 个 CPU 上，都可以通过 RPS 重新分配数据包。那么就可以执行下面这段命令：</p>
+<h1 id="cat-sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus">cat /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</h1>
+<p>000</p>
+<h1 id="echo-fff--sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus">echo fff &gt; /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</h1>
+<h1 id="cat-sysdevicesvirtualnetveth57703b6queuesrx-0rps_cpus-1">cat /sys/devices/virtual/net/veth57703b6/queues/rx-0/rps_cpus</h1>
+<p>fff</p>
+<h2 id="重点小结">重点小结</h2>
+<p>好了，今天的内容讲完了，我们做个总结。我们今天讨论的是容器中网络包乱序引起重传的问题。</p>
+<p>由于在容器平台中看到大部分的重传是快速重传（fast retransmits），我们先梳理了什么是快速重传。快速重传的基本定义是：<strong>如果发送端收到 3 个重复的 ACK，那么发送端就可以立刻重新发送 ACK 对应的下一个数据包，而不用等待发送超时。</strong></p>
+<p>不过我们在 Linux 系统上还会看到发送端收到一个重复的 ACK 就快速重传的，这是因为 Linux 下对 SACK 做了一个特别的判断之后，就可以立刻重传数据包。</p>
+<p>我们再对容器云平台中的快速重传做分析，就会发现这些重传大部分是由包的乱序触发的。</p>
+<p>通过对容器 veth 网络接口进一步研究，我们知道它可能会增加数据包乱序的几率。同时在这个分析过程中，我们也看到了 Linux 网络 RPS 的特性。</p>
+<p><strong>RPS 和 RSS 的作用类似，都是把数据包分散到更多的 CPU 上进行处理，使得系统有更强的网络包处理能力。它们的区别是 RSS 工作在网卡的硬件层，而 RPS 工作在 Linux 内核的软件层。</strong></p>
+<p>在把数据包分散到各个 CPU 时，RPS 保证了同一个数据流是在一个 CPU 上的，这样就可以有效减少包的乱序。那么我们可以把 RPS 的这个特性配置到 veth 网络接口上，来减少数据包乱序的几率。</p>
+<p>不过，我这里还要说明的是，RPS 的配置还是会带来额外的系统开销，在某些网络环境中会引起 softirq CPU 使用率的增大。那接口要不要打开 RPS 呢？这个问题你需要根据实际情况来做个权衡。</p>
+<p>同时你还要注意，TCP 的乱序包，并不一定都会产生数据包的重传。想要减少网络数据包的重传，我们还可以考虑协议栈中其他参数的设置，比如 /proc/sys/net/ipv4/tcp_reordering。</p>
+<h2 id="思考题">思考题</h2>
+<p>在这一讲中，我们提到了 Linux 内核中的 tcp_force_fast_retransmit() 函数。那么你可以想想看，这个函数中的 tp-&gt;recording 和内核参数 /proc/sys/net/ipv4/tcp_reordering 是什么关系？它们对数据包的重传会带来什么影响？</p>
+<p>static bool tcp_force_fast_retransmit(struct sock *sk)<br>
+{<br>
+struct tcp_sock *tp = tcp_sk(sk);</p>
+<pre><code>    return after(tcp_highest_sack_seq(tp),  
+                 tp-&gt;snd_una + tp-&gt;reordering * tp-&gt;mss_cache);  
+</code></pre>
+<p>}</p>
+<p>欢迎你在留言区分享你的思考或疑问。如果学完这一讲让你有所收获，也欢迎转发给你的同事、或者朋友，一起交流探讨。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E7%9D%80%E9%AB%98%E6%89%8B%E5%AD%A6%E5%A4%8D%E7%9B%98/18__%E4%BA%BA%E6%89%8D%E5%9F%B9%E5%85%BB%E6%80%8E%E4%B9%88%E6%8A%8A%E4%BA%BA%E6%89%8D%E8%BD%AC%E5%8C%96%E6%88%90%E5%AE%9E%E9%99%85%E7%94%9F%E4%BA%A7%E5%8A%9B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">18__人才培养：怎么把人才转化成实际生产力？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%82%B1%E5%B2%B3%E7%9A%84%E4%BA%A7%E5%93%81%E5%AE%9E%E6%88%98/18__%E5%A6%82%E4%BD%95%E6%8A%8A%E4%BD%A0%E7%9A%84%E6%96%B0%E7%94%A8%E6%88%B7%E8%BD%AC%E5%8C%96%E4%B8%BA%E5%BF%A0%E5%AE%9E%E7%9A%84%E9%95%BF%E6%9C%9F%E7%94%A8%E6%88%B7/">
+            <span class="next-text nav-default">18__如何把你的新用户转化为忠实的长期用户？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

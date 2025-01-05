@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20__详解时钟轮在RPC中的应用 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是何小锋。上一讲我们学习了在分布式环境下如何快速定位问题，简单回顾下重点。在分布式环境下，RPC 框架自身以及服务提供方的业务逻辑实现，都应该对异常进行合理地封装，让使用方可以根据异常快速地定位问题；而在依赖关系复杂且涉及多个部门合作的分布式系统中，我们也可以借助分布式链路跟踪系统，快速定位问题。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/20__%E8%AF%A6%E8%A7%A3%E6%97%B6%E9%92%9F%E8%BD%AE%E5%9C%A8rpc%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/20__%E8%AF%A6%E8%A7%A3%E6%97%B6%E9%92%9F%E8%BD%AE%E5%9C%A8rpc%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20__详解时钟轮在RPC中的应用">
+  <meta property="og:description" content="你好，我是何小锋。上一讲我们学习了在分布式环境下如何快速定位问题，简单回顾下重点。在分布式环境下，RPC 框架自身以及服务提供方的业务逻辑实现，都应该对异常进行合理地封装，让使用方可以根据异常快速地定位问题；而在依赖关系复杂且涉及多个部门合作的分布式系统中，我们也可以借助分布式链路跟踪系统，快速定位问题。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="RPC实战与核心原理">
+
+  <meta itemprop="name" content="20__详解时钟轮在RPC中的应用">
+  <meta itemprop="description" content="你好，我是何小锋。上一讲我们学习了在分布式环境下如何快速定位问题，简单回顾下重点。在分布式环境下，RPC 框架自身以及服务提供方的业务逻辑实现，都应该对异常进行合理地封装，让使用方可以根据异常快速地定位问题；而在依赖关系复杂且涉及多个部门合作的分布式系统中，我们也可以借助分布式链路跟踪系统，快速定位问题。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3533">
+  <meta itemprop="keywords" content="RPC实战与核心原理">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20__详解时钟轮在RPC中的应用">
+  <meta name="twitter:description" content="你好，我是何小锋。上一讲我们学习了在分布式环境下如何快速定位问题，简单回顾下重点。在分布式环境下，RPC 框架自身以及服务提供方的业务逻辑实现，都应该对异常进行合理地封装，让使用方可以根据异常快速地定位问题；而在依赖关系复杂且涉及多个部门合作的分布式系统中，我们也可以借助分布式链路跟踪系统，快速定位问题。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20__详解时钟轮在RPC中的应用</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3533 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#定时任务带来了什么问题">定时任务带来了什么问题？</a></li>
+        <li><a href="#什么是时钟轮">什么是时钟轮？</a></li>
+        <li><a href="#时钟轮在-rpc-中的应用">时钟轮在 RPC 中的应用</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考">课后思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是何小锋。上一讲我们学习了在分布式环境下如何快速定位问题，简单回顾下重点。在分布式环境下，RPC 框架自身以及服务提供方的业务逻辑实现，都应该对异常进行合理地封装，让使用方可以根据异常快速地定位问题；而在依赖关系复杂且涉及多个部门合作的分布式系统中，我们也可以借助分布式链路跟踪系统，快速定位问题。</p>
+<p>现在，切换到咱们今天的主题，一起看看时钟轮在 RPC 中的应用。</p>
+<h2 id="定时任务带来了什么问题">定时任务带来了什么问题？</h2>
+<p>在讲解时钟轮之前，我们先来聊聊定时任务。相信你在开发的过程中，很多场景都会使用到定时任务，在 RPC 框架中也有很多地方会使用到它。就以调用端请求超时的处理逻辑为例，下面我们看一下 RPC 框架是如果处理超时请求的。</p>
+<p>回顾下[第 17 讲]，我讲解 Future 的时候说过：无论是同步调用还是异步调用，调用端内部实行的都是异步，而调用端在向服务端发送消息之前会创建一个 Future，并存储这个消息标识与这个 Future 的映射，当服务端收到消息并且处理完毕后向调用端发送响应消息，调用端在接收到消息后会根据消息的唯一标识找到这个 Future，并将结果注入给这个 Future。</p>
+<p>那在这个过程中，如果服务端没有及时响应消息给调用端呢？调用端该如何处理超时的请求？</p>
+<p>没错，就是可以利用定时任务。每次创建一个 Future，我们都记录这个 Future 的创建时间与这个 Future 的超时时间，并且有一个定时任务进行检测，当这个 Future 到达超时时间并且没有被处理时，我们就对这个 Future 执行超时逻辑。</p>
+<p><strong>那定时任务该如何实现呢？</strong></p>
+<p>有种实现方式是这样的，也是最简单的一种。每创建一个 Future 我们都启动一个线程，之后 sleep，到达超时时间就触发请求超时的处理逻辑。</p>
+<p>这种方式吧，确实简单，在某些场景下也是可以使用的，但弊端也是显而易见的。就像刚才我讲的那个 Future 超时处理的例子，如果我们面临的是高并发的请求，单机每秒发送数万次请求，请求超时时间设置的是 5 秒，那我们要创建多少个线程用来执行超时任务呢？超过 10 万个线程，这个数字真的够吓人了。</p>
+<p>别急，我们还有另一种实现方式。我们可以用一个线程来处理所有的定时任务，还以刚才那个 Future 超时处理的例子为例。假设我们要启动一个线程，这个线程每隔 100 毫秒会扫描一遍所有的处理 Future 超时的任务，当发现一个 Future 超时了，我们就执行这个任务，对这个 Future 执行超时逻辑。</p>
+<p>这种方式我们用得最多，它也解决了第一种方式线程过多的问题，但其实它也有明显的弊端。</p>
+<p>同样是高并发的请求，那么扫描任务的线程每隔 100 毫秒要扫描多少个定时任务呢？如果调用端刚好在 1 秒内发送了 1 万次请求，这 1 万次请求要在 5 秒后才会超时，那么那个扫描的线程在这个 5 秒内就会不停地对这 1 万个任务进行扫描遍历，要额外扫描 40 多次（每 100 毫秒扫描一次，5 秒内要扫描近 50 次），很浪费 CPU。</p>
+<p>在我们使用定时任务时，它所带来的问题，就是让 CPU 做了很多额外的轮询遍历操作，浪费了 CPU，这种现象在定时任务非常多的情况下，尤其明显。</p>
+<h2 id="什么是时钟轮">什么是时钟轮？</h2>
+<p>这个问题也不难解决，我们只要找到一种方式，减少额外的扫描操作就行了。比如我的一批定时任务是 5 秒之后执行，我在 4.9 秒之后才开始扫描这批定时任务，这样就大大地节省了 CPU。这时我们就可以利用时钟轮的机制了。</p>
+<p>我们先来看下我们生活中用到的时钟。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/cf17e895a9265d49146144c8c2188354.png" alt=""></p>
+<p>时钟示意图</p>
+<p>很熟悉了吧，时钟有时针、分针和秒针，秒针跳动一周之后，也就是跳动 60 个刻度之后，分针跳动 1 次，分针跳动 60 个刻度，时针走动一步。</p>
+<p>而时钟轮的实现原理就是参考了生活中的时钟跳动的原理。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/effadb2f71bd85a8333b6dd4cfcbcc59.png" alt=""></p>
+<p>时钟轮示意图</p>
+<p>在时钟轮机制中，有时间槽和时钟轮的概念，时间槽就相当于时钟的刻度，而时钟轮就相当于秒针与分针等跳动的一个周期，我们会将每个任务放到对应的时间槽位上。</p>
+<p>时钟轮的运行机制和生活中的时钟也是一样的，每隔固定的单位时间，就会从一个时间槽位跳到下一个时间槽位，这就相当于我们的秒针跳动了一次；时钟轮可以分为多层，下一层时钟轮中每个槽位的单位时间是当前时间轮整个周期的时间，这就相当于 1 分钟等于 60 秒钟；当时钟轮将一个周期的所有槽位都跳动完之后，就会从下一层时钟轮中取出一个槽位的任务，重新分布到当前的时钟轮中，当前时钟轮则从第 0 槽位从新开始跳动，这就相当于下一分钟的第 1 秒。</p>
+<p>为了方便你了解时钟轮的运行机制，我们用一个场景例子来模拟下，一起看下这个场景。</p>
+<p>假设我们的时钟轮有 10 个槽位，而时钟轮一轮的周期是 1 秒，那么我们每个槽位的单位时间就是 100 毫秒，而下一层时间轮的周期就是 10 秒，每个槽位的单位时间也就是 1 秒，并且当前的时钟轮刚初始化完成，也就是第 0 跳，当前在第 0 个槽位。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/623095982234b41a22f60df4975799c6.png" alt=""></p>
+<p>时钟轮示意图</p>
+<p>好，现在我们有 3 个任务，分别是任务 A（90 毫秒之后执行）、任务 B（610 毫秒之后执行）与任务 C（1 秒 610 毫秒之后执行），我们将这 3 个任务添加到时钟轮中，任务 A 被放到第 0 槽位，任务 B 被放到第 6 槽位，任务 C 被放到下一层时间轮的第 1 槽位，如下面这张图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/f356ef32d441632304b3bf823fefb15a.png" alt=""></p>
+<p>时钟轮任务分布示意图</p>
+<p>当任务 A 刚被放到时钟轮，就被即刻执行了，因为它被放到了第 0 槽位，而当前时间轮正好跳到第 0 槽位（实际上还没开始跳动，状态为第 0 跳）；600 毫秒之后，时间轮已经进行了 6 跳，当前槽位是第 6 槽位，第 6 槽位所有的任务都被取出执行；1 秒钟之后，当前时钟轮的第 9 跳已经跳完，从新开始了第 0 跳，这时下一层时钟轮从第 0 跳跳到了第 1 跳，将第 1 槽位的任务取出，分布到当前的时钟轮中，这时任务 C 从下一层时钟轮中取出并放到当前时钟轮的第 6 槽位；1 秒 600 毫秒之后，任务 C 被执行。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/a0d00a8e54ee37f0e7798fdbfc242ecc.png" alt=""></p>
+<p>任务 C 槽位转换示意图</p>
+<p>看完了这个场景，相信你对时钟轮的机制已经有所了解了。在这个例子中，时钟轮的扫描周期仍是 100 毫秒，但是其中的任务并没有被过多的重复扫描，它完美地解决了 CPU 浪费的问题。</p>
+<p>这个机制其实不难理解，但实现起来还是很有难度的，其中要注意的问题也很多。具体的代码实现我们这里不展示，这又是另外一个比较大的话题了。有兴趣的话你可以自行查阅下相关源码，动手实现一下。到哪里卡住了，我们可以在留言区交流。</p>
+<h2 id="时钟轮在-rpc-中的应用">时钟轮在 RPC 中的应用</h2>
+<p>通过刚才对时钟轮的讲解，相信你可以看出，它就是用来执行定时任务的，可以说在 RPC 框架中只要涉及到定时相关的操作，我们就可以使用时钟轮。</p>
+<p>那么 RPC 框架在哪些功能实现中会用到它呢？</p>
+<p>刚才我举例讲到的调用端请求超时处理，这里我们就可以应用到时钟轮，我们每发一次请求，都创建一个处理请求超时的定时任务放到时钟轮里，在高并发、高访问量的情况下，时钟轮每次只轮询一个时间槽位中的任务，这样会节省大量的 CPU。</p>
+<p>调用端与服务端启动超时也可以应用到时钟轮，以调用端为例，假设我们想要让应用可以快速地部署，例如 1 分钟内启动，如果超过 1 分钟则启动失败。我们可以在调用端启动时创建一个处理启动超时的定时任务，放到时钟轮里。</p>
+<p>除此之外，你还能想到 RPC 框架在哪些地方可以应用到时钟轮吗？还有定时心跳。RPC 框架调用端定时向服务端发送心跳，来维护连接状态，我们可以将心跳的逻辑封装为一个心跳任务，放到时钟轮里。</p>
+<p>这时你可能会有一个疑问，心跳是要定时重复执行的，而时钟轮中的任务执行一遍就被移除了，对于这种需要重复执行的定时任务我们该如何处理呢？在定时任务的执行逻辑的最后，我们可以重设这个任务的执行时间，把它重新丢回到时钟轮里。</p>
+<h2 id="总结">总结</h2>
+<p>今天我们主要讲解了时钟轮的机制，以及时钟轮在 RPC 框架中的应用。</p>
+<p>这个机制很好地解决了定时任务中，因每个任务都创建一个线程，导致的创建过多线程的问题，以及一个线程扫描所有的定时任务，让 CPU 做了很多额外的轮询遍历操作而浪费 CPU 的问题。</p>
+<p>时钟轮的实现机制就是模拟现实生活中的时钟，将每个定时任务放到对应的时间槽位上，这样可以减少扫描任务时对其它时间槽位定时任务的额外遍历操作。</p>
+<p>在时间轮的使用中，有些问题需要你额外注意：</p>
+<ol>
+<li>时间槽位的单位时间越短，时间轮触发任务的时间就越精确。例如时间槽位的单位时间是 10 毫秒，那么执行定时任务的时间误差就在 10 毫秒内，如果是 100 毫秒，那么误差就在 100 毫秒内。</li>
+<li>时间轮的槽位越多，那么一个任务被重复扫描的概率就越小，因为只有在多层时钟轮中的任务才会被重复扫描。比如一个时间轮的槽位有 1000 个，一个槽位的单位时间是 10 毫秒，那么下一层时间轮的一个槽位的单位时间就是 10 秒，超过 10 秒的定时任务会被放到下一层时间轮中，也就是只有超过 10 秒的定时任务会被扫描遍历两次，但如果槽位是 10 个，那么超过 100 毫秒的任务，就会被扫描遍历两次。</li>
+</ol>
+<p>结合这些特点，我们就可以视具体的业务场景而定，对时钟轮的周期和时间槽数进行设置。</p>
+<p>在 RPC 框架中，只要涉及到定时任务，我们都可以应用时钟轮，比较典型的就是调用端的超时处理、调用端与服务端的启动超时以及定时心跳等等。</p>
+<h2 id="课后思考">课后思考</h2>
+<p>在 RPC 框架中，除了我说过的那几个例子，你还知道有哪些功能的实现可以应用到时钟轮？</p>
+<p>欢迎留言和我分享你的答案，也欢迎你把文章分享给你的朋友，邀请他加入学习。我们下节课再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/">RPC实战与核心原理</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B5%B5%E6%88%90%E7%9A%84%E8%BF%90%E7%BB%B4%E4%BD%93%E7%B3%BB%E7%AE%A1%E7%90%86%E8%AF%BE/20__%E7%BA%BF%E4%B8%8A%E7%8E%AF%E5%A2%83%E5%BB%BA%E8%AE%BE%E8%A6%81%E6%89%9B%E5%BE%97%E4%BD%8F%E7%9C%9F%E5%88%80%E7%9C%9F%E6%9E%AA%E7%9A%84%E8%80%83%E9%AA%8C/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20__线上环境建设，要扛得住真刀真枪的考验</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A1%85%E8%B0%B7%E4%BA%A7%E5%93%81%E5%AE%9E%E6%88%9836%E8%AE%B2/20__%E6%83%B3%E8%A6%81%E5%A2%9E%E9%95%BF%E4%BD%A0%E7%9A%84%E5%9B%A2%E9%98%9F%E9%9C%80%E8%A6%81%E9%AB%98%E6%95%88%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%B5%81/">
+            <span class="next-text nav-default">20__想要增长，你的团队需要高效的工作流</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

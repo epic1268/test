@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17__Cache：多级缓存架构在消息系统中的应用 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是袁武林。
+今天，我要带你了解的是一项在 IM 系统中相对比较通用的、使用比较高频的，而且对系统性能提升非常明显的技术：缓存。
+说到缓存，你应该不陌生。相对于磁盘操作，基于内存的缓存对耗时敏感的高并发应用来说，在性能方面的提升是非常明显的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/17__cache%E5%A4%9A%E7%BA%A7%E7%BC%93%E5%AD%98%E6%9E%B6%E6%9E%84%E5%9C%A8%E6%B6%88%E6%81%AF%E7%B3%BB%E7%BB%9F%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/17__cache%E5%A4%9A%E7%BA%A7%E7%BC%93%E5%AD%98%E6%9E%B6%E6%9E%84%E5%9C%A8%E6%B6%88%E6%81%AF%E7%B3%BB%E7%BB%9F%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17__Cache：多级缓存架构在消息系统中的应用">
+  <meta property="og:description" content="你好，我是袁武林。
+今天，我要带你了解的是一项在 IM 系统中相对比较通用的、使用比较高频的，而且对系统性能提升非常明显的技术：缓存。
+说到缓存，你应该不陌生。相对于磁盘操作，基于内存的缓存对耗时敏感的高并发应用来说，在性能方面的提升是非常明显的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="即时消息技术剖析与实战">
+
+  <meta itemprop="name" content="17__Cache：多级缓存架构在消息系统中的应用">
+  <meta itemprop="description" content="你好，我是袁武林。
+今天，我要带你了解的是一项在 IM 系统中相对比较通用的、使用比较高频的，而且对系统性能提升非常明显的技术：缓存。
+说到缓存，你应该不陌生。相对于磁盘操作，基于内存的缓存对耗时敏感的高并发应用来说，在性能方面的提升是非常明显的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4861">
+  <meta itemprop="keywords" content="即时消息技术剖析与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17__Cache：多级缓存架构在消息系统中的应用">
+  <meta name="twitter:description" content="你好，我是袁武林。
+今天，我要带你了解的是一项在 IM 系统中相对比较通用的、使用比较高频的，而且对系统性能提升非常明显的技术：缓存。
+说到缓存，你应该不陌生。相对于磁盘操作，基于内存的缓存对耗时敏感的高并发应用来说，在性能方面的提升是非常明显的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17__Cache：多级缓存架构在消息系统中的应用</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4861 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#缓存的分布式算法">缓存的分布式算法</a>
+          <ul>
+            <li><a href="#取模求余">取模求余</a></li>
+            <li><a href="#一致性哈希">一致性哈希</a></li>
+            <li><a href="#数据倾斜">数据倾斜</a></li>
+          </ul>
+        </li>
+        <li><a href="#缓存热点问题">缓存热点问题</a>
+          <ul>
+            <li><a href="#多级缓存架构---主从模式">多级缓存架构 - 主从模式</a></li>
+            <li><a href="#多级缓存架构--l1-主从模式">多级缓存架构 -L1+ 主从模式</a></li>
+            <li><a href="#多级缓存架构---本地缓存-l1-主从的多层模式">多级缓存架构 - 本地缓存 +L1+ 主从的多层模式</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是袁武林。</p>
+<p>今天，我要带你了解的是一项在 IM 系统中相对比较通用的、使用比较高频的，而且对系统性能提升非常明显的技术：缓存。</p>
+<p>说到缓存，你应该不陌生。相对于磁盘操作，基于内存的缓存对耗时敏感的高并发应用来说，在性能方面的提升是非常明显的。</p>
+<p>下面是谷歌的技术奠基人杰夫·狄恩（Jeff Dean）给出的一些<a href="./numbers-everyone-should-know.md">计算机相关的硬件指标</a>，虽然有些数据可能由于时间太久不够准确，但大致的量级基本还是一致的。</p>
+<ul>
+<li>L1 cache reference 0.5 ns</li>
+<li>Branch mispredict 5 ns</li>
+<li>L2 cache reference 7 ns</li>
+<li>Mutex lock/unlock 100 ns</li>
+<li>Main memory reference 100 ns</li>
+<li>Compress 1K bytes with Zippy 10,000 ns</li>
+<li>Send 2K bytes over 1 Gbps network 20,000 ns</li>
+<li>Read 1 MB sequentially from memory 250,000 ns</li>
+<li>Round trip within same datacenter 500,000 ns</li>
+<li>Disk seek 10,000,000 ns</li>
+<li>Read 1 MB sequentially from network 10,000,000 ns</li>
+<li>Read 1 MB sequentially from disk 30,000,000 ns</li>
+<li>Send packet CA-&gt;Netherlands-&gt;CA 150,000,000 ns</li>
+</ul>
+<p>可以看到，同样是 1MB 的数据读取，从磁盘读取的耗时，比从内存读取的耗时相差近 100 倍，这也是为什么业界常说“处理高并发的三板斧是缓存、降级和限流”了。</p>
+<p>使用缓存虽然能够给我们带来诸多性能上的收益，但存在一个问题是缓存的资源成本非常高。因此，在 IM 系统中对于缓存的使用，就需要我们左右互搏地在“缓存命中率”和“缓存使用量”两大指标间不断均衡。</p>
+<p>在今天的课程中，我会围绕 IM 系统中缓存的使用，来聊一聊在使用过程中容易碰到的一些问题及相应的解决方案。</p>
+<h2 id="缓存的分布式算法">缓存的分布式算法</h2>
+<p>对于大规模分布式服务来说，大部分缓存的使用都是多实例分布式部署的。接下来，我们就先来了解一下缓存常见的两种分布式算法：取模求余与一致性哈希。</p>
+<h3 id="取模求余">取模求余</h3>
+<p>取模求余的算法比较简单。比如说，用于存储消息内容的缓存，如果采用取模求余，就可以简单地使用消息 ID 对缓存实例的数量进行取模求余。</p>
+<p>如下图所示：如果消息 ID 哈希后对缓存节点取模求余，余数是多少，就缓存到哪个节点上。<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/8f44814624108f2177c64cd7fdcbddf6.png" alt=""></p>
+<p>取模求余的分布式算法在实现上非常简单。但存在的问题是：如果某一个节点宕机或者加入新的节点，节点数量发生变化后，Hash 后取模求余的结果就可能和以前不一样了。由此导致的后果是：加减节点后，缓存命中率下降严重。</p>
+<h3 id="一致性哈希">一致性哈希</h3>
+<p>为了解决这个问题，业界常用的另一种缓存分布式算法是一致性哈希。它是 1997 年麻省理工学院提出的一种算法，目前主要应用在分布式缓存场景中。</p>
+<p>一致性哈希的算法是：把全量的缓存空间分成 2 的 32 次方个区域，这些区域组合成一个环形的存储结构；每一个缓存的消息 ID，都可以通过哈希算法，转化为一个 32 位的二进制数，也就是对应这 2 的 32 次方个缓存区域中的某一个；缓存的节点也遵循同样的哈希算法（比如利用节点的 IP 来哈希），这些缓存节点也都能被映射到 2 的 32 次方个区域中的某一个。</p>
+<p>那么，如何让消息 ID 和具体的缓存节点对应起来呢？</p>
+<p>很简单，每一个映射完的消息 ID，我们按顺时针旋转，找到离它最近的同样映射完的缓存节点，该节点就是消息 ID 对应的缓存节点。大概规则我画了一个图，你可以参考一下：<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/aedb856f19d932dc53031ba37f843ac7.png" alt=""></p>
+<p><strong>那么，为什么一致性哈希能够解决取模求余算法下，加减节点带来的命中率突降的问题呢？</strong></p>
+<p>结合上图，我们一起来看一下。假设已经存在了 4 个缓存节点，现在新增加一个节点 5，那么本来相应会落到节点 1 的 mid1 和 mid9，可能会由于节点 5 的加入，有的落入到节点 5，有的还是落入到节点 1；落入到新增的节点 5 的消息会被 miss 掉，但是仍然落到节点 1 的消息还是能命中之前的缓存的。</p>
+<p>另外，其他的节点 2、3、4 对应的这些消息还是能保持不变的，所以整体缓存的命中率，相比取模取余算法波动会小很多。</p>
+<p>同样，如果某一个节点宕机的话，一致性哈希也能保证，只会有小部分消息的缓存归属节点发生变化，大部分仍然能保持不变。</p>
+<h3 id="数据倾斜">数据倾斜</h3>
+<p>一致性哈希既然解决了加减节点带来的命中率下降的问题，那么是不是这种算法，就是缓存分布式算法的完美方案呢？</p>
+<p>这里我们会发现，一致性哈希算法中，如果节点比较少，会容易出现节点间数据不均衡的情况，发生数据倾斜；如果节点很多，相应的消息就能在多个节点上分布得更均匀。</p>
+<p>但在实际的线上业务中，部署的缓存机器节点是很有限的。</p>
+<p>所以，为了解决物理节点少导致节点间数据倾斜的问题，我们还可以引入虚拟节点，来人为地创造更多缓存节点，以此让数据分布更加均匀。</p>
+<p>虚拟节点的大概实现过程，你可以参考下图：<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/98d50dccf0a774250fbfe9195a3357df.png" alt=""></p>
+<p>我们为每一个物理节点分配多个虚拟节点，比如在上图这里，给节点 1 虚拟出 4 个节点。当消息进行缓存哈希定位时，如果落到了这个物理节点上的任意一个虚拟节点，那么就表示，真正的缓存存储位置在这个物理节点上，然后服务端就可以从这个物理节点上进行数据的读写了。</p>
+<p>如上面这个例子，本来都落在节点 3 的 4 条消息 mid4、mid5、mid6、mid7，在加入节点 1 的虚拟节点后，mid4 和 mid5 落到了虚拟节点 1-2 上，这样 mid4 和 mid5 就被分配到物理节点 1 上了。可见，通过这种方式，能更好地打散数据的分布，解决节点间数据不平衡的问题。</p>
+<h2 id="缓存热点问题">缓存热点问题</h2>
+<p>通过一致性哈希配合虚拟节点，我们解决了节点快速扩容和宕机，导致命中率下降的问题及节点间数据倾斜的问题。但在 IM 的一些场景里，还可能会出现单一资源热点的问题。</p>
+<p>比如，一个超级大 V 给他的粉丝群发了一篇精心编写的长文章，可能一瞬间服务端会有上万的文章阅读请求涌入。由于这些长文章都是作为富文本进行存储的，所以存储的数据较大，有的文章都超过 1MB，而且用户还需要随时能够修改文章，也不好通过 CDN 来进行分发。</p>
+<p>那么，我们如何去解决这种缓存热点问题呢？</p>
+<h3 id="多级缓存架构---主从模式">多级缓存架构 - 主从模式</h3>
+<p>我以上面的“长文章流量热点”的例子来说明一下。为了防止文章下载阅读出现热点时，造成后端存储服务的压力太大，我们一般会通过缓存来进行下载时的加速。比如说，我们可以通过文章的唯一 ID 来进行哈希，并且通过缓存的一主多从模式来进行部署，主从模式的部署大概如下图：<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/82afcbdce1bf9b1bade69f96eef68031.png" alt=""></p>
+<p>一般来说，主从模式下，主库只用于数据写入和更新，从库只用于数据读取。当然，这个也不是一定的。</p>
+<p>比如，在写多读少的场景下，也可以让主库承担一部分的数据读取工作。当缓存的数据读取 QPS 比较大的情况下，可以通过增加从库的方式来提升整体缓存层的抗读取能力。</p>
+<p>主从模式是最常见的、使用最多的缓存应用模式。但是主从模式在某些突发流量的场景下会存在一些问题，就比如刚刚提到的“长文章流量热点”问题。</p>
+<p>我们对某篇长文章的唯一 ID 来进行哈希，在主从模式下，一篇文章只会映射到一个从库节点上。虽然能够通过增加从库副本数来提升服务端对一篇文章的读取能力，但由于文章大小比较大，即使是多从库副本，对于千兆网卡的从库实例机器来说，带宽层面也很难抗住这个热点。举个例子，单台机器 120MB 带宽，对于 1MB 大小的文章来说，如果 QPS 到 1000 的话，至少需要 8 个实例才可以抗住。</p>
+<p>另外，多从库副本是对主库数据的完整拷贝，从成本上考虑也是非常不划算的。除了带宽问题，对于某些 QPS 很高的资源请求来说，如果采用的是单主单从结构，一旦从库宕机，瞬间会有大量请求直接穿透到 DB 存储层，可能直接会导致资源不可用。</p>
+<h3 id="多级缓存架构--l1-主从模式">多级缓存架构 -L1+ 主从模式</h3>
+<p>为了解决主从模式下，单点峰值过高导致单机带宽和热点数据在从库宕机后，造成后端资源瞬时压力的问题，我们可以参考 CPU 和主存的结构，在主从缓存结构前面再增加一层 L1 缓存层。</p>
+<p>L1 缓存，顾名思义一般它的容量会比较小，用于缓存极热的数据。那么，为什么 L1 缓存可以解决主从模式下的带宽问题和穿透问题呢？</p>
+<p>我们来看一下，L1+ 主从模式的部署和访问形式：<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/2e0f0b6675457b0c1e315238249ffd98.png" alt=""></p>
+<p>L1 缓存作为最前端的缓存层，在用户请求的时候，会先从 L1 缓存进行查询。如果 L1 缓存中没有，再从主从缓存里查询，查询到的结果也会回种一份到 L1 缓存中。</p>
+<p>与主从缓存模式不一样的地方是：L1 缓存有分组的概念，一组 L1 可以有多个节点，每一组 L1 缓存都是一份全量的热数据，一个系统可以提供多组 L1 缓存，同一个数据的请求会轮流落到每一组 L1 里面。</p>
+<p>比如同一个文章 ID，第一次请求会落到第一组 L1 缓存，第二次请求可能就落到第二组 L1 缓存。通过穿透后的回种，最后每一组 L1 缓存，都会缓存到同一篇文章。通过这种方式，同一篇文章就有多个 L1 缓存节点来抗读取的请求量了。</p>
+<p>而且，L1 缓存一般采用 LRU（Least Recently Used）方式进行淘汰，这样既能减少 L1 缓存的内存使用量，也能保证热点数据不会被淘汰掉。并且，采用 L1+ 主从的双层模式，即使有某一层节点出现宕机的情况，也不会导致请求都穿透到后端存储上，导致资源出现问题。</p>
+<h3 id="多级缓存架构---本地缓存-l1-主从的多层模式">多级缓存架构 - 本地缓存 +L1+ 主从的多层模式</h3>
+<p>通过 L1 缓存 + 主从缓存的双层架构，我们用较少的资源解决了热点峰值的带宽问题和单点穿透问题。</p>
+<p>但有的时候，面对一些极热的热点峰值，我们可能需要增加多组 L1 才能抗住带宽的需要。不过内存毕竟是比较昂贵的成本，所以有没有更好的平衡极热峰值和缓存成本的方法呢？</p>
+<p>对于大部分请求量较大的应用来说，应用层机器的部署一般不会太少。如果我们的应用服务器本身也能够承担一部分数据缓存的工作，就能充分利用应用层机器的带宽和极少的内存，来低成本地解决带宽问题了。那么，这种方式是否可以实现呢？</p>
+<p>答案是可以的，这种本地缓存 +L1 缓存 + 主从缓存的多级缓存模式，也是业界比较成熟的方案了。多级缓存模式的整体流程大概如下图：<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/b972106020a930a1d8c19459e584a79e.png" alt=""></p>
+<p>本地缓存一般位于应用服务器的部署机器上，使用应用服务器本身的少量内存。它是应用层获取数据的第一道缓存，应用层获取数据时先访问本地缓存，如果未命中，再通过远程从 L1 缓存层获取，最终获取到的数据再回种到本地缓存中。</p>
+<p>通过增加本地缓存，依托应用服务器的多部署节点，基本就能完全解决热点数据带宽的问题。而且，相比较从远程 L1 缓存获取数据，本地缓存离应用和用户设备更近，性能上也会更好一些。</p>
+<p>但是使用本地缓存有一个需要考虑的问题，那就是数据的一致性问题。</p>
+<p>还是以“长文章”为例。我们的服务端可能会随时接收到用户需要修改文章内容的请求，这个时候，对于本地缓存来说，由于应用服务器的部署机器随着扩缩容的改变，其数量不一定是固定的，所以修改后的数据如何同步到本地缓存中，就是一个比较复杂和麻烦的事情了。</p>
+<p>要解决本地缓存一致性问题，业界比较折中的方式是：对本地缓存采用“短过期时间”的方式，来平衡本地缓存命中率和数据更新一致性的问题。比如说，针对“长文章”的本地缓存，我们可以采用 5 秒过期的策略，淘汰后再从中央缓存获取新的数据。这种方式对于大部分业务场景来说，在产品层面上也是都能接受的。</p>
+<h2 id="小结">小结</h2>
+<p>好了，下面简单回顾一下今天课程的内容。</p>
+<p>首先，我介绍了缓存在高并发应用中的重要性，以及在 IM 系统中使用的部分场景。然后再带你了解了缓存分布式的两种算法：取模求余和一致性哈希。</p>
+<ul>
+<li><strong>取模求余算法</strong>在实现上非常简单，但存在的问题是，取模求余算法在节点扩容和宕机后会出现震荡，缓存命中率会严重降低。</li>
+<li><strong>一致性哈希算法</strong>解决了节点增删时震荡的问题，并通过虚拟节点的引入，缓解了**“数据倾斜”**的情况。</li>
+</ul>
+<p>最后，我着重介绍了业界通用的三种分布式缓存的常见架构。</p>
+<ul>
+<li>**一种是主从模式。**简单的主从模式最常见，但是在面对峰值热点流量时，容易出现带宽问题，也存在缓存节点宕机后穿透到存储层的问题。</li>
+<li><strong>第二种是 L1+ 主从模式</strong>。通过增加 L1 缓存层，以并行的多组小容量的 L1 缓存，解决了单一热点的带宽问题，也避免了单一节点宕机后容易穿透到 DB 存储层的情况。</li>
+<li><strong>最后一种是本地缓存 +L1+ 主从的多层模式</strong>。作为低成本的解决方案，我们在 L1+ 主从模式的基础上，引入了本地缓存。本地缓存依托应用服务器的本机少量内存，既提升了资源的有效利用，也彻底解决了带宽的问题。同时在性能方面，也比远程缓存获取更加优秀。对于本地缓存的数据一致性问题，我们可以通过“短过期时间”来平衡缓存命中率和数据一致性。</li>
+</ul>
+<p>面对高并发业务带来的流量压力，我们不可否认的是，缓存的使用是目前为止最有效的提升系统整体性能的手段。作为系统优化的一把利器，如何用好这个强大的工具，是你需要去不断思考和学习的。希望今天介绍的这几种缓存使用的姿势，能够让你有所收获，并能在自己的业务中去尝试实践。</p>
+<p><strong>最后给你留一道思考题：</strong></p>
+<p>L1+ 主从模式下，如果热点数据都被 L1 缓存层拦截命中，会导致主从缓存层相应的这个热点数据，由于长时间得不到读取而被 LRU 淘汰掉。这样，如果下线 L1 缓存，还是会有不少的请求直接穿透到 DB 存储层。那么有没有办法，能够让主从缓存在有 L1 缓存层的情况下，依旧能保持数据热度？</p>
+<p>以上就是今天课程的内容，欢迎你给我留言，我们可以在留言区一起讨论，感谢你的收听，我们下期再见。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/0b97f1bb735db6979eca2f17f8cdf223.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/">即时消息技术剖析与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E9%AB%98%E6%89%8B%E8%AF%BE/17__benchmark%E6%B5%8B%E8%AF%95%E4%B8%8A%E5%A6%82%E4%BD%95%E5%81%9A%E5%A5%BD%E5%BE%AE%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">17__Benchmark测试（上）：如何做好微基准测试？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/17__go%E8%AF%AD%E5%8F%A5%E5%8F%8A%E5%85%B6%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99%E4%B8%8B/">
+            <span class="next-text nav-default">17__go语句及其执行规则（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

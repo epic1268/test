@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>49__Custom_Metrics_让Auto_Scaling不再“食之无味” - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是张磊。今天我和你分享的主题是：Custom Metrics，让 Auto Scaling 不再“食之无味”。
+在上一篇文章中，我为你详细讲述了 Kubernetes 里的核心监控体系的架构。不难看到，Prometheus 项目在其中占据了最为核心的位置。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/49__custom_metrics_%E8%AE%A9auto_scaling%E4%B8%8D%E5%86%8D%E9%A3%9F%E4%B9%8B%E6%97%A0%E5%91%B3/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/49__custom_metrics_%E8%AE%A9auto_scaling%E4%B8%8D%E5%86%8D%E9%A3%9F%E4%B9%8B%E6%97%A0%E5%91%B3/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="49__Custom_Metrics_让Auto_Scaling不再“食之无味”">
+  <meta property="og:description" content="你好，我是张磊。今天我和你分享的主题是：Custom Metrics，让 Auto Scaling 不再“食之无味”。
+在上一篇文章中，我为你详细讲述了 Kubernetes 里的核心监控体系的架构。不难看到，Prometheus 项目在其中占据了最为核心的位置。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入剖析Kubernetes">
+
+  <meta itemprop="name" content="49__Custom_Metrics_让Auto_Scaling不再“食之无味”">
+  <meta itemprop="description" content="你好，我是张磊。今天我和你分享的主题是：Custom Metrics，让 Auto Scaling 不再“食之无味”。
+在上一篇文章中，我为你详细讲述了 Kubernetes 里的核心监控体系的架构。不难看到，Prometheus 项目在其中占据了最为核心的位置。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2866">
+  <meta itemprop="keywords" content="深入剖析Kubernetes">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="49__Custom_Metrics_让Auto_Scaling不再“食之无味”">
+  <meta name="twitter:description" content="你好，我是张磊。今天我和你分享的主题是：Custom Metrics，让 Auto Scaling 不再“食之无味”。
+在上一篇文章中，我为你详细讲述了 Kubernetes 里的核心监控体系的架构。不难看到，Prometheus 项目在其中占据了最为核心的位置。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">49__Custom_Metrics_让Auto_Scaling不再“食之无味”</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2866 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#思考题">思考题</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是张磊。今天我和你分享的主题是：Custom Metrics，让 Auto Scaling 不再“食之无味”。</p>
+<p>在上一篇文章中，我为你详细讲述了 Kubernetes 里的核心监控体系的架构。不难看到，Prometheus 项目在其中占据了最为核心的位置。</p>
+<p>实际上，借助上述监控体系，Kubernetes 就可以为你提供一种非常有用的能力，那就是 Custom Metrics，自定义监控指标。</p>
+<p>在过去的很多 PaaS 项目中，其实都有一种叫作 Auto Scaling，即自动水平扩展的功能。只不过，这个功能往往只能依据某种指定的资源类型执行水平扩展，比如 CPU 或者 Memory 的使用值。</p>
+<p>而在真实的场景中，用户需要进行 Auto Scaling 的依据往往是自定义的监控指标。比如，某个应用的等待队列的长度，或者某种应用相关资源的使用情况。这些复杂多变的需求，在传统 PaaS 项目和其他容器编排项目里，几乎是不可能轻松支持的。</p>
+<p>而凭借强大的 API 扩展机制，Custom Metrics 已经成为了 Kubernetes 的一项标准能力。并且，Kubernetes 的自动扩展器组件 Horizontal Pod Autoscaler（HPA），也可以直接使用 Custom Metrics 来执行用户指定的扩展策略，这里的整个过程都是非常灵活和可定制的。</p>
+<p>不难想到，Kubernetes 里的 Custom Metrics 机制，也是借助 Aggregator APIServer 扩展机制来实现的。这里的具体原理是，当你把 Custom Metrics APIServer 启动之后，Kubernetes 里就会出现一个叫作<code>custom.metrics.k8s.io</code>的 API。而当你访问这个 URL 时，Aggregator 就会把你的请求转发给 Custom Metrics APIServer。</p>
+<p>而 Custom Metrics APIServer 的实现，其实就是一个 Prometheus 项目的 Adaptor。</p>
+<p>比如，现在我们要实现一个根据指定 Pod 收到的 HTTP 请求数量来进行 Auto Scaling 的 Custom Metrics，这个 Metrics 就可以通过访问如下所示的自定义监控 URL 获取到：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">https://&lt;apiserver_ip&gt;/apis/custom-metrics.metrics.k8s.io/v1beta1/namespaces/default/pods/sample-metrics-app/http_requests 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的工作原理是，当你访问这个 URL 的时候，Custom Metrics APIServer 就会去 Prometheus 里查询名叫 sample-metrics-app 这个 Pod 的 http_requests 指标的值，然后按照固定的格式返回给访问者。</p>
+<p>当然，http_requests 指标的值，就需要由 Prometheus 按照我在上一篇文章中讲到的核心监控体系，从目标 Pod 上采集来。</p>
+<p>这里具体的做法有很多种，最普遍的做法，就是让 Pod 里的应用本身暴露出一个 /metrics API，然后在这个 API 里返回自己收到的 HTTP 的请求的数量。所以说，接下来 HPA 只需要定时访问前面提到的自定义监控 URL，然后根据这些值计算是否要执行 Scaling 即可。</p>
+<p>接下来，我通过一个具体的实例，来为你讲解一下 Custom Metrics 具体的使用方式。这个实例的 GitHub 库<a href="./kubeadm-workshop.md">在这里</a>，你可以点击链接查看。在这个例子中，我依然会假设你的集群是 kubeadm 部署出来的，所以 Aggregator 功能已经默认开启了。</p>
+<blockquote>
+<p>备注：我们这里使用的实例，fork 自 Lucas 在上高中时做的一系列 Kubernetes 指南。</p>
+</blockquote>
+<p><strong>首先</strong>，我们当然是先部署 Prometheus 项目。这一步，我当然会使用 Prometheus Operator 来完成，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl apply -f demos/monitoring/prometheus-operator.yaml
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrole &#34;prometheus-operator&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">serviceaccount &#34;prometheus-operator&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;prometheus-operator&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">deployment &#34;prometheus-operator&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> $ kubectl apply -f demos/monitoring/sample-prometheus-instance.yaml
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrole &#34;prometheus&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">serviceaccount &#34;prometheus&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;prometheus&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">prometheus &#34;sample-metrics-prom&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">service &#34;sample-metrics-prom&#34; created
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>第二步</strong>，我们需要把 Custom Metrics APIServer 部署起来，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl apply -f demos/monitoring/custom-metrics.yaml
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">namespace &#34;custom-metrics&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">serviceaccount &#34;custom-metrics-apiserver&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;custom-metrics:system:auth-delegator&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">rolebinding &#34;custom-metrics-auth-reader&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrole &#34;custom-metrics-read&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;custom-metrics-read&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">deployment &#34;custom-metrics-apiserver&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">service &#34;api&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiservice &#34;v1beta1.custom-metrics.metrics.k8s.io&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrole &#34;custom-metrics-server-resources&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;hpa-controller-custom-metrics&#34; created
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>第三步</strong>，我们需要为 Custom Metrics APIServer 创建对应的 ClusterRoleBinding，以便能够使用 curl 来直接访问 Custom Metrics 的 API：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl create clusterrolebinding allowall-cm --clusterrole custom-metrics-server-resources --user system:anonymous
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">clusterrolebinding &#34;allowall-cm&#34; created
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>第四步</strong>，我们就可以把待监控的应用和 HPA 部署起来了，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl apply -f demos/monitoring/sample-metrics-app.yaml
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">deployment &#34;sample-metrics-app&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">service &#34;sample-metrics-app&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">servicemonitor &#34;sample-metrics-app&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">horizontalpodautoscaler &#34;sample-metrics-app-hpa&#34; created
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ingress &#34;sample-metrics-app&#34; created
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里，我们需要关注一下 HPA 的配置，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: HorizontalPodAutoscaler
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: autoscaling/v2beta1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: sample-metrics-app-hpa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  scaleTargetRef:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    kind: Deployment
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    name: sample-metrics-app
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  minReplicas: 2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  maxReplicas: 10
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  metrics:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - type: Object
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    object:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      target:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        kind: Service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        name: sample-metrics-app
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      metricName: http_requests
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      targetValue: 100
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，<strong>HPA 的配置，就是你设置 Auto Scaling 规则的地方。</strong></p>
+<p>比如，scaleTargetRef 字段，就指定了被监控的对象是名叫 sample-metrics-app 的 Deployment，也就是我们上面部署的被监控应用。并且，它最小的实例数目是 2，最大是 10。</p>
+<p>在 metrics 字段，我们指定了这个 HPA 进行 Scale 的依据，是名叫 http_requests 的 Metrics。而获取这个 Metrics 的途径，则是访问名叫 sample-metrics-app 的 Service。</p>
+<p>有了这些字段里的定义，HPA 就可以向如下所示的 URL 发起请求来获取 Custom Metrics 的值了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">https://&lt;apiserver_ip&gt;/apis/custom-metrics.metrics.k8s.io/v1beta1/namespaces/default/services/sample-metrics-app/http_requests
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>需要注意的是，上述这个 URL 对应的被监控对象，是我们的应用对应的 Service。这跟本文一开始举例用到的 Pod 对应的 Custom Metrics URL 是不一样的。当然，<strong>对于一个多实例应用来说，通过 Service 来采集 Pod 的 Custom Metrics 其实才是合理的做法。</strong></p>
+<p>这时候，我们可以通过一个名叫 hey 的测试工具来为我们的应用增加一些访问压力，具体做法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">$</span> <span class="c1"># Install hey</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">$</span> <span class="n">docker</span> <span class="n">run</span> <span class="o">-</span><span class="n">it</span> <span class="o">-</span><span class="n">v</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">bin</span><span class="p">:</span><span class="o">/</span><span class="n">go</span><span class="o">/</span><span class="n">bin</span> <span class="n">golang</span><span class="p">:</span><span class="mf">1.8</span> <span class="n">go</span> <span class="n">get</span> <span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">rakyll</span><span class="o">/</span><span class="n">hey</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">$</span> <span class="k">export</span> <span class="n">APP_ENDPOINT</span><span class="o">=$</span><span class="p">(</span><span class="n">kubectl</span> <span class="n">get</span> <span class="n">svc</span> <span class="n">sample</span><span class="o">-</span><span class="n">metrics</span><span class="o">-</span><span class="n">app</span> <span class="o">-</span><span class="n">o</span> <span class="n">template</span> <span class="o">--</span><span class="n">template</span> <span class="p">{{</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">clusterIP</span><span class="p">}});</span> <span class="n">echo</span> <span class="o">$</span><span class="p">{</span><span class="n">APP_ENDPOINT</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">$</span> <span class="n">hey</span> <span class="o">-</span><span class="n">n</span> <span class="mi">50000</span> <span class="o">-</span><span class="n">c</span> <span class="mi">1000</span> <span class="n">http</span><span class="p">:</span><span class="o">//$</span><span class="p">{</span><span class="n">APP_ENDPOINT</span><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>与此同时，如果你去访问应用 Service 的 Custom Metircs URL，就会看到这个 URL 已经可以为你返回应用收到的 HTTP 请求数量了，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ curl -sSLk https://&lt;apiserver_ip&gt;/apis/custom-metrics.metrics.k8s.io/v1beta1/namespaces/default/services/sample-metrics-app/http_requests
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &#34;kind&#34;: &#34;MetricValueList&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &#34;apiVersion&#34;: &#34;custom-metrics.metrics.k8s.io/v1beta1&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &#34;metadata&#34;: {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &#34;selfLink&#34;: &#34;/apis/custom-metrics.metrics.k8s.io/v1beta1/namespaces/default/services/sample-metrics-app/http_requests&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  },
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &#34;items&#34;: [
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &#34;describedObject&#34;: {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &#34;kind&#34;: &#34;Service&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &#34;name&#34;: &#34;sample-metrics-app&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &#34;apiVersion&#34;: &#34;/__internal&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      },
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &#34;metricName&#34;: &#34;http_requests&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &#34;timestamp&#34;: &#34;2018-11-30T20:56:34Z&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &#34;value&#34;: &#34;501484m&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>这里需要注意的，是 Custom Metrics API 为你返回的 Value 的格式。</strong></p>
+<p>在为被监控应用编写 /metrics API 的返回值时，我们其实比较容易计算的，是该 Pod 收到的 HTTP request 的总数。所以，我们这个<a href="./server.js.md">应用的代码</a>其实是如下所示的样子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  if (request.url == &#34;/metrics&#34;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    response.end(&#34;# HELP http_requests_total The amount of requests served by the server in total\n# TYPE http_requests_total counter\nhttp_requests_total &#34; + totalrequests + &#34;\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，我们的应用在 /metrics 对应的 HTTP response 里返回的，其实是 http_requests_total 的值。这，也就是 Prometheus 收集到的值。</p>
+<p>而 Custom Metrics APIServer 在收到对 http_requests 指标的访问请求之后，它会从 Prometheus 里查询 http_requests_total 的值，然后把它折算成一个以时间为单位的请求率，最后把这个结果作为 http_requests 指标对应的值返回回去。</p>
+<p>所以说，我们在对前面的 Custom Metircs URL 进行访问时，会看到值是 501484m，这里的格式，其实就是 milli-requests，相当于是在过去两分钟内，每秒有 501 个请求。这样，应用的开发者就无需关心如何计算每秒的请求个数了。而这样的“请求率”的格式，是可以直接被 HPA 拿来使用的。</p>
+<p>这时候，如果你同时查看 Pod 的个数的话，就会看到 HPA 开始增加 Pod 的数目了。</p>
+<p>不过，在这里你可能会有一个疑问，Prometheus 项目，又是如何知道采集哪些 Pod 的 /metrics API 作为监控指标的来源呢。</p>
+<p>实际上，如果仔细观察一下我们前面创建应用的输出，你会看到有一个类型是 ServiceMonitor 的对象也被创建了出来。它的 YAML 文件如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: monitoring.coreos.com/v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: ServiceMonitor
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: sample-metrics-app
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    service-monitor: sample-metrics-app
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    matchLabels:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      app: sample-metrics-app
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  endpoints:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - port: web
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个 ServiceMonitor 对象，正是 Prometheus Operator 项目用来指定被监控 Pod 的一个配置文件。可以看到，我其实是通过 Label Selector 为 Prometheus 来指定被监控应用的。</p>
+<h1 id="总结">总结</h1>
+<p>在本篇文章中，我为你详细讲解了 Kubernetes 里对自定义监控指标，即 Custom Metrics 的设计与实现机制。这套机制的可扩展性非常强，也终于使得 Auto Scaling 在 Kubernetes 里面不再是一个“食之无味”的鸡肋功能了。</p>
+<p>另外可以看到，Kubernetes 的 Aggregator APIServer，是一个非常行之有效的 API 扩展机制。而且，Kubernetes 社区已经为你提供了一套叫作 <a href="./kubebuilder.md">KubeBuilder</a> 的工具库，帮助你生成一个 API Server 的完整代码框架，你只需要在里面添加自定义 API，以及对应的业务逻辑即可。</p>
+<h1 id="思考题">思考题</h1>
+<p>在你的业务场景中，你希望使用什么样的指标作为 Custom Metrics，以便对 Pod 进行 Auto Scaling 呢？怎么获取到这个指标呢？</p>
+<p>感谢你的收听，欢迎你给我留言，也欢迎分享给更多的朋友一起阅读。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90Kubernetes/e870b7df0db49509e735e6becd4a9a9a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/">深入剖析Kubernetes</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%82%B1%E5%B2%B3%E7%9A%84%E4%BA%A7%E5%93%81%E6%89%8B%E8%AE%B0/48%E5%B0%BE%E5%A3%B0%E4%BD%A0%E7%9A%84%E5%BF%AB%E4%B9%90%E6%98%AF%E5%93%AA%E4%B8%80%E7%A7%8D/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">48尾声你的快乐是哪一种</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/49__%E6%A1%88%E4%BE%8B%E7%AF%87%E5%86%85%E6%A0%B8%E7%BA%BF%E7%A8%8B_cpu_%E5%88%A9%E7%94%A8%E7%8E%87%E5%A4%AA%E9%AB%98%E6%88%91%E8%AF%A5%E6%80%8E%E4%B9%88%E5%8A%9E/">
+            <span class="next-text nav-default">49__案例篇：内核线程_CPU_利用率太高，我该怎么办？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

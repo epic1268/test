@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>加餐05__eBPF：怎么更加深入地查看内核中的函数？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。
+今天这一讲，我们聊一聊 eBPF。在我们专题加餐第一讲的分析案例时就说过，当我们碰到网络延时问题，在毫无头绪的情况下，就是依靠了我们自己写的一个 eBPF 工具，找到了问题的突破口。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9005__ebpf%E6%80%8E%E4%B9%88%E6%9B%B4%E5%8A%A0%E6%B7%B1%E5%85%A5%E5%9C%B0%E6%9F%A5%E7%9C%8B%E5%86%85%E6%A0%B8%E4%B8%AD%E7%9A%84%E5%87%BD%E6%95%B0/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9005__ebpf%E6%80%8E%E4%B9%88%E6%9B%B4%E5%8A%A0%E6%B7%B1%E5%85%A5%E5%9C%B0%E6%9F%A5%E7%9C%8B%E5%86%85%E6%A0%B8%E4%B8%AD%E7%9A%84%E5%87%BD%E6%95%B0/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="加餐05__eBPF：怎么更加深入地查看内核中的函数？">
+  <meta property="og:description" content="你好，我是程远。
+今天这一讲，我们聊一聊 eBPF。在我们专题加餐第一讲的分析案例时就说过，当我们碰到网络延时问题，在毫无头绪的情况下，就是依靠了我们自己写的一个 eBPF 工具，找到了问题的突破口。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="加餐05__eBPF：怎么更加深入地查看内核中的函数？">
+  <meta itemprop="description" content="你好，我是程远。
+今天这一讲，我们聊一聊 eBPF。在我们专题加餐第一讲的分析案例时就说过，当我们碰到网络延时问题，在毫无头绪的情况下，就是依靠了我们自己写的一个 eBPF 工具，找到了问题的突破口。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5378">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="加餐05__eBPF：怎么更加深入地查看内核中的函数？">
+  <meta name="twitter:description" content="你好，我是程远。
+今天这一讲，我们聊一聊 eBPF。在我们专题加餐第一讲的分析案例时就说过，当我们碰到网络延时问题，在毫无头绪的情况下，就是依靠了我们自己写的一个 eBPF 工具，找到了问题的突破口。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">加餐05__eBPF：怎么更加深入地查看内核中的函数？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5378 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#ebpf-的概念">eBPF 的概念</a></li>
+        <li><a href="#ebpf-的编程模型">eBPF 的编程模型</a></li>
+      </ul>
+    </li>
+    <li><a href="#git-clone-httpsgithubcomniclashedamebpf-kill-example">git clone <a href="https://github.com/niclashedam/ebpf-kill-example">https://github.com/niclashedam/ebpf-kill-example</a></a></li>
+    <li><a href="#cd-ebpf-kill-example">cd ebpf-kill-example/</a></li>
+    <li><a href="#ls">ls</a></li>
+    <li><a href="#cat-makefile">cat Makefile</a></li>
+    <li><a href="#ls-src">ls src/</a></li>
+    <li><a href="#cat-srcbpf_programc">cat src/bpf_program.c</a></li>
+    <li><a href="#make-build">make build</a></li>
+    <li><a href="#ls--l-srcbpf_programo">ls -l src/bpf_program.o</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#用-objdump-来查看-bpf_programo-里的汇编指令">用 objdump 来查看 bpf_program.o 里的汇编指令</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#llvm-objdump--d-srcbpf_programo">llvm-objdump -D src/bpf_program.o</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#用-readelf-读到-bpf_programo-中的-elf-section-信息">用 readelf 读到 bpf_program.o 中的 ELF section 信息。</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#llvm-readelf--sections-srcbpf_programo">llvm-readelf -sections src/bpf_program.o</a></li>
+    <li><a href="#cat-srcloaderc">cat src/loader.c</a></li>
+    <li><a href="#make">make</a></li>
+    <li><a href="#ls--l-srcebpf-kill-example">ls -l src/ebpf-kill-example</a></li>
+    <li><a href="#ld_library_pathlib64ld_library_path-srcebpf-kill-example-">LD_LIBRARY_PATH=lib64/:$LD_LIBRARY_PATH ./src/ebpf-kill-example &amp;</a></li>
+    <li><a href="#ebpf-will-listen-to-force-kills-for-the-next-30-seconds">eBPF will listen to force kills for the next 30 seconds!</a></li>
+    <li><a href="#kill--9-1">kill -9 1</a></li>
+    <li><a href="#1-was-forcefully-killed">1 was forcefully killed!</a>
+      <ul>
+        <li><a href="#重点小结">重点小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。</p>
+<p>今天这一讲，我们聊一聊 eBPF。在我们专题加餐第一讲的分析案例时就说过，当我们碰到网络延时问题，在毫无头绪的情况下，就是依靠了我们自己写的一个 eBPF 工具，找到了问题的突破口。</p>
+<p>由此可见，eBPF 在内核问题追踪上的重要性是不言而喻的。那什么是 eBPF，它的工作原理是怎么样，它的编程模型又是怎样的呢？</p>
+<p>在这一讲里，我们就来一起看看这几个问题。</p>
+<h2 id="ebpf-的概念">eBPF 的概念</h2>
+<p>eBPF，它的全称是“Extended Berkeley Packet Filter”。从名字看，你可能会觉奇怪，似乎它就是一个用来做网络数据包过滤的模块。</p>
+<p>其实这么想也没有错，eBPF 的概念最早源自于 BSD 操作系统中的 BPF（Berkeley Packet Filter），1992 伯克利实验室的一篇论文 “The BSD Packet Filter: A New Architecture for User-level Packet Capture”。这篇论文描述了，BPF 是如何更加高效灵活地从操作系统内核中抓取网络数据包的。</p>
+<p>我们很熟悉的 tcpdump 工具，它就是利用了 BPF 的技术来抓取 Unix 操作系统节点上的网络包。Linux 系统中也沿用了 BPF 的技术。</p>
+<p>那 BPF 是怎样从内核中抓取数据包的呢？我借用 BPF 论文中的图例来解释一下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/a54a0b1cfc6d59ecc71d13abf0de21e1.png" alt=""></p>
+<p>结合这张图，我们一起看看 BPF 实现有哪些特点。</p>
+<p>第一，内核中实现了一个虚拟机，用户态程序通过系统调用，把数据包过滤代码载入到个内核态虚拟机中运行，这样就实现了内核态对数据包的过滤。这一块对应图中灰色的大方块，也就是 BPF 的核心。</p>
+<p>第二，BPF 模块和网络协议栈代码是相互独立的，BPF 只是通过简单的几个 hook 点，就能从协议栈中抓到数据包。内核网络协议代码变化不影响 BPF 的工作，图中右边的“protocol stack”方块就是指内核网络协议栈。</p>
+<p>第三，内核中的 BPF filter 模块使用 buffer 与用户态程序进行通讯，把 filter 的结果返回给用户态程序（例如图中的 network monitor），这样就不会产生内核态与用户态的上下文切换（context switch）。</p>
+<p>在 BPF 实现的基础上，Linux 在 2014 年内核 3.18 的版本上实现了 eBPF，全名是 Extended BPF，也就是 BPF 的扩展。这个扩展主要做了下面这些改进。</p>
+<p>首先，对虚拟机做了增强，扩展了寄存器和指令集的定义，提高了虚拟机的性能，并且可以处理更加复杂的程序。</p>
+<p>其次，增加了 eBPF maps，这是一种存储类型，可以保存状态信息，从一个 BPF 事件的处理函数传递给另一个，或者保存一些统计信息，从内核态传递给用户态程序。</p>
+<p>最后，eBPF 可以处理更多的内核事件，不再只局限在网络事件上。你可以这样来理解，eBPF 的程序可以在更多内核代码 hook 点上注册了，比如 tracepoints、kprobes 等。</p>
+<p>在 Brendan Gregg 写的书《BPF Performance Tools》里有一张 eBPF 的架构图，这张图对 eBPF 内核部分的模块和工作流的描述还是挺完整的，我也推荐你阅读这本书。图书的网上预览部分也可以看到这张图，我把它放在这里，你可以先看一下。</p>
+<p>这里我想提醒你，我们在后面介绍例子程序的时候，你可以回头再来看看这张图，那时你会更深刻地理解这张图里的模块。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/0801b3842213a323bfebe10d172f0daf.png" alt=""></p>
+<p>当 BPF 增强为 eBPF 之后，它的应用范围自然也变广了。从单纯的网络包抓取，扩展到了下面的几个领域：</p>
+<ol>
+<li>网络领域，内核态网络包的快速处理和转发，你可以看一下XDP（eXpress Data Path）。</li>
+<li>安全领域，通过LSM（Linux Security Module）的 hook 点，eBPF 可以对 Linux 内核做安全监控和访问控制，你可以参考KRSI（Kernel Runtime Security Instrumentation）的文档。</li>
+<li>内核追踪 / 调试，eBPF 能通过 tracepoints、kprobes、perf-events 等 hook 点来追踪和调试内核，这也是我们在调试生产环境中，解决容器相关问题时使用的方法。</li>
+</ol>
+<h2 id="ebpf-的编程模型">eBPF 的编程模型</h2>
+<p>前面说了很多 eBPF 概念方面的内容，如果你是刚接触 eBPF，也许还不能完全理解。所以接下来，我们看一下 eBPF 编程模型，然后通过一个编程例子，再帮助你理解 eBPF。</p>
+<p>eBPF 程序其实也是遵循了一个固定的模式，Daniel Thompson 的“Kernel analysis using eBPF”里的一张图解读得非常好，它很清楚地说明了 eBPF 的程序怎么编译、加载和运行的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/c8e2167eccc36aa0ab6b5908e0afebe9.png" alt=""></p>
+<p>结合这张图，我们一起分析一下 eBPF 的运行原理。</p>
+<p>一个 eBPF 的程序分为两部分，第一部分是内核态的代码，也就是图中的 foo_kern.c，这部分的代码之后会在内核 eBPF 的虚拟机中执行。第二部分是用户态的代码，对应图中的 foo_user.c。它的主要功能是负责加载内核态的代码，以及在内核态代码运行后通过 eBPF maps 从内核中读取数据。</p>
+<p>然后我们看看 eBPF 内核态程序的编译，因为内核部分的代码需要被编译成 eBPF bytecode 二进制文件，也就是 eBPF 的虚拟机指令，而在 Linux 里，最常用的 GCC 编译器不支持生成 eBPF bytecode，所以这里<strong>必须要用 Clang/LLVM 来编译</strong>，编译后的文件就是 foo_kern.o。</p>
+<p>foo_user.c 编译链接后就会生成一个普通的用户态程序，它会通过 bpf() 系统调用做两件事：第一是去加载 eBPF bytecode 文件 foo_kern.o，使 foo_kern.o 这个 eBPF bytecode 在内核 eBPF 的虚拟机中运行；第二是创建 eBPF maps，用于内核态与用户态的通讯。</p>
+<p>接下来，在内核态，eBPF bytecode 会被加载到 eBPF 内核虚拟机中，这里你可以参考一下前面的 eBPF 架构图。</p>
+<p>执行 BPF 程序之前，BPF Verifier 先要对 eBPF bytecode 进行很严格的指令检查。检查通过之后，再通过 JIT（Just In Time）编译成宿主机上的本地指令。</p>
+<p>编译成本地指令之后，eBPF 程序就可以在内核中运行了，比如挂载到 tracepoints hook 点，或者用 kprobes 来对内核函数做分析，然后把得到的数据存储到 eBPF maps 中，这样 foo_user 这个用户态程序就可以读到数据了。</p>
+<p>我们学习 eBPF 的编程的时候，可以从编译和执行 Linux 内核中 samples/bpf 目录下的例子开始。在这个目录下的例子里，包含了 eBPF 各种使用场景。每个例子都有两个.c 文件，命名规则都是 xxx_kern.c 和 xxx_user.c，编译和运行的方式就和我们刚才讲的一样。</p>
+<p>本来我想拿 samples/bpf 目录下的一个例子来具体说明的，不过后来我在 github 上看到了一个更好的例子，它就是ebpf-kill-example。下面，我就用这个例子来给你讲一讲，如何编写 eBPF 程序，以及 eBPF 代码需要怎么编译与运行。</p>
+<p>我们先用 git clone 取一下代码：</p>
+<h1 id="git-clone-httpsgithubcomniclashedamebpf-kill-example">git clone <a href="https://github.com/niclashedam/ebpf-kill-example">https://github.com/niclashedam/ebpf-kill-example</a></h1>
+<h1 id="cd-ebpf-kill-example">cd ebpf-kill-example/</h1>
+<h1 id="ls">ls</h1>
+<p>docs  img  LICENSE  Makefile  README.md  src  test</p>
+<p>这里你可以先看一下 Makefile，请注意编译 eBPF 程序需要 Clang/LLVM，以及由 Linux 内核源代码里的 tools/lib/bpf 中生成的 libbpf.so 库和相关的头文件。如果你的 OS 是 Ubuntu，可以运行<code>make deps;make kernel-src</code>这个命令，准备好编译的环境。</p>
+<h1 id="cat-makefile">cat Makefile</h1>
+<p>…<br>
+deps:<br>
+sudo apt update<br>
+sudo apt install -y build-essential git make gcc clang libelf-dev gcc-multilib</p>
+<p>kernel-src:<br>
+git clone &ndash;depth 1 &ndash;single-branch &ndash;branch ${LINUX_VERSION}  <a href="https://github.com/torvalds/linux.git">https://github.com/torvalds/linux.git</a> kernel-src<br>
+cd kernel-src/tools/lib/bpf &amp;&amp; make &amp;&amp; make install prefix=../../../../<br>
+…</p>
+<p>完成上面的步骤后，在 src/ 目录下，我们可以看到两个文件，分别是 bpf_program.c 和 loader.c。</p>
+<p>在这个例子里，bpf_program.c 对应前面说的 foo_kern.c 文件，也就是说 eBPF 内核态的代码在 bpf_program.c 里面。而 loader.c 就是 eBPF 用户态的代码，它主要负责把 eBPF bytecode 加载到内核中，并且通过 eBPF Maps 读取内核中返回的数据。</p>
+<h1 id="ls-src">ls src/</h1>
+<p>bpf_program.c  loader.c</p>
+<p>我们先看一下 bpf_program.c 中的内容：</p>
+<h1 id="cat-srcbpf_programc">cat src/bpf_program.c</h1>
+<p>#include &lt;linux/bpf.h&gt;<br>
+#include &lt;stdlib.h&gt;<br>
+#include &ldquo;bpf_helpers.h&rdquo;</p>
+<p>//这里定义了一个 eBPF Maps<br>
+//Data in this map is accessible in user-space<br>
+struct bpf_map_def SEC(&ldquo;maps&rdquo;) kill_map = {<br>
+.type        = BPF_MAP_TYPE_HASH,<br>
+.key_size    = sizeof(long),<br>
+.value_size  = sizeof(char),<br>
+.max_entries = 64,<br>
+};</p>
+<p>// This is the tracepoint arguments of the kill functions<br>
+// /sys/kernel/debug/tracing/events/syscalls/sys_enter_kill/format<br>
+struct syscalls_enter_kill_args {<br>
+long long pad;</p>
+<pre><code>long syscall_nr;  
+long pid;  
+long sig;  
+</code></pre>
+<p>};</p>
+<p>// 这里定义了 BPF_PROG_TYPE_TRACEPOINT 类型的 BPF Program  <br>
+SEC(&ldquo;tracepoint/syscalls/sys_enter_kill&rdquo;)<br>
+int bpf_prog(struct syscalls_enter_kill_args *ctx) {<br>
+// Ignore normal program terminations<br>
+if(ctx-&gt;sig != 9) return 0;</p>
+<p>// We can call glibc functions in eBPF<br>
+long key = labs(ctx-&gt;pid);<br>
+int val = 1;</p>
+<p>// Mark the PID as killed in the map<br>
+bpf_map_update_elem(&amp;kill_map, &amp;key, &amp;val, BPF_NOEXIST);</p>
+<p>return 0;<br>
+}</p>
+<p>// All eBPF programs must be GPL licensed<br>
+char _license[] SEC(&ldquo;license&rdquo;) = &ldquo;GPL&rdquo;;</p>
+<p>在这一小段代码中包含了 eBPF 代码最重要的三个要素，分别是：</p>
+<ol>
+<li>BPF Program Types</li>
+<li>BPF Maps</li>
+<li>BPF Helpers</li>
+</ol>
+<p>“BPF Program Types”定义了函数在 eBPF 内核态的类型，这个类型决定了这个函数会在内核中的哪个 hook 点执行，同时也决定了函数的输入参数的类型。在内核代码bpf_prog_type的枚举定义里，你可以看到 eBPF 支持的所有“BPF Program Types”。</p>
+<p>比如在这个例子里的函数 bpf_prog()，通过 SEC() 这个宏，我们可以知道它的类型是 BPF_PROG_TYPE_TRACEPOINT，并且它注册在 syscalls subsystem 下的 sys_enter_kill 这个 tracepoint 上。</p>
+<p>既然我们知道了具体的 tracepoint，那么这个 tracepoint 的注册函数的输入参数也就固定了。在这里，我们就把参数组织到 syscalls_enter_kill_args{}这个结构里，里面最主要的信息就是 kill() 系统调用中，输入信号的<strong>编号 sig</strong> 和<strong>信号发送目标进程的 pid</strong>。</p>
+<p>“BPF Maps”定义了 key/value 对的一个存储结构，它用于 eBPF 内核态程序之间，或者内核态程序与用户态程序之间的数据通讯。eBPF 中定义了不同类型的 Maps，在内核代码bpf_map_type的枚举定义中，你可以看到完整的定义。</p>
+<p>在这个例子里，定义的 kill_map 是 BPF_MAP_TYPE_HASH 类型，这里也用到了 SEC() 这个宏，等会儿我们再解释，先看其他的。</p>
+<p>kill_map 是 HASH Maps 里的一个 key，它是一个 long 数据类型，value 是一个 char 字节。bpf_prog() 函数在系统调用 kill() 的 tracepoint 上运行，可以得到目标进程的 pid 参数，Maps 里的 key 值就是这个 pid 参数来赋值的，而 val 只是简单赋值为 1。</p>
+<p>然后，这段程序调用了一个函数 bpf_map_update_elem()，把这组新的 key/value 对写入了到 kill_map 中。这个函数 bpf_map_update_elem() 就是我们要说的第三个要素 BPF Helpers。</p>
+<p>我们再看一下“BPF Helpers”，它定义了一组可以在 eBPF 内核态程序中调用的函数。</p>
+<p>尽管 eBPF 程序在内核态运行，但是跟 kernel module 不一样，eBPF 程序不能调用普通内核 export 出来的函数，而是只能调用在内核中为 eBPF 事先定义好的一些接口函数。这些接口函数叫作 BPF Helpers，具体有哪些你可以在”Linux manual page”中查看。</p>
+<p>看明白这段代码之后，我们就可以运行 <code>make build</code> 命令，把 C 代码编译成 eBPF bytecode 了。这里生成了 src/bpf_program.o 这个文件：</p>
+<h1 id="make-build">make build</h1>
+<p>clang -O2 -target bpf -c src/bpf_program.c -Ikernel-src/tools/testing/selftests/bpf -Ikernel-src/tools/lib/bpf -o src/bpf_program.o</p>
+<h1 id="ls--l-srcbpf_programo">ls -l src/bpf_program.o</h1>
+<p>-rw-r&mdash;&ndash; 1 root root 1128 Jan 24 00:50 src/bpf_program.o</p>
+<p>接下来，你可以用 LLVM 工具来看一下 eBPF bytecode 里的内容，这样做可以确认下面两点。</p>
+<ol>
+<li>编译生成了 BPF 虚拟机的汇编指令，而不是 x86 的指令。</li>
+<li>在代码中用 SEC 宏添加的“BPF Program Types”和“BPF Maps”信息也在后面的 section 里。</li>
+</ol>
+<p>查看 eBPF bytecode 信息的操作如下：</p>
+<h3 id="用-objdump-来查看-bpf_programo-里的汇编指令">用 objdump 来查看 bpf_program.o 里的汇编指令</h3>
+<h1 id="llvm-objdump--d-srcbpf_programo">llvm-objdump -D src/bpf_program.o</h1>
+<p>…</p>
+<p>Disassembly of section tracepoint/syscalls/sys_enter_kill:</p>
+<p>0000000000000000 &lt;bpf_prog&gt;:<br>
+0:   79 12 18 00 00 00 00 00         r2 = *(u64 *)(r1 + 24)<br>
+1:   55 02 10 00 09 00 00 00         if r2 != 9 goto +16 &lt;LBB0_2&gt;<br>
+2:   79 11 10 00 00 00 00 00         r1 = *(u64 *)(r1 + 16)<br>
+3:   bf 12 00 00 00 00 00 00          r2 = r1<br>
+4:   c7 02 00 00 3f 00 00 00          r2 s&raquo;= 63<br>
+5:   0f 21 00 00 00 00 00 00          r1 += r2<br>
+6:   af 21 00 00 00 00 00 00          r1 ^= r2<br>
+7:   7b 1a f8 ff 00 00 00 00            *(u64 *)(r10 - 8) = r1<br>
+8:   b7 01 00 00 01 00 00 00         r1 = 1<br>
+9:   63 1a f4 ff 00 00 00 00            *(u32 *)(r10 - 12) = r1<br>
+10: bf a2 00 00 00 00 00 00          r2 = r10<br>
+11: 07 02 00 00 f8 ff ff ff   r2 += -8<br>
+12: bf a3 00 00 00 00 00 00          r3 = r10<br>
+13: 07 03 00 00 f4 ff ff ff   r3 += -12<br>
+14: 18 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00     r1 = 0 ll<br>
+16: b7 04 00 00 01 00 00 00         r4 = 1<br>
+17: 85 00 00 00 02 00 00 00         call 2<br>
+…</p>
+<h3 id="用-readelf-读到-bpf_programo-中的-elf-section-信息">用 readelf 读到 bpf_program.o 中的 ELF section 信息。</h3>
+<h1 id="llvm-readelf--sections-srcbpf_programo">llvm-readelf -sections src/bpf_program.o</h1>
+<p>There are 9 section headers, starting at offset 0x228:</p>
+<p>Section Headers:<br>
+[Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al<br>
+…<br>
+[ 3] tracepoint/syscalls/sys_enter_kill PROGBITS 0000000000000000 000040 0000a0 00  AX  0   0  8<br>
+[ 4] .reltracepoint/syscalls/sys_enter_kill REL 0000000000000000 000190 000010 10      8   3  8<br>
+[ 5] maps              PROGBITS        0000000000000000 0000e0 00001c 00  WA  0   0  4</p>
+<p>好了，看完了 eBPF 程序的内核态部分，我们再来看看它的用户态部分 loader.c：</p>
+<h1 id="cat-srcloaderc">cat src/loader.c</h1>
+<p>#include &ldquo;bpf_load.h&rdquo;<br>
+#include &lt;unistd.h&gt;<br>
+#include &lt;stdio.h&gt;</p>
+<p>int main(int argc, char **argv) {<br>
+// Load our newly compiled eBPF program<br>
+if (load_bpf_file(&ldquo;src/bpf_program.o&rdquo;) != 0) {<br>
+printf(&ldquo;The kernel didn&rsquo;t load the BPF program\n&rdquo;);<br>
+return -1;<br>
+}</p>
+<p>printf(&ldquo;eBPF will listen to force kills for the next 30 seconds!\n&rdquo;);<br>
+sleep(30);</p>
+<p>// map_fd is a global variable containing all eBPF map file descriptors<br>
+int fd = map_fd[0], val;<br>
+long key = -1, prev_key;</p>
+<p>// Iterate over all keys in the map<br>
+while(bpf_map_get_next_key(fd, &amp;prev_key, &amp;key) == 0) {<br>
+printf(&quot;%ld was forcefully killed!\n&quot;, key);<br>
+prev_key = key;<br>
+}</p>
+<p>return 0;<br>
+}</p>
+<p>这部分的代码其实也很简单，主要就是做了两件事：</p>
+<ol>
+<li>通过执行 load_bpf_file() 函数，加载内核态代码生成的 eBPF bytecode，也就是编译后得到的文件“src/bpf_program.o”。</li>
+<li>等待 30 秒钟后，从 BPF Maps 读取 key/value 对里的值。这里的值就是前面内核态的函数 bpf_prog()，在 kill() 系统调用的 tracepoint 上执行这个函数以后，写入到 BPF Maps 里的值。</li>
+</ol>
+<p>至于读取 BPF Maps 的部分，就不需要太多的解释了，这里我们主要看一下 load_bpf_file() 这个函数，load_bpf_file() 是 Linux 内核代码 samples/bpf/bpf_load.c 里封装的一个函数。</p>
+<p>这个函数可以读取 eBPF bytecode 中的信息，然后决定如何在内核中加载 BPF Program，以及创建 BPF Maps。这里用到的都是bpf()这个系统调用，具体的代码你可以去看一下内核中bpf_load.c和bpf.c这两个文件。</p>
+<p>理解了用户态的 load.c 这段代码后，我们最后编译一下，就生成了用户态的程序 ebpf-kill-example：</p>
+<h1 id="make">make</h1>
+<p>clang -O2 -target bpf -c src/bpf_program.c -Ikernel-src/tools/testing/selftests/bpf -Ikernel-src/tools/lib/bpf -o src/bpf_program.o<br>
+clang -O2 -o src/ebpf-kill-example -lelf -Ikernel-src/samples/bpf -Ikernel-src/tools/lib -Ikernel-src/tools/perf -Ikernel-src/tools/include -Llib64 -lbpf \<br>
+kernel-src/samples/bpf/bpf_load.c -DHAVE_ATTR_TEST=0 src/loader.c</p>
+<h1 id="ls--l-srcebpf-kill-example">ls -l src/ebpf-kill-example</h1>
+<p>-rwxr-x&mdash; 1 root root 23400 Jan 24 01:28 src/ebpf-kill-example</p>
+<p>你可以运行一下这个程序，如果在 30 秒以内有别的程序执行了 <code>kill -9 &lt;pid&gt;</code>，那么在内核中的 eBPF 代码就可以截获这个操作，然后通过 eBPF Maps 把信息传递给用户态进程，并且把这个信息打印出来了。</p>
+<h1 id="ld_library_pathlib64ld_library_path-srcebpf-kill-example-">LD_LIBRARY_PATH=lib64/:$LD_LIBRARY_PATH ./src/ebpf-kill-example &amp;</h1>
+<p>[1] 1963961</p>
+<h1 id="ebpf-will-listen-to-force-kills-for-the-next-30-seconds">eBPF will listen to force kills for the next 30 seconds!</h1>
+<h1 id="kill--9-1">kill -9 1</h1>
+<h1 id="1-was-forcefully-killed">1 was forcefully killed!</h1>
+<h2 id="重点小结">重点小结</h2>
+<p>今天我们一起学习了 eBPF，接下来我给你总结一下重点。</p>
+<p>eBPF 对早年的 BPF 技术做了增强之后，为 Linux 网络，Linux 安全以及 Linux 内核的调试和跟踪这三个领域提供了强大的扩展接口。</p>
+<p>虽然整个 eBPF 技术是很复杂的，不过对于用户编写 eBPF 的程序，还是有一个固定的模式。</p>
+<p>eBPF 的程序都分为两部分，一是内核态的代码最后会被编译成 eBPF bytecode，二是用户态代码，它主要是负责加载 eBPF bytecode，并且通过 eBPF Maps 与内核态代码通讯。</p>
+<p>这里我们重点要掌握 eBPF 程序里的三个要素，<strong>eBPF Program Types，eBPF Maps 和 eBPF Helpers。</strong></p>
+<p>eBPF Program Types 可以定义函数在 eBPF 内核态的类型。eBPF Maps 定义了 key/value 对的存储结构，搭建了 eBPF Program 之间以及用户态和内核态之间的数据交换的桥梁。eBPF Helpers 是内核事先定义好了接口函数，方便 eBPF 程序调用这些函数。</p>
+<p>理解了这些概念后，你可以开始动手编写 eBPF 的程序了。不过，eBPF 程序的调试并不方便，基本只能依靠 bpf_trace_printk()，同时也需要我们熟悉 eBPF 虚拟机的汇编指令。这些就需要你在实际的操作中，不断去积累经验了。</p>
+<h2 id="思考题">思考题</h2>
+<p>请你在ebpf-kill-example 这个例子的基础上，做一下修改，让用户态程序也能把调用 kill() 函数的进程所对应的进程号打印出来。</p>
+<p>欢迎你在留言区记录你的思考或疑问。如果这一讲让你有所收获，也欢迎转发给你的朋友，同事，跟他一起学习进步。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9004__%E7%90%86%E8%A7%A3ftrace2%E6%80%8E%E4%B9%88%E7%90%86%E8%A7%A3ftrace%E8%83%8C%E5%90%8E%E7%9A%84%E6%8A%80%E6%9C%AFtracepoint%E5%92%8Ckprobe/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9006__bcc%E5%85%A5%E9%97%A8ebpf%E7%9A%84%E5%89%8D%E7%AB%AF%E5%B7%A5%E5%85%B7/">
+            <span class="next-text nav-default">加餐06__BCC：入门eBPF的前端工具</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

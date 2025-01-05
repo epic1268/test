@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__延迟解析：V8是如何实现闭包的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是李兵。
+在第一节我们介绍过 V8 执行 JavaScript 代码，需要经过编译和执行两个阶段，其中编译过程是指 V8 将 JavaScript 代码转换为字节码或者二进制机器代码的阶段，而执行阶段则是指解释器解释执行字节码，或者是 CPU 直接执行二进制机器代码的阶段。总的流程你可以参看下图：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%9B%BE%E8%A7%A3googlev8/12__%E5%BB%B6%E8%BF%9F%E8%A7%A3%E6%9E%90v8%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%97%AD%E5%8C%85%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%9B%BE%E8%A7%A3googlev8/12__%E5%BB%B6%E8%BF%9F%E8%A7%A3%E6%9E%90v8%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E9%97%AD%E5%8C%85%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__延迟解析：V8是如何实现闭包的？">
+  <meta property="og:description" content="你好，我是李兵。
+在第一节我们介绍过 V8 执行 JavaScript 代码，需要经过编译和执行两个阶段，其中编译过程是指 V8 将 JavaScript 代码转换为字节码或者二进制机器代码的阶段，而执行阶段则是指解释器解释执行字节码，或者是 CPU 直接执行二进制机器代码的阶段。总的流程你可以参看下图：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="图解GoogleV8">
+
+  <meta itemprop="name" content="12__延迟解析：V8是如何实现闭包的？">
+  <meta itemprop="description" content="你好，我是李兵。
+在第一节我们介绍过 V8 执行 JavaScript 代码，需要经过编译和执行两个阶段，其中编译过程是指 V8 将 JavaScript 代码转换为字节码或者二进制机器代码的阶段，而执行阶段则是指解释器解释执行字节码，或者是 CPU 直接执行二进制机器代码的阶段。总的流程你可以参看下图：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3656">
+  <meta itemprop="keywords" content="图解GoogleV8">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__延迟解析：V8是如何实现闭包的？">
+  <meta name="twitter:description" content="你好，我是李兵。
+在第一节我们介绍过 V8 执行 JavaScript 代码，需要经过编译和执行两个阶段，其中编译过程是指 V8 将 JavaScript 代码转换为字节码或者二进制机器代码的阶段，而执行阶段则是指解释器解释执行字节码，或者是 CPU 直接执行二进制机器代码的阶段。总的流程你可以参看下图：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__延迟解析：V8是如何实现闭包的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3656 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#惰性解析的过程">惰性解析的过程</a></li>
+        <li><a href="#拆解闭包javascript-的三个特性">拆解闭包——JavaScript 的三个特性</a></li>
+        <li><a href="#闭包给惰性解析带来的问题">闭包给惰性解析带来的问题</a></li>
+        <li><a href="#预解析器如何解决闭包所带来的问题">预解析器如何解决闭包所带来的问题？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是李兵。</p>
+<p>在第一节我们介绍过 V8 执行 JavaScript 代码，需要经过<strong>编译</strong>和<strong>执行</strong>两个阶段，其中<strong>编译过程</strong>是指 V8 将 JavaScript 代码转换为字节码或者二进制机器代码的阶段，而执行阶段则是指解释器解释执行字节码，或者是 CPU 直接执行二进制机器代码的阶段。总的流程你可以参看下图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%9B%BE%E8%A7%A3GoogleV8/2ee028f5de107e7e8ca9c3aa4c0c2a4b.png" alt=""></p>
+<p>代码执行</p>
+<p>在编译 JavaScript 代码的过程中，V8 并不会一次性将所有的 JavaScript 解析为中间代码，这主要是基于以下两点：</p>
+<ol>
+<li>首先，如果一次解析和编译所有的 JavaScript 代码，过多的代码会增加编译时间，这会严重影响到首次执行 JavaScript 代码的速度，让用户感觉到卡顿。因为有时候一个页面的 JavaScript 代码都有 10 多兆，如果要将所有的代码一次性解析编译完成，那么会大大增加用户的等待时间；</li>
+<li>其次，解析完成的字节码和编译之后的机器代码都会存放在内存中，如果一次性解析和编译所有 JavaScript 代码，那么这些中间代码和机器代码将会一直占用内存，特别是在手机普及的年代，内存是非常宝贵的资源。</li>
+</ol>
+<p>基于以上的原因，所有主流的 JavaScript 虚拟机都实现了<strong>惰性解析</strong>。所谓惰性解析是指解析器在解析的过程中，如果遇到函数声明，那么会跳过函数内部的代码，并不会为其生成 AST 和字节码，而仅仅生成顶层代码的 AST 和字节码。</p>
+<h2 id="惰性解析的过程">惰性解析的过程</h2>
+<p>关于惰性解析，我们可以结合下面这个例子来分析下：</p>
+<p>function foo(a,b) {<br>
+var d = 100<br>
+var f = 10<br>
+return d + f + a + b;<br>
+}<br>
+var a = 1<br>
+var c = 4<br>
+foo(1, 5)</p>
+<p>当把这段代码交给 V8 处理时，V8 会至上而下解析这段代码，在解析过程中首先会遇到 foo 函数，由于这只是一个函数声明语句，V8 在这个阶段只需要将该函数转换为函数对象，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%9B%BE%E8%A7%A3GoogleV8/8d32843fec3bc8253415721dc55f4854.png" alt=""></p>
+<p>注意，这里只是将该函数声明转换为函数对象，但是并有没有解析和编译函数内部的代码，所以也不会为 foo 函数的内部代码生成抽象语法树。</p>
+<p>然后继续往下解析，由于后续的代码都是顶层代码，所以 V8 会为它们生成抽象语法树，最终生成的结果如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%9B%BE%E8%A7%A3GoogleV8/3a0d155ff6dbfcc05825747c16b30aed.png" alt=""></p>
+<p>生成顶层代码的抽象语法树</p>
+<p>代码解析完成之后，V8 便会按照顺序自上而下执行代码，首先会先执行“a=1”和“c=4”这两个赋值表达式，接下来执行 foo 函数的调用，过程是从 foo 函数对象中取出函数代码，然后和编译顶层代码一样，V8 会先编译 foo 函数的代码，编译时同样需要先将其编译为抽象语法树和字节码，然后再解释执行。</p>
+<p>好了，上面就是惰性解析的一个大致过程，看上去是不是很简单，不过在 V8 实现惰性解析的过程中，需要支持 JavaScript 中的闭包特性，这会使得 V8 的解析过程变得异常复杂。</p>
+<p>为什么闭包会让 V8 解析代码的过程变得复杂呢？要解答这个问题，我们先来拆解闭包的特性，然后再来分析为什么闭包影响到了 V8 的解析流程。</p>
+<h2 id="拆解闭包javascript-的三个特性">拆解闭包——JavaScript 的三个特性</h2>
+<p>JavaScript 中的闭包有三个基础特性。</p>
+<p>第一，<strong>JavaScript 语言允许在函数内部定义新的函数</strong>，代码如下所示：</p>
+<p>function foo() {<br>
+function inner() {<br>
+}<br>
+inner()<br>
+}</p>
+<p>这和其他的流行语言有点差异，在其他的大部分语言中，函数只能声明在顶层代码中，而 JavaScript 中之所以可以在函数中声明另外一个函数，主要是因为 JavaScript 中的函数即对象，你可以在函数中声明一个变量，当然你也可以在函数中声明一个函数。</p>
+<p>第二，可以在<strong>内部函数中访问父函数中定义的变量</strong>，代码如下所示：</p>
+<p>var d = 20<br>
+//inner 函数的父函数，词法作用域<br>
+function foo() {<br>
+var d = 55<br>
+//foo 的内部函数<br>
+function inner() {<br>
+return d+2<br>
+}<br>
+inner()<br>
+}</p>
+<p>由于可以在函数中定义新的函数，所以很自然的，内部的函数可以使用外部函数中定义的变量，注意上面代码中的 inner 函数和 foo 函数，inner 是在 foo 函数内部定义的，我们就称 inner 函数是 foo 函数的子函数，foo 函数是 inner 函数的父函数。这里的父子关系是针对词法作用域而言的，因为词法作用域在函数声明时就决定了，比如 inner 函数是在 foo 函数内部声明的，所以 inner 函数可以访问 foo 函数内部的变量，比如 inner 就可以访问 foo 函数中的变量 d。</p>
+<p>但是如果在 foo 函数外部，也定义了一个变量 d，那么当 inner 函数访问该变量时，到底是该访问哪个变量呢？</p>
+<p>在《06｜作用域链：V8 是如何查找变量的？》这节课，我介绍了词法作用域和词法作用域链，每个函数有自己的词法作用域，该函数中定义的变量都存在于该作用域中，然后 V8 会将这些作用域按照词法的位置，也就是代码位置关系，将这些作用域串成一个链，这就是词法作用域链，查找变量的时候会沿着词法作用域链的途径来查找。</p>
+<p>所以，inner 函数在自己的作用域中没有查找到变量 d，就接着在 foo 函数的作用域中查找，再查找不到才会查找顶层作用域中的变量。所以 inner 函数中使用的变量 d 就是 foo 函数中的变量 d。</p>
+<p>第三，<strong>因为函数是一等公民，所以函数可以作为返回值</strong>，我们可以看下面这段代码：</p>
+<p>function foo() {<br>
+return function inner(a, b) {<br>
+const c = a + b<br>
+return c<br>
+}<br>
+}<br>
+const f = foo()</p>
+<p>观察上面这段代码，我们将 inner 函数作为了 foo 函数的返回值，也就是说，当调用 foo 函数时，最终会返回 inner 函数给调用者，比如上面我们将 inner 函数返回给了全局变量 f，接下来就可以在外部像调用 inner 函数一样调用 f 了。</p>
+<p>以上就是和 JavaScript 闭包相关的三个重要特性：</p>
+<ol>
+<li>可以在 JavaScript 函数内部定义新的函数；</li>
+<li>内部函数中访问父函数中定义的变量；</li>
+<li>因为 JavaScript 中的函数是一等公民，所以函数可以作为另外一个函数的返回值。</li>
+</ol>
+<p>这也是 JavaScript 过于灵活的一个原因，比如在 C/C++ 中，你就不可以在一个函数中定义另外一个函数，所以也就没了内部函数访问外部函数中变量的问题了。</p>
+<h2 id="闭包给惰性解析带来的问题">闭包给惰性解析带来的问题</h2>
+<p>好了，了解了 JavaScript 的这三个特性之后，下面我们就来使用这三个特性组装的一段经典的闭包代码：</p>
+<p>function foo() {<br>
+var d = 20<br>
+return function inner(a, b) {<br>
+const c = a + b + d<br>
+return c<br>
+}<br>
+}<br>
+const f = foo()</p>
+<p>观察上面上面这段代码，我们在 foo 函数中定义了 inner 函数，并返回 inner 函数，同时在 inner 函数中访问了 foo 函数中的变量 d。</p>
+<p>我们可以分析下上面这段代码的执行过程：</p>
+<ol>
+<li>当调用 foo 函数时，foo 函数会将它的内部函数 inner 返回给全局变量 f；</li>
+<li>然后 foo 函数执行结束，执行上下文被 V8 销毁了；</li>
+<li>虽然 foo 函数的执行上下文被销毁了，但是依然存活的 inner 函数引用了 foo 函数作用域中的变量 d。</li>
+</ol>
+<p>按照通用的做法，d 已经被 v8 销毁了，但是由于存活的函数 inner 依然引用了 foo 函数中的变量 d，这样就会带来两个问题：</p>
+<ol>
+<li>当 foo 执行结束时，变量 d 该不该被销毁？如果不应该被销毁，那么应该采用什么策略？</li>
+<li>如果采用了惰性解析，那么当执行到 foo 函数时，V8 只会解析 foo 函数，并不会解析内部的 inner 函数，那么这时候 V8 就不知道 inner 函数中是否引用了 foo 函数的变量 d。</li>
+</ol>
+<p>这么讲可能有点抽象，下面我们就来看一下上面这段代码的执行流程，我们上节分析过了，JavaScript 是一门基于堆和栈的语言，当执行 foo 函数的时候，堆栈的变化如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%9B%BE%E8%A7%A3GoogleV8/a8f9ff26c9dd07372d1ea8f8f39b6ccd.png" alt=""></p>
+<p>从上图可以看出来，在执行全局代码时，V8 会将全局执行上下文压入到调用栈中，然后进入执行 foo 函数的调用过程，这时候 V8 会为 foo 函数创建执行上下文，执行上下文中包括了变量 d，然后将 foo 函数的执行上下文压入栈中，foo 函数执行结束之后，foo 函数执行上下文从栈中弹出，这时候 foo 执行上下文中的变量 d 也随之被销毁。</p>
+<p>但是这时候，由于 inner 函数被保存到全局变量中了，所以 inner 函数依然存在，最关键的地方在于 inner 函数使用了 foo 函数中的变量 d，按照正常执行流程，变量 d 在 foo 函数执行结束之后就被销毁了。</p>
+<p>所以正常的处理方式应该是 foo 函数的执行上下文虽然被销毁了，但是 inner 函数引用的 foo 函数中的变量却不能被销毁，那么 V8 就需要为这种情况做特殊处理，需要保证即便 foo 函数执行结束，但是 foo 函数中的 d 变量依然保持在内存中，不能随着 foo 函数的执行上下文被销毁掉。</p>
+<p>那么怎么处理呢？</p>
+<p>在执行 foo 函数的阶段，虽然采取了惰性解析，不会解析和执行 foo 函数中的 inner 函数，但是 V8 还是需要判断 inner 函数是否引用了 foo 函数中的变量，负责处理这个任务的模块叫着预解析器。</p>
+<h2 id="预解析器如何解决闭包所带来的问题">预解析器如何解决闭包所带来的问题？</h2>
+<p>V8 引入预解析器，比如当解析顶层代码的时候，遇到了一个函数，那么预解析器并不会直接跳过该函数，而是对该函数做一次快速的预解析，其主要目的有两个。</p>
+<p>第一，是判断当前函数是不是存在一些语法上的错误，如下面这段代码：</p>
+<p>function foo(a, b) {<br>
+{/} //语法错误<br>
+}<br>
+var a = 1<br>
+var c = 4<br>
+foo(1, 5)</p>
+<p>在预解析过程中，预解析器发现了语法错误，那么就会向 V8 抛出语法错误，比如上面这段代码的语法错误是这样的：</p>
+<p>Uncaught SyntaxError: Invalid regular expression: missing /</p>
+<p>第二，除了检查语法错误之外，预解析器另外的一个重要的功能就是检查函数内部是否引用了外部变量，如果引用了外部的变量，预解析器会将栈中的变量复制到堆中，在下次执行到该函数的时候，直接使用堆中的引用，这样就解决了闭包所带来的问题。</p>
+<h2 id="总结">总结</h2>
+<p>今天我们主要介绍了 V8 的惰性解析，所谓惰性解析是指解析器在解析的过程中，如果遇到函数声明，那么会跳过函数内部的代码，并不会为其生成 AST 和字节码，而仅仅生成顶层代码的 AST 和字节码。</p>
+<p>利用惰性解析可以加速 JavaScript 代码的启动速度，如果要将所有的代码一次性解析编译完成，那么会大大增加用户的等待时间。</p>
+<p>由于 JavaScript 是一门天生支持闭包的语言，由于闭包会引用当前函数作用域之外的变量，所以当 V8 解析一个函数的时候，还需要判断该函数的内部函数是否引用了当前函数内部声明的变量，如果引用了，那么需要将该变量存放到堆中，即便当前函数执行结束之后，也不会释放该变量。</p>
+<h2 id="思考题">思考题</h2>
+<p>观察下面两段代码：</p>
+<p>function foo() {<br>
+var a = 0<br>
+}</p>
+<p>function foo() {<br>
+var a = 0<br>
+return function inner() {<br>
+return a++<br>
+}<br>
+}</p>
+<p>请你思考下，当调用 foo 函数时，foo 函数内部的变量 a 会分别分配到栈上？还是堆上？为什么？欢迎你在留言区与我分享讨论。</p>
+<p>感谢你的阅读，如果你觉得这篇文章对你有所启发，也欢迎把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%9B%BE%E8%A7%A3googlev8/">图解GoogleV8</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/12__%E5%BA%8F%E5%88%97%E5%8C%96%E4%B8%8E%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E5%A6%82%E4%BD%95%E9%80%9A%E8%BF%87%E7%BD%91%E7%BB%9C%E4%BC%A0%E8%BE%93%E7%BB%93%E6%9E%84%E5%8C%96%E7%9A%84%E6%95%B0%E6%8D%AE/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__序列化与反序列化：如何通过网络传输结构化的数据？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/12__%E4%B8%80%E8%87%B4%E6%80%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E5%9F%BA%E4%BA%8Eraft%E5%AE%9E%E7%8E%B0%E7%9A%84etcd%E8%BF%98%E4%BC%9A%E5%87%BA%E7%8E%B0%E6%95%B0%E6%8D%AE%E4%B8%8D%E4%B8%80%E8%87%B4/">
+            <span class="next-text nav-default">12__一致性：为什么基于Raft实现的etcd还会出现数据不一致？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

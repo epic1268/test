@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>35__Hot_Reload是怎么做到的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是陈航。
+在上一篇文章中，我与你分享了 Flutter 的 Debug 与 Release 编译模式，以及如何通过断言与编译常数来精准识别当前代码所运行的编译模式，从而写出只在 Debug 或 Release 模式下生效的代码。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/35__hot_reload%E6%98%AF%E6%80%8E%E4%B9%88%E5%81%9A%E5%88%B0%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/35__hot_reload%E6%98%AF%E6%80%8E%E4%B9%88%E5%81%9A%E5%88%B0%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="35__Hot_Reload是怎么做到的？">
+  <meta property="og:description" content="你好，我是陈航。
+在上一篇文章中，我与你分享了 Flutter 的 Debug 与 Release 编译模式，以及如何通过断言与编译常数来精准识别当前代码所运行的编译模式，从而写出只在 Debug 或 Release 模式下生效的代码。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Flutter核心技术与实战">
+
+  <meta itemprop="name" content="35__Hot_Reload是怎么做到的？">
+  <meta itemprop="description" content="你好，我是陈航。
+在上一篇文章中，我与你分享了 Flutter 的 Debug 与 Release 编译模式，以及如何通过断言与编译常数来精准识别当前代码所运行的编译模式，从而写出只在 Debug 或 Release 模式下生效的代码。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3799">
+  <meta itemprop="keywords" content="Flutter核心技术与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="35__Hot_Reload是怎么做到的？">
+  <meta name="twitter:description" content="你好，我是陈航。
+在上一篇文章中，我与你分享了 Flutter 的 Debug 与 Release 编译模式，以及如何通过断言与编译常数来精准识别当前代码所运行的编译模式，从而写出只在 Debug 或 Release 模式下生效的代码。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">35__Hot_Reload是怎么做到的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3799 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#热重载">热重载</a></li>
+        <li><a href="#不支持热重载的场景">不支持热重载的场景</a></li>
+        <li><a href="#代码出现编译错误">代码出现编译错误</a></li>
+        <li><a href="#widget-状态无法兼容">Widget 状态无法兼容</a></li>
+        <li><a href="#全局变量和静态属性的更改">全局变量和静态属性的更改</a></li>
+        <li><a href="#main-方法里的更改">main 方法里的更改</a></li>
+        <li><a href="#initstate-方法里的更改">initState 方法里的更改</a></li>
+        <li><a href="#枚举和泛型类型更改">枚举和泛型类型更改</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是陈航。</p>
+<p>在上一篇文章中，我与你分享了 Flutter 的 Debug 与 Release 编译模式，以及如何通过断言与编译常数来精准识别当前代码所运行的编译模式，从而写出只在 Debug 或 Release 模式下生效的代码。</p>
+<p>另外，对于在开发期与发布期分别使用不同的配置环境，Flutter 也提供了支持。我们可以将应用中可配置的部分进行封装抽象，使用配置多入口的方式，通过 InheritedWidget 来为应用的启动注入环境配置。</p>
+<p>如果你有过原生应用的开发经历，那你一定知道在原生应用开发时，如果我们想要在硬件设备上看到调整后的运行效果，在完成了代码修改后，必须要经过漫长的重新编译，才能同步到设备上。</p>
+<p>而 Flutter 则不然，由于 Debug 模式支持 JIT，并且为开发期的运行和调试提供了大量优化，因此代码修改后，我们可以通过亚秒级的热重载（Hot Reload）进行增量代码的快速刷新，而无需经过全量的代码编译，从而大大缩短了从代码修改到看到修改产生的变化之间所需要的时间。</p>
+<p>比如，在开发页面的过程中，当我们点击按钮出现一个弹窗的时候，发现弹窗标题没有对齐，这时候只要修改标题的对齐样式，然后保存，在代码并没有重新编译的情况下，标题样式就发生了改变，感觉就像是在 UI 编辑面板中直接修改元素样式一样，非常方便。</p>
+<p>那么，Flutter 的热重载到底是如何实现的呢？</p>
+<h2 id="热重载">热重载</h2>
+<p>热重载是指，在不中断 App 正常运行的情况下，动态注入修改后的代码片段。而这一切的背后，离不开 Flutter 所提供的运行时编译能力。为了更好地理解 Flutter 的热重载实现原理，我们先简单回顾一下 Flutter 编译模式背后的技术吧。</p>
+<ul>
+<li>JIT（Just In Time），指的是即时编译或运行时编译，在 Debug 模式中使用，可以动态下发和执行代码，启动速度快，但执行性能受运行时编译影响；</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/d33b51146780c6f1fb1163c640069d1f.png" alt=""></p>
+<p>图 1 JIT 编译模式示意图</p>
+<ul>
+<li>AOT（Ahead Of Time），指的是提前编译或运行前编译，在 Release 模式中使用，可以为特定的平台生成稳定的二进制代码，执行性能好、运行速度快，但每次执行均需提前编译，开发调试效率低。</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/f05b266fddf20a0a29f335b1b458ede7.png" alt=""></p>
+<p>图 2 AOT 编译模式示意图</p>
+<p>可以看到，Flutter 提供的两种编译模式中，AOT 是静态编译，即编译成设备可直接执行的二进制码；而 JIT 则是动态编译，即将 Dart 代码编译成中间代码（Script Snapshot），在运行时设备需要 Dart VM 解释执行。</p>
+<p>而热重载之所以只能在 Debug 模式下使用，是因为 Debug 模式下，Flutter 采用的是 JIT 动态编译（而 Release 模式下采用的是 AOT 静态编译）。JIT 编译器将 Dart 代码编译成可以运行在 Dart VM 上的 Dart Kernel，而 Dart Kernel 是可以动态更新的，这就实现了代码的实时更新功能。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/d89ebc95016f5229498688e06aa4ae9d.png" alt=""></p>
+<p>图 3 热重载流程</p>
+<p>总体来说，<strong>热重载的流程可以分为扫描工程改动、增量编译、推送更新、代码合并、Widget 重建 5 个步骤：</strong></p>
+<ol>
+<li>工程改动。热重载模块会逐一扫描工程中的文件，检查是否有新增、删除或者改动，直到找到在上次编译之后，发生变化的 Dart 代码。</li>
+<li>增量编译。热重载模块会将发生变化的 Dart 代码，通过编译转化为增量的 Dart Kernel 文件。</li>
+<li>推送更新。热重载模块将增量的 Dart Kernel 文件通过 HTTP 端口，发送给正在移动设备上运行的 Dart VM。</li>
+<li>代码合并。Dart VM 会将收到的增量 Dart Kernel 文件，与原有的 Dart Kernel 文件进行合并，然后重新加载新的 Dart Kernel 文件。</li>
+<li>Widget 重建。在确认 Dart VM 资源加载成功后，Flutter 会将其 UI 线程重置，通知 Flutter Framework 重建 Widget。</li>
+</ol>
+<p>可以看到，Flutter 提供的热重载在收到代码变更后，并不会让 App 重新启动执行，而只会触发 Widget 树的重新绘制，因此可以保持改动前的状态，这就大大节省了调试复杂交互界面的时间。</p>
+<p>比如，我们需要为一个视图栈很深的页面调整 UI 样式，若采用重新编译的方式，不仅需要漫长的全量编译时间，而为了恢复视图栈，也需要重复之前的多次点击交互，才能重新进入到这个页面查看改动效果。但如果是采用热重载的方式，不仅没有编译时间，而且页面的视图栈状态也得以保留，完成热重载之后马上就可以预览 UI 效果了，相当于局部界面刷新。</p>
+<h2 id="不支持热重载的场景">不支持热重载的场景</h2>
+<p>Flutter 提供的亚秒级热重载一直是开发者的调试利器。通过热重载，我们可以快速修改 UI、修复 Bug，无需重启应用即可看到改动效果，从而大大提升了 UI 调试效率。</p>
+<p>不过，Flutter 的热重载也有一定的局限性。因为涉及到状态保存与恢复，所以并不是所有的代码改动都可以通过热重载来更新。</p>
+<p>接下来，我就与你介绍几个不支持热重载的典型场景：</p>
+<ul>
+<li>代码出现编译错误；</li>
+<li>Widget 状态无法兼容；</li>
+<li>全局变量和静态属性的更改；</li>
+<li>main 方法里的更改；</li>
+<li>initState 方法里的更改；</li>
+<li>枚举和泛类型更改。</li>
+</ul>
+<p>现在，我们就具体看看这几种场景的问题，应该如何解决吧。</p>
+<h2 id="代码出现编译错误">代码出现编译错误</h2>
+<p>当代码更改导致编译错误时，热重载会提示编译错误信息。比如下面的例子中，代码中漏写了一个反括号，在使用热重载时，编译器直接报错：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">Initializing</span> <span class="n">hot</span> <span class="n">reload</span><span class="o">...</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">Syncing</span> <span class="n">files</span> <span class="n">to</span> <span class="n">device</span> <span class="n">iPhone</span> <span class="n">X</span><span class="o">...</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">Compiler</span> <span class="n">message</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">lib</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">dart</span><span class="p">:</span><span class="mi">84</span><span class="p">:</span><span class="mi">23</span><span class="p">:</span> <span class="n">Error</span><span class="p">:</span> <span class="n">Can</span><span class="s1">&#39;t find &#39;</span><span class="p">)</span><span class="s1">&#39; to match &#39;</span><span class="p">(</span><span class="s1">&#39;.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">MaterialApp</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                      <span class="o">^</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">Reloaded</span> <span class="mi">1</span> <span class="n">of</span> <span class="mi">462</span> <span class="n">libraries</span> <span class="ow">in</span> <span class="mi">301</span><span class="n">ms</span><span class="o">.</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这种情况下，只需更正上述代码中的错误，就可以继续使用热重载。</p>
+<h2 id="widget-状态无法兼容">Widget 状态无法兼容</h2>
+<p>当代码更改会影响 Widget 的状态时，会使得热重载前后 Widget 所使用的数据不一致，即应用程序保留的状态与新的更改不兼容。这时，热重载也是无法使用的。</p>
+<p>比如下面的代码中，我们将某个类的定义从 StatelessWidget 改为 StatefulWidget 时，热重载就会直接报错：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 改动前
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class MyWidget extends StatelessWidget {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Widget build(BuildContext context) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return GestureDetector(onTap: () =&gt; print(&#39;T&#39;));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 改动后
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class MyWidget extends StatefulWidget {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  State&lt;MyWidget&gt; createState() =&gt; MyWidgetState();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class MyWidgetState extends State&lt;MyWidget&gt; { /*...*/ }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当遇到这种情况时，我们需要重启应用，才能看到更新后的程序。</p>
+<h2 id="全局变量和静态属性的更改">全局变量和静态属性的更改</h2>
+<p>在 Flutter 中，全局变量和静态属性都被视为状态，在第一次运行应用程序时，会将它们的值设为初始化语句的执行结果，因此在热重载期间不会重新初始化。</p>
+<p>比如下面的代码中，我们修改了一个静态 Text 数组的初始化元素。虽然热重载并不会报错，但由于静态变量并不会在热重载之后初始化，因此这个改变并不会产生效果：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 改动前
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final sampleText = [
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T1&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T2&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T3&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T4&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 改动后
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final sampleText = [
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T1&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T2&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T3&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Text(&#34;T10&#34;),    // 改动点
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">];
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果我们需要更改全局变量和静态属性的初始化语句，重启应用才能查看更改效果。</p>
+<h2 id="main-方法里的更改">main 方法里的更改</h2>
+<p>在 Flutter 中，由于热重载之后只会根据原来的根节点重新创建控件树，因此 main 函数的任何改动并不会在热重载后重新执行。所以，如果我们改动了 main 函数体内的代码，是无法通过热重载看到更新效果的。</p>
+<p>在第 1 篇文章“<a href="./104051.md">预习篇 · 从零开始搭建 Flutter 开发环境</a>”中，我与你介绍了这种情况。在更新前，我们通过 MyApp 封装了一个展示“Hello World”的文本，在更新后，直接在 main 函数封装了一个展示“Hello 2019”的文本：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">更新前</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="n">MyAPP</span> <span class="k">extends</span> <span class="n">StatelessWidget</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">override</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">Widget</span> <span class="n">build</span><span class="p">(</span><span class="n">BuildContext</span> <span class="n">context</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="k">const</span> <span class="n">Center</span><span class="p">(</span><span class="n">child</span><span class="p">:</span> <span class="n">Text</span><span class="p">(</span><span class="s1">&#39;Hello World&#39;</span><span class="p">,</span> <span class="n">textDirection</span><span class="p">:</span> <span class="n">TextDirection</span><span class="o">.</span><span class="n">ltr</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">void</span> <span class="n">main</span><span class="p">()</span> <span class="o">=&gt;</span> <span class="n">runApp</span><span class="p">(</span><span class="n">new</span> <span class="n">MyAPP</span><span class="p">());</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">更新后</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">void</span> <span class="n">main</span><span class="p">()</span> <span class="o">=&gt;</span> <span class="n">runApp</span><span class="p">(</span><span class="k">const</span> <span class="n">Center</span><span class="p">(</span><span class="n">child</span><span class="p">:</span> <span class="n">Text</span><span class="p">(</span><span class="s1">&#39;Hello, 2019&#39;</span><span class="p">,</span> <span class="n">textDirection</span><span class="p">:</span> <span class="n">TextDirection</span><span class="o">.</span><span class="n">ltr</span><span class="p">)));</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于 main 函数并不会在热重载后重新执行，因此以上改动是无法通过热重载查看更新的。</p>
+<h2 id="initstate-方法里的更改">initState 方法里的更改</h2>
+<p>在热重载时，Flutter 会保存 Widget 的状态，然后重建 Widget。而 initState 方法是 Widget 状态的初始化方法，这个方法里的更改会与状态保存发生冲突，因此热重载后不会产生效果。</p>
+<p>在下面的例子中，我们将计数器的初始值由 10 改为 100：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 更改前
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class _MyHomePageState extends State&lt;MyHomePage&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int _counter;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void initState() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    _counter = 10;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    super.initState();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 更改后
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class _MyHomePageState extends State&lt;MyHomePage&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int _counter;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void initState() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    _counter = 100;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    super.initState();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于这样的改动发生在 initState 方法中，因此无法通过热重载查看更新，我们需要重启应用，才能看到更改效果。</p>
+<h2 id="枚举和泛型类型更改">枚举和泛型类型更改</h2>
+<p>在 Flutter 中，枚举和泛型也被视为状态，因此对它们的修改也不支持热重载。比如在下面的代码中，我们将一个枚举类型改为普通类，并为其增加了一个泛型参数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">更改前</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">enum</span> <span class="ne">Color</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">red</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">green</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">blue</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">class</span> <span class="n">C</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">U</span> <span class="n">u</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">更改后</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">class</span> <span class="ne">Color</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="ne">Color</span><span class="p">(</span><span class="n">this</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">this</span><span class="o">.</span><span class="n">g</span><span class="p">,</span> <span class="n">this</span><span class="o">.</span><span class="n">b</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">final</span> <span class="ne">int</span> <span class="n">r</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">final</span> <span class="ne">int</span> <span class="n">g</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">final</span> <span class="ne">int</span> <span class="n">b</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">class</span> <span class="n">C</span><span class="o">&lt;</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="o">&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">U</span> <span class="n">u</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">V</span> <span class="n">v</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这两类更改都会导致热重载失败，并生成对应的提示消息。同样的，我们需要重启应用，才能查看到更改效果。</p>
+<h2 id="总结">总结</h2>
+<p>好了，今天的分享就到这里，我们总结一下今天的主要内容吧。</p>
+<p>Flutter 的热重载是基于 JIT 编译模式的代码增量同步。由于 JIT 属于动态编译，能够将 Dart 代码编译成生成中间代码，让 Dart VM 在运行时解释执行，因此可以通过动态更新中间代码实现增量同步。</p>
+<p>热重载的流程可以分为 5 步，包括：扫描工程改动、增量编译、推送更新、代码合并、Widget 重建。Flutter 在接收到代码变更后，并不会让 App 重新启动执行，而只会触发 Widget 树的重新绘制，因此可以保持改动前的状态，大大缩短了从代码修改到看到修改产生的变化之间所需要的时间。</p>
+<p>而另一方面，由于涉及到状态保存与恢复，因此涉及状态兼容与状态初始化的场景，热重载是无法支持的，比如改动前后 Widget 状态无法兼容、全局变量与静态属性的更改、main 方法里的更改、initState 方法里的更改、枚举和泛型的更改等。</p>
+<p>可以发现，热重载提高了调试 UI 的效率，非常适合写界面样式这样需要反复查看修改效果的场景。但由于其状态保存的机制所限，热重载本身也有一些无法支持的边界。</p>
+<p>如果你在写业务逻辑的时候，不小心碰到了热重载无法支持的场景，也不需要进行漫长的重新编译加载等待，只要点击位于工程面板左下角的热重启（Hot Restart）按钮，就可以以秒级的速度进行代码重新编译以及程序重启了，同样也很快。</p>
+<h2 id="思考题">思考题</h2>
+<p>最后，我给你留下一道思考题吧。</p>
+<p>你是否了解其他框架（比如 React Native、Webpack）的热重载机制？它们的热重载机制与 Flutter 有何区别？</p>
+<p>欢迎你在评论区给我留言分享你的观点，我会在下一篇文章中等待你！感谢你的收听，也欢迎你把这篇文章分享给更多的朋友一起阅读。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/c35b0beb65ba6c713724c0b53ee1b6d3.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/">Flutter核心技术与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A0%94%E5%8F%91%E6%95%88%E7%8E%87%E7%A0%B4%E5%B1%80%E4%B9%8B%E9%81%93/35__facebook%E5%B7%A5%E7%A8%8B%E5%B8%88%E6%96%87%E5%8C%96%E5%AE%9E%E8%B7%B5%E4%B8%89%E5%A4%A7%E6%94%AF%E6%9F%B1%E4%B9%8B%E4%BA%8C%E6%8B%A5%E6%9C%89%E4%BF%A1%E6%81%AF%E5%92%8C%E6%9D%83%E9%99%90/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">35__Facebook工程师文化实践三大支柱之二拥有信息和权限</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/35__join%E8%AF%AD%E5%8F%A5%E6%80%8E%E4%B9%88%E4%BC%98%E5%8C%96/">
+            <span class="next-text nav-default">35__join语句怎么优化？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

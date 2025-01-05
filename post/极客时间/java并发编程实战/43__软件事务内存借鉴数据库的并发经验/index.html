@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>43__软件事务内存：借鉴数据库的并发经验 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="很多同学反馈说，工作了挺长时间但是没有机会接触并发编程，实际上我们天天都在写并发程序，只不过并发相关的问题都被类似 Tomcat 这样的 Web 服务器以及 MySQL 这样的数据库解决了。尤其是数据库，在解决并发问题方面，可谓成绩斐然，它的事务机制非常简单易用，能甩 Java 里面的锁、原子类十条街。技术无边界，很显然要借鉴一下。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/43__%E8%BD%AF%E4%BB%B6%E4%BA%8B%E5%8A%A1%E5%86%85%E5%AD%98%E5%80%9F%E9%89%B4%E6%95%B0%E6%8D%AE%E5%BA%93%E7%9A%84%E5%B9%B6%E5%8F%91%E7%BB%8F%E9%AA%8C/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/43__%E8%BD%AF%E4%BB%B6%E4%BA%8B%E5%8A%A1%E5%86%85%E5%AD%98%E5%80%9F%E9%89%B4%E6%95%B0%E6%8D%AE%E5%BA%93%E7%9A%84%E5%B9%B6%E5%8F%91%E7%BB%8F%E9%AA%8C/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="43__软件事务内存：借鉴数据库的并发经验">
+  <meta property="og:description" content="很多同学反馈说，工作了挺长时间但是没有机会接触并发编程，实际上我们天天都在写并发程序，只不过并发相关的问题都被类似 Tomcat 这样的 Web 服务器以及 MySQL 这样的数据库解决了。尤其是数据库，在解决并发问题方面，可谓成绩斐然，它的事务机制非常简单易用，能甩 Java 里面的锁、原子类十条街。技术无边界，很显然要借鉴一下。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java并发编程实战">
+
+  <meta itemprop="name" content="43__软件事务内存：借鉴数据库的并发经验">
+  <meta itemprop="description" content="很多同学反馈说，工作了挺长时间但是没有机会接触并发编程，实际上我们天天都在写并发程序，只不过并发相关的问题都被类似 Tomcat 这样的 Web 服务器以及 MySQL 这样的数据库解决了。尤其是数据库，在解决并发问题方面，可谓成绩斐然，它的事务机制非常简单易用，能甩 Java 里面的锁、原子类十条街。技术无边界，很显然要借鉴一下。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3369">
+  <meta itemprop="keywords" content="Java并发编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="43__软件事务内存：借鉴数据库的并发经验">
+  <meta name="twitter:description" content="很多同学反馈说，工作了挺长时间但是没有机会接触并发编程，实际上我们天天都在写并发程序，只不过并发相关的问题都被类似 Tomcat 这样的 Web 服务器以及 MySQL 这样的数据库解决了。尤其是数据库，在解决并发问题方面，可谓成绩斐然，它的事务机制非常简单易用，能甩 Java 里面的锁、原子类十条街。技术无边界，很显然要借鉴一下。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">43__软件事务内存：借鉴数据库的并发经验</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3369 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#用-stm-实现转账">用 STM 实现转账</a></li>
+        <li><a href="#自己实现-stm">自己实现 STM</a></li>
+        <li><a href="#总结">总结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>很多同学反馈说，工作了挺长时间但是没有机会接触并发编程，实际上我们天天都在写并发程序，只不过并发相关的问题都被类似 Tomcat 这样的 Web 服务器以及 MySQL 这样的数据库解决了。尤其是数据库，在解决并发问题方面，可谓成绩斐然，它的<strong>事务机制非常简单易用</strong>，能甩 Java 里面的锁、原子类十条街。技术无边界，很显然要借鉴一下。</p>
+<p>其实很多编程语言都有从数据库的事务管理中获得灵感，并且总结出了一个新的并发解决方案：<strong>软件事务内存（Software Transactional Memory，简称 STM）</strong>。传统的数据库事务，支持 4 个特性：原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）和持久性（Durability），也就是大家常说的 ACID，STM 由于不涉及到持久化，所以只支持 ACI。</p>
+<p>STM 的使用很简单，下面我们以经典的转账操作为例，看看用 STM 该如何实现。</p>
+<h2 id="用-stm-实现转账">用 STM 实现转账</h2>
+<p>我们曾经在<a href="./85001.md">《05 | 一不小心就死锁了，怎么办？》</a>这篇文章中，讲到了并发转账的例子，示例代码如下。简单地使用 synchronized 将 transfer() 方法变成同步方法并不能解决并发问题，因为还存在死锁问题。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class UnsafeAccount {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 余额
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private long balance;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造函数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public UnsafeAccount(long balance) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.balance = balance;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 转账
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void transfer(UnsafeAccount target, long amt){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (this.balance &gt; amt) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      this.balance -= amt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      target.balance += amt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该转账操作若使用数据库事务就会非常简单，如下面的示例代码所示。如果所有 SQL 都正常执行，则通过 commit() 方法提交事务；如果 SQL 在执行过程中有异常，则通过 rollback() 方法回滚事务。数据库保证在并发情况下不会有死锁，而且还能保证前面我们说的原子性、一致性、隔离性和持久性，也就是 ACID。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection conn = null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">try{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 获取数据库连接
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  conn = DriverManager.getConnection();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 设置手动提交事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  conn.setAutoCommit(false);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 执行转账 SQL
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 提交事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  conn.commit();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 出现异常回滚事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  conn.rollback();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那如果用 STM 又该如何实现呢？Java 语言并不支持 STM，不过可以借助第三方的类库来支持，<a href="./Multiverse.md">Multiverse</a>就是个不错的选择。下面的示例代码就是借助 Multiverse 实现了线程安全的转账操作，相比较上面线程不安全的 UnsafeAccount，其改动并不大，仅仅是将余额的类型从 long 变成了 TxnLong，将转账的操作放到了 atomic(()-&gt;{}) 中。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class Account{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 余额
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private TxnLong balance;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造函数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public Account(long balance){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.balance = StmUtils.newTxnLong(balance);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 转账
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void transfer(Account to, int amt){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 原子化操作
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    atomic(()-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      if (this.balance.get() &gt; amt) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.balance.decrement(amt);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        to.balance.increment(amt);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一个关键的 atomic() 方法就把并发问题解决了，这个方案看上去比传统的方案的确简单了很多，那它是如何实现的呢？数据库事务发展了几十年了，目前被广泛使用的是<strong>MVCC</strong>（全称是 Multi-Version Concurrency Control），也就是多版本并发控制。</p>
+<p>MVCC 可以简单地理解为数据库事务在开启的时候，会给数据库打一个快照，以后所有的读写都是基于这个快照的。当提交事务的时候，如果所有读写过的数据在该事务执行期间没有发生过变化，那么就可以提交；如果发生了变化，说明该事务和有其他事务读写的数据冲突了，这个时候是不可以提交的。</p>
+<p>为了记录数据是否发生了变化，可以给每条数据增加一个版本号，这样每次成功修改数据都会增加版本号的值。MVCC 的工作原理和我们曾经在<a href="./89456.md">《18 | StampedLock：有没有比读写锁更快的锁？》</a>中提到的乐观锁非常相似。有不少 STM 的实现方案都是基于 MVCC 的，例如知名的 Clojure STM。</p>
+<p>下面我们就用最简单的代码基于 MVCC 实现一个简版的 STM，这样你会对 STM 以及 MVCC 的工作原理有更深入的认识。</p>
+<h2 id="自己实现-stm">自己实现 STM</h2>
+<p>我们首先要做的，就是让 Java 中的对象有版本号，在下面的示例代码中，VersionedRef 这个类的作用就是将对象 value 包装成带版本号的对象。按照 MVCC 理论，数据的每一次修改都对应着一个唯一的版本号，所以不存在仅仅改变 value 或者 version 的情况，用不变性模式就可以很好地解决这个问题，所以 VersionedRef 这个类被我们设计成了不可变的。</p>
+<p>所有对数据的读写操作，一定是在一个事务里面，TxnRef 这个类负责完成事务内的读写操作，读写操作委托给了接口 Txn，Txn 代表的是读写操作所在的当前事务，内部持有的 curRef 代表的是系统中的最新值。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 带版本号的对象引用
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final class VersionedRef&lt;T&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  final T value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  final long version;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public VersionedRef(T value, long version) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.value = value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.version = version;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 支持事务的引用
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class TxnRef&lt;T&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 当前数据，带版本号
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  volatile VersionedRef curRef;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public TxnRef(T value) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.curRef = new VersionedRef(value, 0L);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 获取当前事务中的数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public T getValue(Txn txn) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return txn.get(this);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 在当前事务中设置数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void setValue(T value, Txn txn) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    txn.set(this, value);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>STMTxn 是 Txn 最关键的一个实现类，事务内对于数据的读写，都是通过它来完成的。STMTxn 内部有两个 Map：inTxnMap，用于保存当前事务中所有读写的数据的快照；writeMap，用于保存当前事务需要写入的数据。每个事务都有一个唯一的事务 ID txnId，这个 txnId 是全局递增的。</p>
+<p>STMTxn 有三个核心方法，分别是读数据的 get() 方法、写数据的 set() 方法和提交事务的 commit() 方法。其中，get() 方法将要读取数据作为快照放入 inTxnMap，同时保证每次读取的数据都是一个版本。set() 方法会将要写入的数据放入 writeMap，但如果写入的数据没被读取过，也会将其放入 inTxnMap。</p>
+<p>至于 commit() 方法，我们为了简化实现，使用了互斥锁，所以事务的提交是串行的。commit() 方法的实现很简单，首先检查 inTxnMap 中的数据是否发生过变化，如果没有发生变化，那么就将 writeMap 中的数据写入（这里的写入其实就是 TxnRef 内部持有的 curRef）；如果发生过变化，那么就不能将 writeMap 中的数据写入了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 事务接口
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public interface Txn {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;T&gt; T get(TxnRef&lt;T&gt; ref);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;T&gt; void set(TxnRef&lt;T&gt; ref, T value);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//STM 事务实现类
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final class STMTxn implements Txn {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 事务 ID 生成器
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private static AtomicLong txnSeq = new AtomicLong(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 当前事务所有的相关数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private Map&lt;TxnRef, VersionedRef&gt; inTxnMap = new HashMap&lt;&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 当前事务所有需要修改的数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private Map&lt;TxnRef, Object&gt; writeMap = new HashMap&lt;&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 当前事务 ID
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private long txnId;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造函数，自动生成当前事务 ID
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  STMTxn() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    txnId = txnSeq.incrementAndGet();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   // 获取当前事务中的数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public &lt;T&gt; T get(TxnRef&lt;T&gt; ref) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 将需要读取的数据，加入 inTxnMap
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (!inTxnMap.containsKey(ref)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      inTxnMap.put(ref, ref.curRef);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return (T) inTxnMap.get(ref).value;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 在当前事务中修改数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public &lt;T&gt; void set(TxnRef&lt;T&gt; ref, T value) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 将需要修改的数据，加入 inTxnMap
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (!inTxnMap.containsKey(ref)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      inTxnMap.put(ref, ref.curRef);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    writeMap.put(ref, value);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 提交事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  boolean commit() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    synchronized (STM.commitLock) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 是否校验通过
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    boolean isValid = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 校验所有读过的数据是否发生过变化
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for(Map.Entry&lt;TxnRef, VersionedRef&gt; entry : inTxnMap.entrySet()){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      VersionedRef curRef = entry.getKey().curRef;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      VersionedRef readRef = entry.getValue();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 通过版本号来验证数据是否发生过变化
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      if (curRef.version != readRef.version) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        isValid = false;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 如果校验通过，则所有更改生效
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (isValid) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      writeMap.forEach((k, v) -&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        k.curRef = new VersionedRef(v, txnId);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return isValid;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面我们来模拟实现 Multiverse 中的原子化操作 atomic()。atomic() 方法中使用了类似于 CAS 的操作，如果事务提交失败，那么就重新创建一个新的事务，重新执行。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@FunctionalInterface
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public interface TxnRunnable {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void run(Txn txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//STM
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final class STM {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 私有化构造方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private STM() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 提交数据需要用到的全局锁  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  static final Object commitLock = new Object();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 原子化提交方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public static void atomic(TxnRunnable action) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    boolean committed = false;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 如果没有提交成功，则一直重试
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (!committed) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 创建新的事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      STMTxn txn = new STMTxn();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 执行业务逻辑
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      action.run(txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 提交事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      committed = txn.commit();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>就这样，我们自己实现了 STM，并完成了线程安全的转账操作，使用方法和 Multiverse 差不多，这里就不赘述了，具体代码如下面所示。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class Account {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 余额
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private TxnRef&lt;Integer&gt; balance;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 构造方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public Account(int balance) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this.balance = new TxnRef&lt;Integer&gt;(balance);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 转账操作
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void transfer(Account target, int amt){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    STM.atomic((txn)-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      Integer from = balance.getValue(txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      balance.setValue(from-amt, txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      Integer to = target.balance.getValue(txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      target.balance.setValue(to+amt, txn);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结">总结</h2>
+<p>STM 借鉴的是数据库的经验，数据库虽然复杂，但仅仅存储数据，而编程语言除了有共享变量之外，还会执行各种 I/O 操作，很显然 I/O 操作是很难支持回滚的。所以，STM 也不是万能的。目前支持 STM 的编程语言主要是函数式语言，函数式语言里的数据天生具备不可变性，利用这种不可变性实现 STM 相对来说更简单。</p>
+<p>另外，需要说明的是，文中的“自己实现 STM”部分我参考了<a href="./software-transactional-memory-in-scala.md">Software Transactional Memory in Scala</a>这篇博文以及<a href="./stm-java.md">一个 GitHub 项目</a>，目前还很粗糙，并不是一个完备的 MVCC。如果你对这方面感兴趣，可以参考<a href="./improving-the-stm-multi-version-concurrency-control.md">Improving the STM: Multi-Version Concurrency Control</a> 这篇博文，里面讲到了如何优化，你可以尝试学习下。</p>
+<p>欢迎在留言区与我分享你的想法，也欢迎你在留言区记录你的思考过程。感谢阅读，如果你觉得这篇文章对你有帮助的话，也欢迎把它分享给更多的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/f2ae29f2a91a0266d9d86db774df526d.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">Java并发编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/43__%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">43__如何使用缓存优化系统性能？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%B8%E5%BC%8F%E4%BC%9F%E7%9A%84%E6%9E%B6%E6%9E%84%E8%AF%BE/43__%E5%AE%9E%E6%88%98%E4%B8%89%E7%94%BB%E5%9B%BE%E7%A8%8B%E5%BA%8F%E5%90%8E%E7%AB%AF%E5%AE%9E%E6%88%98/">
+            <span class="next-text nav-default">43__实战（三）：“画图”程序后端实战</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

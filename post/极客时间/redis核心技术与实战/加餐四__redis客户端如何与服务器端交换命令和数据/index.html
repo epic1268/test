@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>加餐（四）__Redis客户端如何与服务器端交换命令和数据？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是蒋德钧。
+在前面的课程中，我们主要学习了 Redis 服务器端的机制和关键技术，很少涉及到客户端的问题。但是，Redis 采用的是典型的 client-server（服务器端 - 客户端）架构，客户端会发送请求给服务器端，服务器端会返回响应给客户端。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/%E5%8A%A0%E9%A4%90%E5%9B%9B__redis%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%A6%82%E4%BD%95%E4%B8%8E%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%AB%AF%E4%BA%A4%E6%8D%A2%E5%91%BD%E4%BB%A4%E5%92%8C%E6%95%B0%E6%8D%AE/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/%E5%8A%A0%E9%A4%90%E5%9B%9B__redis%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%A6%82%E4%BD%95%E4%B8%8E%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%AB%AF%E4%BA%A4%E6%8D%A2%E5%91%BD%E4%BB%A4%E5%92%8C%E6%95%B0%E6%8D%AE/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="加餐（四）__Redis客户端如何与服务器端交换命令和数据？">
+  <meta property="og:description" content="你好，我是蒋德钧。
+在前面的课程中，我们主要学习了 Redis 服务器端的机制和关键技术，很少涉及到客户端的问题。但是，Redis 采用的是典型的 client-server（服务器端 - 客户端）架构，客户端会发送请求给服务器端，服务器端会返回响应给客户端。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Redis核心技术与实战">
+
+  <meta itemprop="name" content="加餐（四）__Redis客户端如何与服务器端交换命令和数据？">
+  <meta itemprop="description" content="你好，我是蒋德钧。
+在前面的课程中，我们主要学习了 Redis 服务器端的机制和关键技术，很少涉及到客户端的问题。但是，Redis 采用的是典型的 client-server（服务器端 - 客户端）架构，客户端会发送请求给服务器端，服务器端会返回响应给客户端。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4883">
+  <meta itemprop="keywords" content="Redis核心技术与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="加餐（四）__Redis客户端如何与服务器端交换命令和数据？">
+  <meta name="twitter:description" content="你好，我是蒋德钧。
+在前面的课程中，我们主要学习了 Redis 服务器端的机制和关键技术，很少涉及到客户端的问题。但是，Redis 采用的是典型的 client-server（服务器端 - 客户端）架构，客户端会发送请求给服务器端，服务器端会返回响应给客户端。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">加餐（四）__Redis客户端如何与服务器端交换命令和数据？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4883 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#客户端和服务器端交互的内容有哪些">客户端和服务器端交互的内容有哪些？</a></li>
+        <li><a href="#resp-2-的编码格式规范">RESP 2 的编码格式规范</a></li>
+        <li><a href="#resp-2-的不足和-resp-3-的改进">RESP 2 的不足和 RESP 3 的改进</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#每课一问">每课一问</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是蒋德钧。</p>
+<p>在前面的课程中，我们主要学习了 Redis 服务器端的机制和关键技术，很少涉及到客户端的问题。但是，Redis 采用的是典型的 client-server（服务器端 - 客户端）架构，客户端会发送请求给服务器端，服务器端会返回响应给客户端。</p>
+<p>如果要对 Redis 客户端进行二次开发（比如增加新的命令），我们就需要了解请求和响应涉及的命令、数据在客户端和服务器之间传输时，是如何编码的。否则，我们在客户端新增的命令就无法被服务器端识别和处理。</p>
+<p>Redis 使用 RESP（REdis Serialization Protocol）协议定义了客户端和服务器端交互的命令、数据的编码格式。在 Redis 2.0 版本中，RESP 协议正式成为客户端和服务器端的标准通信协议。从 Redis 2.0 到 Redis 5.0，RESP 协议都称为 RESP 2 协议，从 Redis 6.0 开始，Redis 就采用 RESP 3 协议了。不过，6.0 版本是在今年 5 月刚推出的，所以，目前我们广泛使用的还是 RESP 2 协议。</p>
+<p>这节课，我就向你重点介绍下 RESP 2 协议的规范要求，以及 RESP 3 相对 RESP 2 的改进之处。</p>
+<p>首先，我们先来看下客户端和服务器端交互的内容包括哪些，毕竟，交互内容不同，编码形式也不一样。</p>
+<h2 id="客户端和服务器端交互的内容有哪些">客户端和服务器端交互的内容有哪些？</h2>
+<p>为了方便你更加清晰地理解，RESP 2 协议是如何对命令和数据进行格式编码的，我们可以把交互内容，分成客户端请求和服务器端响应两类：</p>
+<ol>
+<li>在客户端请求中，客户端会给 Redis 发送命令，以及要写入的键和值；</li>
+<li>而在服务器端响应中，Redis 实例会返回读取的值、OK 标识、成功写入的元素个数、错误信息，以及命令（例如 Redis Cluster 中的 MOVE 命令）。</li>
+</ol>
+<p>其实，这些交互内容还可以再进一步细分成七类，我们再来了解下它们。</p>
+<ol>
+<li><strong>命令</strong>：这就是针对不同数据类型的操作命令。例如对 String 类型的 SET、GET 操作，对 Hash 类型的 HSET、HGET 等，这些命令就是代表操作语义的字符串。</li>
+<li><strong>键</strong>：键值对中的键，可以直接用字符串表示。</li>
+<li><strong>单个值</strong>：对应 String 类型的数据，数据本身可以是字符串、数值（整数或浮点数），布尔值（True 或是 False）等。</li>
+<li><strong>集合值</strong>：对应 List、Hash、Set、Sorted Set 类型的数据，不仅包含多个值，而且每个值也可以是字符串、数值或布尔值等。</li>
+<li><strong>OK 回复</strong>：对应命令操作成功的结果，就是一个字符串的“OK”。</li>
+<li><strong>整数回复</strong>：这里有两种情况。一种是，命令操作返回的结果是整数，例如 LLEN 命令返回列表的长度；另一种是，集合命令成功操作时，实际操作的元素个数，例如 SADD 命令返回成功添加的元素个数。</li>
+<li><strong>错误信息</strong>：命令操作出错时的返回结果，包括“error”标识，以及具体的错误信息。</li>
+</ol>
+<p>了解了这 7 类内容都是什么，下面我再结合三个具体的例子，帮助你进一步地掌握这些交互内容。</p>
+<p>先看第一个例子，来看看下面的命令：</p>
+<p>#成功写入 String 类型数据，返回 OK<br>
+127.0.0.1:6379&gt; SET testkey testvalue<br>
+OK</p>
+<p>这里的交互内容就包括了<strong>命令</strong>（SET 命令）、<strong>键（</strong> <strong>String 类型的键 testkey）和</strong> <strong>单个值</strong>（String 类型的值 testvalue），而服务器端则直接返回一个 <strong>OK 回复</strong>。</p>
+<p>第二个例子是执行 HSET 命令：</p>
+<p>#成功写入 Hash 类型数据，返回实际写入的集合元素个数<br>
+127.0.0.1:6379&gt;HSET testhash a 1 b 2 c 3<br>
+(integer) 3</p>
+<p>这里的交互内容包括三个 key-value 的 Hash<strong>集合值</strong>（a 1 b 2 c 3），而服务器端返回<strong>整数回复</strong>（3），表示操作成功写入的元素个数。</p>
+<p>最后一个例子是执行 PUT 命令，如下所示：</p>
+<p>#发送的命令不对，报错，并返回错误信息<br>
+127.0.0.1:6379&gt;PUT testkey2 testvalue<br>
+(error) ERR unknown command &lsquo;PUT&rsquo;, with args beginning with: &rsquo;testkey&rsquo;, &rsquo;testvalue&rsquo;</p>
+<p>可以看到，这里的交互内容包括**错误信息，**这是因为，Redis 实例本身不支持 PUT 命令，所以服务器端报错“error”，并返回具体的错误信息，也就是未知的命令“put”。</p>
+<p>好了，到这里，你了解了，Redis 客户端和服务器端交互的内容。接下来，我们就来看下，RESP 2 是按照什么样的格式规范来对这些内容进行编码的。</p>
+<h2 id="resp-2-的编码格式规范">RESP 2 的编码格式规范</h2>
+<p>RESP 2 协议的设计目标是，希望 Redis 开发人员实现客户端时简单方便，这样就可以减少客户端开发时出现的 Bug。而且，当客户端和服务器端交互出现问题时，希望开发人员可以通过查看协议交互过程，能快速定位问题，方便调试。为了实现这一目标，RESP 2 协议采用了可读性很好的文本形式进行编码，也就是通过一系列的字符串，来表示各种命令和数据。</p>
+<p>不过，交互内容有多种，而且，实际传输的命令或数据也会有很多个。针对这两种情况，RESP 2 协议在编码时设计了两个基本规范。</p>
+<ol>
+<li>为了对不同类型的交互内容进行编码，RESP 2 协议实现了 5 种编码格式类型。同时，为了区分这 5 种编码类型，RESP 2 使用一个专门的字符，作为每种编码类型的开头字符。这样一来，客户端或服务器端在对编码后的数据进行解析时，就可以直接通过开头字符知道当前解析的编码类型。</li>
+<li>RESP 2 进行编码时，会按照单个命令或单个数据的粒度进行编码，并在每个编码结果后面增加一个换行符“\r\n”（有时也表示成 CRLF），表示一次编码结束。</li>
+</ol>
+<p>接下来，我就来分别介绍下这 5 种编码类型。</p>
+<p><strong>1. 简单字符串类型（RESP Simple Strings）</strong></p>
+<p>这种类型就是用一个字符串来进行编码，比如，请求操作在服务器端成功执行后的 OK 标识回复，就是用这种类型进行编码的。</p>
+<p>当服务器端成功执行一个操作后，返回的 OK 标识就可以编码如下：</p>
+<p>+OK\r\n</p>
+<p><strong>2. 长字符串类型（RESP Bulk String）</strong></p>
+<p>这种类型是用一个二进制安全的字符串来进行编码。这里的二进制安全，其实是相对于 C 语言中对字符串的处理方式来说的。我来具体解释一下。</p>
+<p>Redis 在解析字符串时，不会像 C 语言那样，使用“<code>\0</code>”判定一个字符串的结尾，Redis 会把“<code>\0</code>”解析成正常的 0 字符，并使用额外的属性值表示字符串的长度。</p>
+<p>举个例子，对于“Redis\0Cluster\0”这个字符串来说，C 语言会解析为“Redis”，而 Redis 会解析为“Redis Cluster”，并用 len 属性表示字符串的真实长度是 14 字节，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/0bd37cd716c062e04df3bddb53e3e81d.png" alt=""></p>
+<p>这样一来，字符串中即使存储了“<code>\0</code>”字符，也不会导致 Redis 解析到“<code>\0</code>”时，就认为字符串结束了从而停止解析，这就保证了数据的安全性。和长字符串类型相比，简单字符串就是非二进制安全的。</p>
+<p>长字符串类型最大可以达到 512MB，所以可以对很大的数据量进行编码，正好可以满足键值对本身的数据量需求，所以，RESP 2 就用这种类型对交互内容中的键或值进行编码，并且使用“<code>$</code>”字符作为开头字符，<code>$</code>字符后面会紧跟着一个数字，这个数字表示字符串的实际长度。</p>
+<p>例如，我们使用 GET 命令读取一个键（假设键为 testkey）的值（假设值为 testvalue）时，服务端返回的 String 值编码结果如下，其中，<code>$</code>字符后的 9，表示数据长度为 9 个字符。</p>
+<p>$9 testvalue\r\n</p>
+<p><strong>3. 整数类型（RESP Integer）</strong></p>
+<p>这种类型也还是一个字符串，但是表示的是一个有符号 64 位整数。为了和包含数字的简单字符串类型区分开，整数类型使用“<code>:</code>”字符作为开头字符，可以用于对服务器端返回的整数回复进行编码。</p>
+<p>例如，在刚才介绍的例子中，我们使用 HSET 命令设置了 testhash 的三个元素，服务器端实际返回的编码结果如下：</p>
+<p>:3\r\n</p>
+<p><strong>4. 错误类型（RESP Errors）</strong></p>
+<p>它是一个字符串，包括了错误类型和具体的错误信息。Redis 服务器端报错响应就是用这种类型进行编码的。RESP 2 使用“<code>-</code>”字符作为它的开头字符。</p>
+<p>例如，在刚才的例子中，我们在 redis-cli 执行 PUT testkey2 testvalue 命令报错，服务器端实际返回给客户端的报错编码结果如下：</p>
+<p>-ERR unknown command <code>PUT</code>, with args beginning with: <code>testkey</code>, <code>testvalue</code></p>
+<p>其中，ERR 就是报错类型，表示是一个通用错误，ERR 后面的文字内容就是具体的报错信息。</p>
+<p><strong>5. 数组编码类型（RESP Arrays）</strong></p>
+<p>这是一个包含多个元素的数组，其中，元素的类型可以是刚才介绍的这 4 种编码类型。</p>
+<p>在客户端发送请求和服务器端返回结果时，数组编码类型都能用得上。客户端在发送请求操作时，一般会同时包括命令和要操作的数据。而数组类型包含了多个元素，所以，就适合用来对发送的命令和数据进行编码。为了和其他类型区分，RESP 2 使用“<code>*</code>”字符作为开头字符。</p>
+<p>例如，我们执行命令 GET testkey，此时，客户端发送给服务器端的命令的编码结果就是使用数组类型编码的，如下所示：</p>
+<p>*2\r\n$3\r\nGET\r\n$7\r\ntestkey\r\n</p>
+<p>其中，<strong>第一个</strong><code>*</code><strong>字符标识当前是数组类型的编码结果</strong>，2 表示该数组有 2 个元素，分别对应命令 GET 和键 testkey。命令 GET 和键 testkey，都是使用长字符串类型编码的，所以用<code>$</code>字符加字符串长度来表示。</p>
+<p>类似地，当服务器端返回包含多个元素的集合类型数据时，也会用<code>*</code>字符和元素个数作为标识，并用长字符串类型对返回的集合元素进行编码。</p>
+<p>好了，到这里，你了解了 RESP 2 协议的 5 种编码类型和相应的开头字符，我在下面的表格里做了小结，你可以看下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/b606f7284d0b9595ad065e62c6b9d390.png" alt=""></p>
+<p>Redis 6.0 中使用了 RESP 3 协议，对 RESP 2.0 做了改进，我们来学习下具体都有哪些改进。</p>
+<h2 id="resp-2-的不足和-resp-3-的改进">RESP 2 的不足和 RESP 3 的改进</h2>
+<p>虽然我们刚刚说 RESP 2 协议提供了 5 种编码类型，看起来很丰富，其实是不够的。毕竟，基本数据类型还包括很多种，例如浮点数、布尔值等。编码类型偏少，会带来两个问题。</p>
+<p>一方面，在值的基本数据类型方面，RESP 2 只能区分字符串和整数，对于其他的数据类型，客户端使用 RESP 2 协议时，就需要进行额外的转换操作。例如，当一个浮点数用字符串表示时，客户端需要将字符串中的值和实际数字值比较，判断是否为数字值，然后再将字符串转换成实际的浮点数。</p>
+<p>另一方面，RESP 2 用数组类别编码表示所有的集合类型，但是，Redis 的集合类型包括了 List、Hash、Set 和 Sorted Set。当客户端接收到数组类型编码的结果时，还需要根据调用的命令操作接口，来判断返回的数组究竟是哪一种集合类型。</p>
+<p>我来举个例子。假设有一个 Hash 类型的键是 testhash，集合元素分别为 a:1、b:2、c:3。同时，有一个 Sorted Set 类型的键是 testzset，集合元素分别是 a、b、c，它们的分数分别是 1、2、3。我们在 redis-cli 客户端中读取它们的结果时，返回的形式都是一个数组，如下所示：</p>
+<p>127.0.0.1:6379&gt;HGETALL testhash</p>
+<ol>
+<li>&ldquo;a&rdquo;</li>
+<li>&ldquo;1&rdquo;</li>
+<li>&ldquo;b&rdquo;</li>
+<li>&ldquo;2&rdquo;</li>
+<li>&ldquo;c&rdquo;</li>
+<li>&ldquo;3&rdquo;</li>
+</ol>
+<p>127.0.0.1:6379&gt;ZRANGE testzset 0 3 withscores</p>
+<ol>
+<li>&ldquo;a&rdquo;</li>
+<li>&ldquo;1&rdquo;</li>
+<li>&ldquo;b&rdquo;</li>
+<li>&ldquo;2&rdquo;</li>
+<li>&ldquo;c&rdquo;</li>
+<li>&ldquo;3&rdquo;</li>
+</ol>
+<p>为了在客户端按照 Hash 和 Sorted Set 两种类型处理代码中返回的数据，客户端还需要根据发送的命令操作 HGETALL 和 ZRANGE，来把这两个编码的数组结果转换成相应的 Hash 集合和有序集合，增加了客户端额外的开销。</p>
+<p>从 Redis 6.0 版本开始，RESP 3 协议增加了对多种数据类型的支持，包括空值、浮点数、布尔值、有序的字典集合、无序的集合等。RESP 3 也是通过不同的开头字符来区分不同的数据类型，例如，当开头第一个字符是“<code>,</code>”，就表示接下来的编码结果是浮点数。这样一来，客户端就不用再通过额外的字符串比对，来实现数据转换操作了，提升了客户端的效率。</p>
+<h2 id="小结">小结</h2>
+<p>这节课，我们学习了 RESP 2 协议。这个协议定义了 Redis 客户端和服务器端进行命令和数据交互时的编码格式。RESP 2 提供了 5 种类型的编码格式，包括简单字符串类型、长字符串类型、整数类型、错误类型和数组类型。为了区分这 5 种类型，RESP 2 协议使用了 5 种不同的字符作为这 5 种类型编码结果的第一个字符，分别是<code>+</code>、 <code>$</code>、:、- 和 *。</p>
+<p>RESP 2 协议是文本形式的协议，实现简单，可以减少客户端开发出现的 Bug，而且可读性强，便于开发调试。当你需要开发定制化的 Redis 客户端时，就需要了解和掌握 RESP 2 协议。</p>
+<p>RESP 2 协议的一个不足就是支持的类型偏少，所以，Redis 6.0 版本使用了 RESP 3 协议。和 RESP 2 协议相比，RESP 3 协议增加了对浮点数、布尔类型、有序字典集合、无序集合等多种类型数据的支持。不过，这里，有个地方需要你注意，Redis 6.0 只支持 RESP 3，对 RESP 2 协议不兼容，所以，如果你使用 Redis 6.0 版本，需要确认客户端已经支持了 RESP 3 协议，否则，将无法使用 Redis 6.0。</p>
+<p>最后，我也给你提供一个小工具。如果你想查看服务器端返回数据的 RESP 2 编码结果，就可以使用 telnet 命令和 redis 实例连接，执行如下命令就行：</p>
+<p>telnet 实例 IP 实例端口</p>
+<p>接着，你可以给实例发送命令，这样就能看到用 RESP 2 协议编码后的返回结果了。当然，你也可以在 telnet 中，向 Redis 实例发送用 RESP 2 协议编写的命令操作，实例同样能处理，你可以课后试试看。</p>
+<h2 id="每课一问">每课一问</h2>
+<p>按照惯例，我给你提个小问题，假设 Redis 实例中有一个 List 类型的数据，key 为 mylist，value 是使用 LPUSH 命令写入 List 集合的 5 个元素，依次是 1、2、3.3、4、hello，当执行 LRANGE mylist 0 4 命令时，实例返回给客户端的编码结果是怎样的？</p>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得今天的内容对你有所帮助，也欢迎你分享给你的朋友或同事。我们下节课见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/">Redis核心技术与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%B9%94%E6%96%B0%E4%BA%AE%E7%9A%84cto%E6%88%90%E9%95%BF%E5%A4%8D%E7%9B%98/%E5%8A%A0%E9%A4%90%E4%B8%89_%E9%80%89%E6%8B%A9%E5%86%B3%E5%AE%9A%E4%B8%8A%E9%99%90%E5%8A%AA%E5%8A%9B%E5%86%B3%E5%AE%9A%E4%B8%8B%E9%99%90/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">加餐（三）_选择决定上限，努力决定下限</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/%E5%8A%A0%E9%A4%90%E4%BA%94__redis%E6%9C%89%E5%93%AA%E4%BA%9B%E5%A5%BD%E7%94%A8%E7%9A%84%E8%BF%90%E7%BB%B4%E5%B7%A5%E5%85%B7/">
+            <span class="next-text nav-default">加餐（五）__Redis有哪些好用的运维工具？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

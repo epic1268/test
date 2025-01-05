@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>22执行引擎：如何把握ShardingSphere中的Executor执行模型？（上） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上一课时中，我们对 ShardingGroupExecuteCallback 和 SQLExecuteTemplate 做了介绍。从设计上讲，前者充当 ShardingExecuteEngine 的回调入口；而后者则是一个模板类，完成对 ShardingExecuteEngine 的封装并提供了对外的统一入口，这些类都位于底层的 sharding-core-execute 工程中。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/22%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E6%8A%8A%E6%8F%A1shardingsphere%E4%B8%AD%E7%9A%84executor%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8B%E4%B8%8A/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/22%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E6%8A%8A%E6%8F%A1shardingsphere%E4%B8%AD%E7%9A%84executor%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8B%E4%B8%8A/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="22执行引擎：如何把握ShardingSphere中的Executor执行模型？（上）">
+  <meta property="og:description" content="在上一课时中，我们对 ShardingGroupExecuteCallback 和 SQLExecuteTemplate 做了介绍。从设计上讲，前者充当 ShardingExecuteEngine 的回调入口；而后者则是一个模板类，完成对 ShardingExecuteEngine 的封装并提供了对外的统一入口，这些类都位于底层的 sharding-core-execute 工程中。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="ShardingSphere核心原理精讲">
+
+  <meta itemprop="name" content="22执行引擎：如何把握ShardingSphere中的Executor执行模型？（上）">
+  <meta itemprop="description" content="在上一课时中，我们对 ShardingGroupExecuteCallback 和 SQLExecuteTemplate 做了介绍。从设计上讲，前者充当 ShardingExecuteEngine 的回调入口；而后者则是一个模板类，完成对 ShardingExecuteEngine 的封装并提供了对外的统一入口，这些类都位于底层的 sharding-core-execute 工程中。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4780">
+  <meta itemprop="keywords" content="ShardingSphere核心原理精讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="22执行引擎：如何把握ShardingSphere中的Executor执行模型？（上）">
+  <meta name="twitter:description" content="在上一课时中，我们对 ShardingGroupExecuteCallback 和 SQLExecuteTemplate 做了介绍。从设计上讲，前者充当 ShardingExecuteEngine 的回调入口；而后者则是一个模板类，完成对 ShardingExecuteEngine 的封装并提供了对外的统一入口，这些类都位于底层的 sharding-core-execute 工程中。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">22执行引擎：如何把握ShardingSphere中的Executor执行模型？（上）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4780 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上一课时中，我们对 ShardingGroupExecuteCallback 和 SQLExecuteTemplate 做了介绍。从设计上讲，前者充当 ShardingExecuteEngine 的回调入口；而后者则是一个模板类，完成对 ShardingExecuteEngine 的封装并提供了对外的统一入口，这些类都位于底层的 sharding-core-execute 工程中。</p>
+<p>从今天开始，我们将进入到 sharding-jdbc-core 工程，来看看 ShardingSphere 中执行引擎上层设计中的几个核心类。</p>
+<p>AbstractStatementExecutor</p>
+<p>如上图所示，根据上一课时中的执行引擎整体结构图，可以看到SQLExecuteTemplate的直接使用者是AbstractStatementExecutor 类，今天我们就从这个类开始展开讨论，该类的变量比较多，我们先来看一下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">//数据库类型
+</span></span><span class="line"><span class="cl">private final DatabaseType databaseType;
+</span></span><span class="line"><span class="cl">//JDBC中用于指定结果处理方式的 resultSetType
+</span></span><span class="line"><span class="cl">private final int resultSetType;
+</span></span><span class="line"><span class="cl">//JDBC中用于指定是否可对结果集进行修改的 resultSetConcurrency
+</span></span><span class="line"><span class="cl">private final int resultSetConcurrency; 
+</span></span><span class="line"><span class="cl">//JDBC中用于指定事务提交或回滚后结果集是否仍然可用的 resultSetConcurrency
+</span></span><span class="line"><span class="cl">private final int resultSetHoldability;
+</span></span><span class="line"><span class="cl">//分片 Connection
+</span></span><span class="line"><span class="cl">private final ShardingConnection connection;
+</span></span><span class="line"><span class="cl">//用于数据准备的模板类
+</span></span><span class="line"><span class="cl">private final SQLExecutePrepareTemplate sqlExecutePrepareTemplate;
+</span></span><span class="line"><span class="cl">//SQL 执行模板类
+</span></span><span class="line"><span class="cl">private final SQLExecuteTemplate sqlExecuteTemplate;
+</span></span><span class="line"><span class="cl">//JDBC的Connection列表
+</span></span><span class="line"><span class="cl">private final Collection&lt;Connection&gt; connections = new LinkedList&lt;&gt;();
+</span></span><span class="line"><span class="cl">//SQLStatement 上下文
+</span></span><span class="line"><span class="cl">private SQLStatementContext sqlStatementContext;
+</span></span><span class="line"><span class="cl">//参数集
+</span></span><span class="line"><span class="cl">private final List&lt;List&lt;Object&gt;&gt; parameterSets = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">//JDBC的Statement 列表
+</span></span><span class="line"><span class="cl">private final List&lt;Statement&gt; statements = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">//JDBC的ResultSet 列表
+</span></span><span class="line"><span class="cl">private final List&lt;ResultSet&gt; resultSets = new CopyOnWriteArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">//ShardingExecuteGroup 列表
+</span></span><span class="line"><span class="cl">private final Collection&lt;ShardingExecuteGroup&lt;StatementExecuteUnit&gt;&gt; executeGroups = new LinkedList&lt;&gt;();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从这个类开始，我们会慢慢接触 JDBC 规范相关的对象，因为 ShardingSphere 的设计目标是，重写一套与目前的 JDBC 规范完全兼容的体系。这里，我们看到的 Connection、Statement 和 ResultSet 等对象，以及 resultSetType、resultSetConcurrency、resultSetHoldability 等参数，都是属于 JDBC 规范中的内容，我们在注释上做了特别的说明，你对此也都比较熟悉。</p>
+<p>而像 ShardingSphere 自己封装的 ShardingConnection 对象也很重要，我们已经在《03 | 规范兼容：JDBC 规范与 ShardingSphere 是什么关系？》中对这个类的实现方式，以及如何兼容 JDBC 规范的详细过程做了介绍。</p>
+<p>在 AbstractStatementExecutor 中，这些变量的展开，会涉及很多 sharding-jdbc-core 代码工程，关于数据库访问相关的类的介绍，包括我们以前已经接触过的 ShardingStatement 和 ShardingPreparedStatement 等类，所以我们在展开 AbstractStatementExecutor 类的具体实现方法之前，需要对这些类有一定的了解。</p>
+<p>在 AbstractStatementExecutor 构造函数中，我们发现了上一课时中介绍的执行引擎 ShardingExecuteEngine 的创建过程，并通过它创建了 SQLExecuteTemplate 模板类，相关代码如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public AbstractStatementExecutor(final int resultSetType, final int resultSetConcurrency, final int resultSetHoldability, final ShardingConnection shardingConnection) {
+</span></span><span class="line"><span class="cl">    …
+</span></span><span class="line"><span class="cl">    ShardingExecuteEngine executeEngine = connection.getRuntimeContext().getExecuteEngine();
+</span></span><span class="line"><span class="cl">    sqlExecuteTemplate = new SQLExecuteTemplate(executeEngine, connection.isHoldTransaction());
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>同时，AbstractStatementExecutor 中如下所示的 cacheStatements 方法也很有特色，该方法会根据持有的 ShardingExecuteGroup 类分别填充 statements 和 parameterSets 这两个对象，以供 AbstractStatementExecutor 的子类进行使用：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">protected final void cacheStatements() {
+</span></span><span class="line"><span class="cl">    for (ShardingExecuteGroup&lt;StatementExecuteUnit&gt; each : executeGroups) {
+</span></span><span class="line"><span class="cl">        statements.addAll(Lists.transform(each.getInputs(), new Function&lt;StatementExecuteUnit, Statement&gt;() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            @Override
+</span></span><span class="line"><span class="cl">            public Statement apply(final StatementExecuteUnit input) {
+</span></span><span class="line"><span class="cl">                return input.getStatement();
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        }));
+</span></span><span class="line"><span class="cl">        parameterSets.addAll(Lists.transform(each.getInputs(), new Function&lt;StatementExecuteUnit, List&lt;Object&gt;&gt;() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            @Override
+</span></span><span class="line"><span class="cl">            public List&lt;Object&gt; apply(final StatementExecuteUnit input) {
+</span></span><span class="line"><span class="cl">                return input.getRouteUnit().getSqlUnit().getParameters();
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        }));
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>注意：这里在实现方式上使用了 Google 提供的 Guava 框架中的 Lists.transform 方法，从而完成了不同对象之间的转换过程，这种实现方式在 ShardingSphere 中应用广泛，非常值得你学习。</p>
+<p>然后我们来看 AbstractStatementExecutor 中最核心的方法，即执行回调的 executeCallback 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">protected final &lt;T&gt; List&lt;T&gt; executeCallback(final SQLExecuteCallback&lt;T&gt; executeCallback) throws SQLException {
+</span></span><span class="line"><span class="cl">    List&lt;T&gt; result = sqlExecuteTemplate.executeGroup((Collection) executeGroups, executeCallback);
+</span></span><span class="line"><span class="cl">    refreshMetaDataIfNeeded(connection.getRuntimeContext(), sqlStatementContext);
+</span></span><span class="line"><span class="cl">    return result;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然，在这里应该使用 SQLExecuteTemplate 模板类来完成具体回调的执行过程。同时，我可以看到这里还有一个 refreshMetaDataIfNeeded 辅助方法用来刷选元数据。</p>
+<p>AbstractStatementExecutor 有两个实现类：一个是普通的 StatementExecutor，一个是 PreparedStatementExecutor，接下来我将分别进行讲解。</p>
+<p>StatementExecutor</p>
+<p>我们来到 StatementExecutor，先看它的用于执行初始化操作的 init 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public void init(final SQLRouteResult routeResult) throws SQLException {
+</span></span><span class="line"><span class="cl">    setSqlStatementContext(routeResult.getSqlStatementContext());
+</span></span><span class="line"><span class="cl">    getExecuteGroups().addAll(obtainExecuteGroups(routeResult.getRouteUnits()));
+</span></span><span class="line"><span class="cl">    cacheStatements();
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的 cacheStatements 方法前面已经介绍过，而 obtainExecuteGroups 方法用于获取所需的 ShardingExecuteGroup 集合。要实现这个方法，就需要引入 SQLExecutePrepareTemplate 和对应的回调 SQLExecutePrepareCallback。</p>
+<p>1.SQLExecutePrepareCallback</p>
+<p>从命名上看，让人感觉 SQLExecutePrepareTemplate 和 SQLExecuteTemplate 应该是一对，尤其是名称中有一个“Prepare”，让人联想到 PreparedStatement。</p>
+<p>但事实上，SQLExecutePrepareTemplate 与 SQLExecuteTemplate 没有什么关联，它也不是像 SQLExecuteTemplate 一样提供了 ShardingExecuteEngine 的封装，而是主要关注于 ShardingExecuteGroup 数据的收集和拼装，换句话说是为了准备（Prepare）数据。</p>
+<p>在 SQLExecutePrepareTemplate 中，核心的功能就是下面这个方法，该方法传入了一个 SQLExecutePrepareCallback 对象，并返回 ShardingExecuteGroup 的一个集合：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public Collection&lt;ShardingExecuteGroup&lt;StatementExecuteUnit&gt;&gt; getExecuteUnitGroups(final Collection&lt;RouteUnit&gt; routeUnits, final SQLExecutePrepareCallback callback) throws SQLException {
+</span></span><span class="line"><span class="cl">        return getSynchronizedExecuteUnitGroups(routeUnits, callback);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>为了构建这个集合，SQLExecutePrepareTemplate 实现了很多辅助方法，同时它还引入了一个 SQLExecutePrepareCallback 回调，来完成 ShardingExecuteGroup 数据结构中部分数据的填充。SQLExecutePrepareCallback 接口定义如下，可以看到 Connection 和 StatementExecuteUnit 这两个对象是通过回调来创建的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLExecutePrepareCallback {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //获取 Connection 列表
+</span></span><span class="line"><span class="cl">    List&lt;Connection&gt; getConnections(ConnectionMode connectionMode, String dataSourceName, int connectionSize) throws SQLException;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //获取 Statement 执行单元
+</span></span><span class="line"><span class="cl">    StatementExecuteUnit createStatementExecuteUnit(Connection connection, RouteUnit routeUnit, ConnectionMode connectionMode) throws SQLException;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当我们获取了想要的 ShardingExecuteGroup 之后，相当于完成了 StatementExecutor 的初始化工作。该类中剩下的就是一系列以“execute”开头的 SQL 执行方法，包括 executeQuery、executeUpdate，以及它们的各种重载方法。我们先来看用于查询的 executeQuery 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public List&lt;QueryResult&gt; executeQuery() throws SQLException {
+</span></span><span class="line"><span class="cl">    final boolean isExceptionThrown = ExecutorExceptionHandler.isExceptionThrown();
+</span></span><span class="line"><span class="cl">    //创建 SQLExecuteCallback 并执行查询
+</span></span><span class="line"><span class="cl">    SQLExecuteCallback&lt;QueryResult&gt; executeCallback = new SQLExecuteCallback&lt;QueryResult&gt;(getDatabaseType(), isExceptionThrown) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        @Override
+</span></span><span class="line"><span class="cl">        protected QueryResult executeSQL(final String sql, final Statement statement, final ConnectionMode connectionMode) throws SQLException {
+</span></span><span class="line"><span class="cl">            return getQueryResult(sql, statement, connectionMode);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    };
+</span></span><span class="line"><span class="cl">    //执行 SQLExecuteCallback 并返回结果
+</span></span><span class="line"><span class="cl">    return executeCallback(executeCallback);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们已经在上一课时中介绍过这个方法，我们知道 SQLExecuteCallback 实现了 ShardingGroupExecuteCallback 接口并提供了 executeSQL 模板方法。而在上述 executeQuery 方法中，executeSQL 模板方法的实现过程，就是调用如下所示的 getQueryResult 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private QueryResult getQueryResult(final String sql, final Statement statement, final ConnectionMode connectionMode) throws SQLException {
+</span></span><span class="line"><span class="cl">    //通过 Statement 执行 SQL 并获取结果
+</span></span><span class="line"><span class="cl"> ResultSet resultSet = statement.executeQuery(sql);
+</span></span><span class="line"><span class="cl">    getResultSets().add(resultSet);
+</span></span><span class="line"><span class="cl">    //根据连接模式来确认构建结果
+</span></span><span class="line"><span class="cl">    return ConnectionMode.MEMORY_STRICTLY == connectionMode ? new StreamQueryResult(resultSet) : new MemoryQueryResult(resultSet);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>2.ConnectionMode</p>
+<p>getQueryResult 方法中完全基于 JDBC 中的 Statement 和 ResultSet 对象来执行查询并返回结果。</p>
+<p>但是，这里也引入了 ShardingSphere 执行引擎中非常重要的一个概念，即ConnectionMode（连接模式），它是一个枚举：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="k">enum</span> <span class="n">ConnectionMode</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">MEMORY_STRICTLY</span><span class="p">,</span> <span class="n">CONNECTION_STRICTLY</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到有两种具体的连接模式：MEMORY_STRICTLY 和 CONNECTION_STRICTLY。</p>
+<p>MEMORY_STRICTLY 代表内存限制模式，</p>
+<p>CONNECTION_STRICTLY 代表连接限制模式。</p>
+<p>ConnectionMode（连接模式） 是 ShardingSphere 所提出的一个特有概念，背后体现的是一种设计上的平衡思想。从数据库访问资源的角度来看，一方面是对数据库连接资源的控制保护，另一方面是采用更优的归并模式达到对中间件内存资源的节省，如何处理好两者之间的关系，是 ShardingSphere 执行引擎需求解决的问题。</p>
+<p>为此，ShardingSphere 提出了连接模式的概念，简单举例说明：</p>
+<p>当采用内存限制模式时，对于同一数据源，如果有 10 张分表，那么执行时会获取 10 个连接并进行并行执行；</p>
+<p>而当采用连接限制模式时，执行过程中只会获取 1 个连接而进行串行执行。</p>
+<p>那么这个 ConnectionMode 是怎么得出来的呢？</p>
+<p>实际上这部分代码位于 SQLExecutePrepareTemplate 中，我们根据 maxConnectionsSizePerQuery 这个配置项，以及与每个数据库所需要执行的 SQL 数量进行比较，然后得出具体的 ConnectionMode：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">ConnectionMode connectionMode = maxConnectionsSizePerQuery &lt; sqlUnits.size() ? ConnectionMode.CONNECTION_STRICTLY : ConnectionMode.MEMORY_STRICTLY;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>关于这个判断条件，我们可以使用一张简单的示意图来进行说明，如下所示：</p>
+<p>如上图所示，我们可以看到如果每个数据库连接所指向的 SQL 数多于一条时，走的是内存限制模式，反之走的是连接限制模式。</p>
+<p>3.StreamQueryResult VS MemoryQueryResult</p>
+<p>在了解了 ConnectionMode（连接模式） 的设计理念后，我们再来看 StatementExecutor 的 executeQuery 方法返回的是一个 QueryResult。</p>
+<p>在 ShardingSphere 中，QueryResult 是一个代表查询结果的接口，可以看到该接口封装了很多面向底层数据获取的方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface QueryResult {
+</span></span><span class="line"><span class="cl">    boolean next() throws SQLException;
+</span></span><span class="line"><span class="cl">    Object getValue(int columnIndex, Class&lt;?&gt; type) throws SQLException;
+</span></span><span class="line"><span class="cl">    Object getCalendarValue(int columnIndex, Class&lt;?&gt; type, Calendar calendar) throws SQLException;
+</span></span><span class="line"><span class="cl">    InputStream getInputStream(int columnIndex, String type) throws SQLException;
+</span></span><span class="line"><span class="cl">    boolean wasNull() throws SQLException;
+</span></span><span class="line"><span class="cl">    int getColumnCount() throws SQLException;
+</span></span><span class="line"><span class="cl">    String getColumnLabel(int columnIndex) throws SQLException;
+</span></span><span class="line"><span class="cl">    boolean isCaseSensitive(int columnIndex) throws SQLException;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ShardingSphere中，QueryResult 接口存在于 StreamQueryResult（代表流式归并结果）和 MemoryQueryResult （代表内存归并结果）这两个实现类。</p>
+<p>ShardingSphere 采用这样的设计实际上跟前面介绍的 ConnectionMode 有直接关系。</p>
+<p>我们知道，在内存限制模式中，ShardingSphere 对一次操作所耗费的数据库连接数量不做限制；</p>
+<p>而当采用连接限制模式时，ShardingSphere严格控制对一次操作所耗费的数据库连接数量。</p>
+<p>基于这样的设计原理，如上面的 ConnectionMode 的计算示意图所示：在 maxConnectionSizePerQuery 允许的范围内，当一个连接需要执行的请求数量大于 1 时，意味着当前的数据库连接无法持有相应的数据结果集，则必须采用内存归并；反之，则可以采用流式归并。</p>
+<p>StreamQueryResult</p>
+<p>我们通过对比 StreamQueryResult 和 MemoryQueryResult 的实现过程，对上述原理做进一步分析，在 StreamQueryResult 中，它的 next 方法非常简单：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public boolean next() throws SQLException {
+</span></span><span class="line"><span class="cl">    return resultSet.next();
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然这是一种流式处理的方式，从 ResultSet 中获取下一个数据行。</p>
+<p>MemoryQueryResult</p>
+<p>我们再来看 MemoryQueryResult，在它的构造函数中，通过 getRows 方法把 ResultSet 中的全部数据行，先进行获取并存储在内存变量 rows 中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Iterator&lt;List&lt;Object&gt;&gt; getRows(final ResultSet resultSet) throws SQLException {
+</span></span><span class="line"><span class="cl">    Collection&lt;List&lt;Object&gt;&gt; result = new LinkedList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    while (resultSet.next()) {
+</span></span><span class="line"><span class="cl">        List&lt;Object&gt; rowData = new ArrayList&lt;&gt;(resultSet.getMetaData().getColumnCount());
+</span></span><span class="line"><span class="cl">        for (int columnIndex = 1; columnIndex &lt;= resultSet.getMetaData().getColumnCount(); columnIndex++) {
+</span></span><span class="line"><span class="cl">          //获取每一个 Row 的数据
+</span></span><span class="line"><span class="cl">            Object rowValue = getRowValue(resultSet, columnIndex);
+</span></span><span class="line"><span class="cl">          //存放在内存中
+</span></span><span class="line"><span class="cl">            rowData.add(resultSet.wasNull() ? null : rowValue);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">        result.add(rowData);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    return result.iterator();
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>基于以上方法，MemoryQueryResult 的 next 方法应该是，从这个 rows 变量中获取下一个数据行，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public boolean next() {
+</span></span><span class="line"><span class="cl">    if (rows.hasNext()) {
+</span></span><span class="line"><span class="cl">        currentRow = rows.next();
+</span></span><span class="line"><span class="cl">        return true;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    currentRow = null;
+</span></span><span class="line"><span class="cl">    return false;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过这种方式，我们就将传统的流式处理方式转变成了内存处理方式。</p>
+<p>关于 ConnectionMode 和两种 QueryResult 的讨论就到这里，让我们回到 StatementExecutor。理解了 StatementExecutor 的 executeQuery 方法之后，我们再来看它更为通用的 execute 方法，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public boolean execute() throws SQLException {
+</span></span><span class="line"><span class="cl">     return execute(new Executor() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         @Override
+</span></span><span class="line"><span class="cl">         public boolean execute(final Statement statement, final String sql) throws SQLException {
+</span></span><span class="line"><span class="cl">             return statement.execute(sql);
+</span></span><span class="line"><span class="cl">         }
+</span></span><span class="line"><span class="cl">     });
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>注意到上述 execute 方法并没有使用 SQLExecuteCallback 回调，而是使用了一个 Executor 接口，该接口定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private interface Executor {
+</span></span><span class="line"><span class="cl">        //执行 SQL
+</span></span><span class="line"><span class="cl">        boolean execute(Statement statement, String sql) throws SQLException;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后我们再继续往下看，发现在改方法实际的执行过程中，还是用到了 SQLExecuteCallback 回调：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private boolean execute(final Executor executor) throws SQLException {
+</span></span><span class="line"><span class="cl">    final boolean isExceptionThrown = ExecutorExceptionHandler.isExceptionThrown();
+</span></span><span class="line"><span class="cl">    //创建 SQLExecuteCallback 并执行
+</span></span><span class="line"><span class="cl">    SQLExecuteCallback&lt;Boolean&gt; executeCallback = new SQLExecuteCallback&lt;Boolean&gt;(getDatabaseType(), isExceptionThrown) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        @Override
+</span></span><span class="line"><span class="cl">        protected Boolean executeSQL(final String sql, final Statement statement, final ConnectionMode connectionMode) throws SQLException {
+</span></span><span class="line"><span class="cl">            //使用 Executor 进行执行
+</span></span><span class="line"><span class="cl">            return executor.execute(statement, sql);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    };
+</span></span><span class="line"><span class="cl">    List&lt;Boolean&gt; result = executeCallback(executeCallback);
+</span></span><span class="line"><span class="cl">    if (null == result || result.isEmpty() || null == result.get(0)) {
+</span></span><span class="line"><span class="cl">        return false;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    return result.get(0);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里多嵌套一层的目的是，更好地分离代码的职责，并对执行结果进行处理，同样的处理技巧在 StatementExecutor 的 executeUpdate 方法中也有体现。</p>
+<p>PreparedStatementExecutor</p>
+<p>讲完 StatementExecutor 之后，我们来看 PreparedStatementExecutor。PreparedStatementExecutor 包含了与 StatementExecutor 一样的用于初始化的 init 方法。然后，我们同样来看它如下所示的 executeQuery 方法，可以看到这里的处理方式与在 StatementExecutor 的一致：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public List&lt;QueryResult&gt; executeQuery() throws SQLException {
+</span></span><span class="line"><span class="cl">    final boolean isExceptionThrown = ExecutorExceptionHandler.isExceptionThrown();
+</span></span><span class="line"><span class="cl">   //创建 SQLExecuteCallback 并执行
+</span></span><span class="line"><span class="cl">    SQLExecuteCallback&lt;QueryResult&gt; executeCallback = new SQLExecuteCallback&lt;QueryResult&gt;(getDatabaseType(), isExceptionThrown) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        @Override
+</span></span><span class="line"><span class="cl">        protected QueryResult executeSQL(final String sql, final Statement statement, final ConnectionMode connectionMode) throws SQLException {
+</span></span><span class="line"><span class="cl">            return getQueryResult(statement, connectionMode);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    };
+</span></span><span class="line"><span class="cl">    return executeCallback(executeCallback);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后，我们再来看它的 execute 方法，就会发现有不同点：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public boolean execute() throws SQLException {
+</span></span><span class="line"><span class="cl">    boolean isExceptionThrown = ExecutorExceptionHandler.isExceptionThrown();
+</span></span><span class="line"><span class="cl">    SQLExecuteCallback&lt;Boolean&gt; executeCallback = SQLExecuteCallbackFactory.getPreparedSQLExecuteCallback(getDatabaseType(), isExceptionThrown);
+</span></span><span class="line"><span class="cl">    List&lt;Boolean&gt; result = executeCallback(executeCallback);
+</span></span><span class="line"><span class="cl">    if (null == result || result.isEmpty() || null == result.get(0)) {
+</span></span><span class="line"><span class="cl">        return false;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    return result.get(0);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>与 StatementExecutor 不同，PreparedStatementExecutor 在实现 execute 方法时没有设计类似 Executor 这样的接口，而是直接提供了一个工厂类 SQLExecuteCallbackFactory：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class SQLExecuteCallbackFactory {
+</span></span><span class="line"><span class="cl">	…
+</span></span><span class="line"><span class="cl">    public static SQLExecuteCallback&lt;Boolean&gt; getPreparedSQLExecuteCallback(final DatabaseType databaseType, final boolean isExceptionThrown) {
+</span></span><span class="line"><span class="cl">        return new SQLExecuteCallback&lt;Boolean&gt;(databaseType, isExceptionThrown) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            @Override
+</span></span><span class="line"><span class="cl">            protected Boolean executeSQL(final String sql, final Statement statement, final ConnectionMode connectionMode) throws SQLException {
+</span></span><span class="line"><span class="cl">                return ((PreparedStatement) statement).execute();
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        };
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>注意到这里的静态方法 getPreparedSQLExecuteCallback 也就是返回了一个 SQLExecuteCallback 回调的实现，而在这个实现中使用了 JDBC 底层的 PreparedStatement 完成具体 SQL 的执行过程。</p>
+<p>至此，我们对 ShardingSphere 中两个主要执行器 StatementExecutor 和 PreparedStatementExecutor 都进行了详细介绍。</p>
+<p>从源码解析到日常开发</p>
+<p>本课时关于两种 QueryResult 的设计思想，同样可以应用到日常开发中。当我们面对如何处理来自数据库或外部数据源的数据时，可以根据需要设计流式访问方式和内存访问方式，这两种访问方式在数据访问过程中都具有一定的代表性。</p>
+<p>通常，我们会首先想到将所有访问到的数据存放在内存中，再进行二次处理，但这种处理方式会面临性能问题，流式访问方式性能更高，但需要我们挖掘适合的应用场景。</p>
+<p>小结与预告</p>
+<p>今天介绍了 ShardingSphere 执行引擎主题的第二个课时，我们重点围绕执行引擎中的执行器展开讨论，给出了 StatementExecutor 和 PreparedStatementExecutor 这两种执行器的实现方式，也给出了 ShardingSphere 中关于连接模式的详细讨论。</p>
+<p>这里给大家留一道思考题：ShardingSphere 中连接模式的概念和作用是什么？欢迎你在留言区与大家讨论，我将逐一点评解答。</p>
+<p>从类层结构而言，StatementExecutor 和 PreparedStatementExecutor 都属于底层组件，在下一课时，我们会介绍包括 ShardingStatement 和 PreparedShardingStatement 在内的位于更加上层的执行引擎组件。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/">ShardingSphere核心原理精讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/22%E6%8B%A5%E6%8A%B1%E6%9C%AA%E6%9D%A5%E5%A6%82%E4%BD%95%E5%A4%87%E6%88%98%E4%B8%8B%E4%B8%80%E4%BB%A3%E6%80%A7%E8%83%BD%E7%9B%91%E6%8E%A7%E7%B3%BB%E7%BB%9F/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">22拥抱未来：如何备战下一代性能监控系统？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E9%9D%A2%E8%AF%95%E5%AE%9D%E5%85%B8/23-%E7%AE%97%E6%B3%95%E6%A8%A1%E6%9D%BF%E5%A6%82%E4%BD%95%E8%AE%A9%E9%AB%98%E9%A2%91%E7%AE%97%E6%B3%95%E8%80%83%E7%82%B9%E7%A7%92%E5%8F%98%E9%BB%98%E5%86%99%E9%A2%98/">
+            <span class="next-text nav-default">23 算法模板：如何让高频算法考点秒变默写题？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

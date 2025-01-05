@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25带你解析Python垃圾回收机制 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="24 | 带你解析 Python 垃圾回收机制
+你好，我是景霄。
+众所周知，我们当代的计算机都是图灵机架构。图灵机架构的本质，就是一条无限长的纸带，对应着我们今天的存储器。在工程学的演化中，逐渐出现了寄存器、易失性存储器（内存）和永久性存储器（硬盘）等产品。其实，这本身来自一个矛盾：速度越快的存储器，单位价格也越昂贵。因此，妥善利用好每一寸高速存储器的空间，永远是系统设计的一个核心。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/python%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/25%E5%B8%A6%E4%BD%A0%E8%A7%A3%E6%9E%90python%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E6%9C%BA%E5%88%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/python%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/25%E5%B8%A6%E4%BD%A0%E8%A7%A3%E6%9E%90python%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E6%9C%BA%E5%88%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25带你解析Python垃圾回收机制">
+  <meta property="og:description" content="24 | 带你解析 Python 垃圾回收机制
+你好，我是景霄。
+众所周知，我们当代的计算机都是图灵机架构。图灵机架构的本质，就是一条无限长的纸带，对应着我们今天的存储器。在工程学的演化中，逐渐出现了寄存器、易失性存储器（内存）和永久性存储器（硬盘）等产品。其实，这本身来自一个矛盾：速度越快的存储器，单位价格也越昂贵。因此，妥善利用好每一寸高速存储器的空间，永远是系统设计的一个核心。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Python核心技术与实战">
+
+  <meta itemprop="name" content="25带你解析Python垃圾回收机制">
+  <meta itemprop="description" content="24 | 带你解析 Python 垃圾回收机制
+你好，我是景霄。
+众所周知，我们当代的计算机都是图灵机架构。图灵机架构的本质，就是一条无限长的纸带，对应着我们今天的存储器。在工程学的演化中，逐渐出现了寄存器、易失性存储器（内存）和永久性存储器（硬盘）等产品。其实，这本身来自一个矛盾：速度越快的存储器，单位价格也越昂贵。因此，妥善利用好每一寸高速存储器的空间，永远是系统设计的一个核心。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3995">
+  <meta itemprop="keywords" content="Python核心技术与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25带你解析Python垃圾回收机制">
+  <meta name="twitter:description" content="24 | 带你解析 Python 垃圾回收机制
+你好，我是景霄。
+众所周知，我们当代的计算机都是图灵机架构。图灵机架构的本质，就是一条无限长的纸带，对应着我们今天的存储器。在工程学的演化中，逐渐出现了寄存器、易失性存储器（内存）和永久性存储器（硬盘）等产品。其实，这本身来自一个矛盾：速度越快的存储器，单位价格也越昂贵。因此，妥善利用好每一寸高速存储器的空间，永远是系统设计的一个核心。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25带你解析Python垃圾回收机制</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3995 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>24 | 带你解析 Python 垃圾回收机制</p>
+<p>你好，我是景霄。</p>
+<p>众所周知，我们当代的计算机都是图灵机架构。图灵机架构的本质，就是一条无限长的纸带，对应着我们今天的存储器。在工程学的演化中，逐渐出现了寄存器、易失性存储器（内存）和永久性存储器（硬盘）等产品。其实，这本身来自一个矛盾：速度越快的存储器，单位价格也越昂贵。因此，妥善利用好每一寸高速存储器的空间，永远是系统设计的一个核心。</p>
+<p>回到 Python 应用层。</p>
+<p>我们知道，Python 程序在运行的时候，需要在内存中开辟出一块空间，用于存放运行时产生的临时变量；计算完成后，再将结果输出到永久性存储器中。如果数据量过大，内存空间管理不善就很容易出现 OOM（out of memory），俗称爆内存，程序可能被操作系统中止。</p>
+<p>而对于服务器，这种设计为永不中断的系统来说，内存管理则显得更为重要，不然很容易引发内存泄漏。什么是内存泄漏呢？</p>
+<p>这里的泄漏，并不是说你的内存出现了信息安全问题，被恶意程序利用了，而是指程序本身没有设计好，导致程序未能释放已不再使用的内存。</p>
+<p>内存泄漏也不是指你的内存在物理上消失了，而是意味着代码在分配了某段内存后，因为设计错误，失去了对这段内存的控制，从而造成了内存的浪费。</p>
+<p>那么，Python 又是怎么解决这些问题的？换句话说，对于不会再用到的内存空间，Python 是通过什么机制来回收这些空间的呢？</p>
+<p>计数引用</p>
+<p>我们反复提过好几次， Python 中一切皆对象。因此，你所看到的一切变量，本质上都是对象的一个指针。</p>
+<p>那么，怎么知道一个对象，是否永远都不能被调用了呢？</p>
+<p>我们上节课提到过的，也是非常直观的一个想法，就是当这个对象的引用计数（指针数）为 0 的时候，说明这个对象永不可达，自然它也就成为了垃圾，需要被回收。</p>
+<p>我们来看一个例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">import os
+</span></span><span class="line"><span class="cl">import psutil
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># 显示当前 python 程序占用的内存大小
+</span></span><span class="line"><span class="cl">def show_memory_info(hint):
+</span></span><span class="line"><span class="cl">    pid = os.getpid()
+</span></span><span class="line"><span class="cl">    p = psutil.Process(pid)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    info = p.memory_full_info()
+</span></span><span class="line"><span class="cl">    memory = info.uss / 1024. / 1024
+</span></span><span class="line"><span class="cl">    print(&#39;{} memory used: {} MB&#39;.format(hint, memory))
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>def func():
+    show_memory_info(&lsquo;initial&rsquo;)
+    a = [i for i in range(10000000)]
+    show_memory_info(&lsquo;after a created&rsquo;)</p>
+<p>func()
+show_memory_info(&lsquo;finished&rsquo;)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 47.19140625 MB
+after a created memory used: 433.91015625 MB
+finished memory used: 48.109375 MB</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">通过这个示例，你可以看到，调用函数 func()，在列表 a 被创建之后，内存占用迅速增加到了 433 MB：而在函数调用结束后，内存则返回正常。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">这是因为，函数内部声明的列表 a 是局部变量，在函数返回后，局部变量的引用会注销掉；此时，列表 a 所指代对象的引用数为 0，Python 便会执行垃圾回收，因此之前占用的大量内存就又回来了。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">明白了这个原理后，我们稍微修改一下代码：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>def func():
+    show_memory_info(&lsquo;initial&rsquo;)
+    global a
+    a = [i for i in range(10000000)]
+    show_memory_info(&lsquo;after a created&rsquo;)</p>
+<p>func()
+show_memory_info(&lsquo;finished&rsquo;)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 48.88671875 MB
+after a created memory used: 433.94921875 MB
+finished memory used: 433.94921875 MB</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">新的这段代码中，global a 表示将 a 声明为全局变量。那么，即使函数返回后，列表的引用依然存在，于是对象就不会被垃圾回收掉，依然占用大量内存。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">同样，如果我们把生成的列表返回，然后在主程序中接收，那么引用依然存在，垃圾回收就不会被触发，大量内存仍然被占用着：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>def func():
+    show_memory_info(&lsquo;initial&rsquo;)
+    a = [i for i in derange(10000000)]
+    show_memory_info(&lsquo;after a created&rsquo;)
+    return a</p>
+<p>a = func()
+show_memory_info(&lsquo;finished&rsquo;)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 47.96484375 MB
+after a created memory used: 434.515625 MB
+finished memory used: 434.515625 MB</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">这是最常见的几种情况。由表及里，下面，我们深入看一下 Python 内部的引用计数机制。老规矩，先来看代码：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import sys</p>
+<p>a = []</p>
+<p># 两次引用，一次来自 a，一次来自 getrefcount
+print(sys.getrefcount(a))</p>
+<p>def func(a):
+    # 四次引用，a，python 的函数调用栈，函数参数，和 getrefcount
+    print(sys.getrefcount(a))</p>
+<p>func(a)</p>
+<p># 两次引用，一次来自 a，一次来自 getrefcount，函数 func 调用已经不存在
+print(sys.getrefcount(a))</p>
+<p>########## 输出 ##########</p>
+<p>2
+4
+2</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">简单介绍一下，sys.getrefcount() 这个函数，可以查看一个变量的引用次数。这段代码本身应该很好理解，不过别忘了，getrefcount 本身也会引入一次计数。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">另一个要注意的是，在函数调用发生的时候，会产生额外的两次引用，一次来自函数栈，另一个是函数参数。
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import sys</p>
+<p>a = []</p>
+<p>print(sys.getrefcount(a)) # 两次</p>
+<p>b = a</p>
+<p>print(sys.getrefcount(a)) # 三次</p>
+<p>c = b
+d = b
+e = c
+f = e
+g = d</p>
+<p>print(sys.getrefcount(a)) # 八次</p>
+<p>########## 输出 ##########</p>
+<p>2
+3
+8</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">看到这段代码，需要你稍微注意一下，a、b、c、d、e、f、g 这些变量全部指代的是同一个对象，而 sys.getrefcount() 函数并不是统计一个指针，而是要统计一个对象被引用的次数，所以最后一共会有八次引用。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">理解引用这个概念后，引用释放是一种非常自然和清晰的思想。相比 C 语言里，你需要使用 free 去手动释放内存，Python 的垃圾回收在这里可以说是省心省力了。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">不过，我想还是会有人问，如果我偏偏想手动释放内存，应该怎么做呢？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">方法同样很简单。你只需要先调用 del a 来删除一个对象；然后强制调用 gc.collect()，即可手动启动垃圾回收。
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import gc</p>
+<p>show_memory_info(&lsquo;initial&rsquo;)</p>
+<p>a = [i for i in range(10000000)]</p>
+<p>show_memory_info(&lsquo;after a created&rsquo;)</p>
+<p>del a
+gc.collect()</p>
+<p>show_memory_info(&lsquo;finish&rsquo;)
+print(a)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 48.1015625 MB
+after a created memory used: 434.3828125 MB
+finish memory used: 48.33203125 MB</p>
+<hr>
+<p>NameError                                 Traceback (most recent call last)
+<ipython-input-12-153e15063d8a> in <module>
+     11 
+     12 show_memory_info(&lsquo;finish&rsquo;)
+&mdash;&gt; 13 print(a)</p>
+<p>NameError: name &lsquo;a&rsquo; is not defined</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">到这里，是不是觉得垃圾回收非常简单呀？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">我想，肯定有人觉得自己都懂了，那么，如果此时有面试官问：引用次数为 0 是垃圾回收启动的充要条件吗？还有没有其他可能性呢？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">这个问题，你能回答的上来吗？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">循环引用
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">如果你也被困住了，别急。我们不妨小步设问，先来思考这么一个问题：如果有两个对象，它们互相引用，并且不再被别的对象所引用，那么它们应该被垃圾回收吗？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">请仔细观察下面这段代码：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>def func():
+    show_memory_info(&lsquo;initial&rsquo;)
+    a = [i for i in range(10000000)]
+    b = [i for i in range(10000000)]
+    show_memory_info(&lsquo;after a, b created&rsquo;)
+    a.append(b)
+    b.append(a)</p>
+<p>func()
+show_memory_info(&lsquo;finished&rsquo;)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 47.984375 MB
+after a, b created memory used: 822.73828125 MB
+finished memory used: 821.73046875 MB</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">这里，</span><span class="n">a</span> <span class="err">和</span> <span class="n">b</span> <span class="err">互相引用，并且，作为局部变量，在函数</span> <span class="k">func</span> <span class="err">调用结束后，</span><span class="n">a</span> <span class="err">和</span> <span class="n">b</span> <span class="err">这两个指针从程序意义上已经不存在了。但是，很明显，依然有内存占用！为什么呢？因为互相引用，导致它们的引用数都不为</span> <span class="mi">0</span><span class="err">。</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">试想一下，如果这段代码出现在生产环境中，哪怕</span> <span class="n">a</span> <span class="err">和</span> <span class="n">b</span> <span class="err">一开始占用的空间不是很大，但经过长时间运行后，</span><span class="n">Python</span> <span class="err">所占用的内存一定会变得越来越大，最终撑爆服务器，后果不堪设想。</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">当然，有人可能会说，互相引用还是很容易被发现的呀，问题不大。可是，更隐蔽的情况是出现一个引用环，在工程代码比较复杂的情况下，引用环还真不一定能被轻易发现。</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">那么，我们应该怎么做呢？</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="err">事实上，</span><span class="n">Python</span> <span class="err">本身能够处理这种情况，我们刚刚讲过的，可以显式调用</span> <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span> <span class="err">，来启动垃圾回收。</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import gc</p>
+<p>def func():
+    show_memory_info(&lsquo;initial&rsquo;)
+    a = [i for i in range(10000000)]
+    b = [i for i in range(10000000)]
+    show_memory_info(&lsquo;after a, b created&rsquo;)
+    a.append(b)
+    b.append(a)</p>
+<p>func()
+gc.collect()
+show_memory_info(&lsquo;finished&rsquo;)</p>
+<p>########## 输出 ##########</p>
+<p>initial memory used: 49.51171875 MB
+after a, b created memory used: 824.1328125 MB
+finished memory used: 49.98046875 MB</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">所以你看，Python 的垃圾回收机制并没有那么弱。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Python 使用标记清除（mark-sweep）算法和分代收集（generational），来启用针对循环引用的自动垃圾回收。你可能不太熟悉这两个词，这里我简单介绍一下。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">先来看标记清除算法。我们先用图论来理解不可达的概念。对于一个有向图，如果从一个节点出发进行遍历，并标记其经过的所有节点；那么，在遍历结束后，所有没有被标记的节点，我们就称之为不可达节点。显而易见，这些节点的存在是没有任何意义的，自然的，我们就需要对它们进行垃圾回收。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">当然，每次都遍历全图，对于 Python 而言是一种巨大的性能浪费。所以，在 Python 的垃圾回收实现中，mark-sweep 使用双向链表维护了一个数据结构，并且只考虑容器类的对象（只有容器类对象才有可能产生循环引用）。具体算法这里我就不再多讲了，毕竟我们的重点是关注应用。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">而分代收集算法，则是另一个优化手段。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Python 将所有对象分为三代。刚刚创立的对象是第 0 代；经过一次垃圾回收后，依然存在的对象，便会依次从上一代挪到下一代。而每一代启动自动垃圾回收的阈值，则是可以单独指定的。当垃圾回收器中新增对象减去删除对象达到相应的阈值时，就会对这一代对象启动垃圾回收。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">事实上，分代收集基于的思想是，新生的对象更有可能被垃圾回收，而存活更久的对象也有更高的概率继续存活。因此，通过这种做法，可以节约不少计算量，从而提高 Python 的性能。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">学了这么多，刚刚面试官的问题，你应该能回答得上来了吧！没错，引用计数是其中最简单的实现，不过切记，引用计数并非充要条件，它只能算作充分非必要条件；至于其他的可能性，我们所讲的循环引用正是其中一种。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">调试内存泄漏
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">不过，虽然有了自动回收机制，但这也不是万能的，难免还是会有漏网之鱼。内存泄漏是我们不想见到的，而且还会严重影响性能。有没有什么好的调试手段呢？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">答案当然是肯定的，接下来我就为你介绍一个“得力助手”。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">它就是 objgraph，一个非常好用的可视化引用关系的包。在这个包中，我主要推荐两个函数，第一个是 show\_refs()，它可以生成清晰的引用关系图。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">通过下面这段代码和生成的引用调用图，你能非常直观地发现，有两个 list 互相引用，说明这里极有可能引起内存泄露。这样一来，再去代码层排查就容易多了。
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import objgraph</p>
+<p>a = [1, 2, 3]
+b = [4, 5, 6]</p>
+<p>a.append(b)
+b.append(a)</p>
+<p>objgraph.show_refs([a])</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">而另一个非常有用的函数，是 show\_backrefs()。下面同样为示例代码和生成图，你可以自己先阅读一下：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>import objgraph</p>
+<p>a = [1, 2, 3]
+b = [4, 5, 6]</p>
+<p>a.append(b)
+b.append(a)</p>
+<p>objgraph.show_backrefs([a])</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">相比刚才的引用调用图，这张图显得稍微复杂一些。不过，我仍旧推荐你掌握它，因为这个 API 有很多有用的参数，比如层数限制（max\_depth）、宽度限制（too\_many）、输出格式控制（filename output）、节点过滤（filter, extra\_ignore）等。所以，建议你使用之前，先认真看一下文档。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">总结
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">最后，带你来总结一下。今天这节课，我们深入了解了 Python 的垃圾回收机制，我主要强调下面这几点：
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">垃圾回收是 Python 自带的机制，用于自动释放不会再用到的内存空间；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">引用计数是其中最简单的实现，不过切记，这只是充分非必要条件，因为循环引用需要通过不可达判定，来确定是否可以回收；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Python 的自动回收算法包括标记清除和分代收集，主要针对的是循环引用的垃圾收集；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">调试内存泄漏方面， objgraph 是很好的可视化分析工具。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">思考题
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">最后给你留一道思考题。你能否自己实现一个垃圾回收判定算法呢？我的要求很简单，输入是一个有向图，给定起点，表示程序入口点；给定有向边，输出不可达节点。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">希望你可以认真思考这个问题，并且在留言区写下你的答案与我讨论。也欢迎你把这篇文章分享出去，我们一起交流，一起进步。
+</span></span></code></pre></td></tr></table>
+</div>
+</div>
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/python%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/">Python核心技术与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%82%B1%E5%B2%B3%E7%9A%84%E4%BA%A7%E5%93%81%E6%89%8B%E8%AE%B0/25%E4%BA%A7%E5%93%81%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90pathsource%E7%9A%84%E6%B7%B7%E4%B9%B1%E4%B8%8E%E7%9B%B4%E8%A7%82/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25产品案例分析PathSource的混乱与直观</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%A3%E7%A0%81%E7%B2%BE%E8%BF%9B%E4%B9%8B%E8%B7%AF/25%E9%BB%91%E7%99%BD%E7%81%B0%E7%90%86%E8%A7%A3%E5%BB%B6%E8%BF%9F%E5%88%86%E9%85%8D%E7%9A%84%E4%B8%A4%E9%9D%A2%E6%80%A7/">
+            <span class="next-text nav-default">25黑白灰理解延迟分配的两面性</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

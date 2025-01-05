@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>14__隔离性：实现悲观协议，除了锁还有别的办法吗？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天的主题是悲观协议，我会结合第 13 讲的内容将并发控制技术和你说清楚。在第 13 讲我们以并发控制的三阶段作为工具，区分了广义上的乐观协议和悲观协议。因为狭义乐观很少使用，所以我们将重点放在了相对乐观上。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/14__%E9%9A%94%E7%A6%BB%E6%80%A7%E5%AE%9E%E7%8E%B0%E6%82%B2%E8%A7%82%E5%8D%8F%E8%AE%AE%E9%99%A4%E4%BA%86%E9%94%81%E8%BF%98%E6%9C%89%E5%88%AB%E7%9A%84%E5%8A%9E%E6%B3%95%E5%90%97/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/14__%E9%9A%94%E7%A6%BB%E6%80%A7%E5%AE%9E%E7%8E%B0%E6%82%B2%E8%A7%82%E5%8D%8F%E8%AE%AE%E9%99%A4%E4%BA%86%E9%94%81%E8%BF%98%E6%9C%89%E5%88%AB%E7%9A%84%E5%8A%9E%E6%B3%95%E5%90%97/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="14__隔离性：实现悲观协议，除了锁还有别的办法吗？">
+  <meta property="og:description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天的主题是悲观协议，我会结合第 13 讲的内容将并发控制技术和你说清楚。在第 13 讲我们以并发控制的三阶段作为工具，区分了广义上的乐观协议和悲观协议。因为狭义乐观很少使用，所以我们将重点放在了相对乐观上。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="分布式数据库30讲">
+
+  <meta itemprop="name" content="14__隔离性：实现悲观协议，除了锁还有别的办法吗？">
+  <meta itemprop="description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天的主题是悲观协议，我会结合第 13 讲的内容将并发控制技术和你说清楚。在第 13 讲我们以并发控制的三阶段作为工具，区分了广义上的乐观协议和悲观协议。因为狭义乐观很少使用，所以我们将重点放在了相对乐观上。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5394">
+  <meta itemprop="keywords" content="分布式数据库30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="14__隔离性：实现悲观协议，除了锁还有别的办法吗？">
+  <meta name="twitter:description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天的主题是悲观协议，我会结合第 13 讲的内容将并发控制技术和你说清楚。在第 13 讲我们以并发控制的三阶段作为工具，区分了广义上的乐观协议和悲观协议。因为狭义乐观很少使用，所以我们将重点放在了相对乐观上。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">14__隔离性：实现悲观协议，除了锁还有别的办法吗？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5394 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#悲观协议的分类">悲观协议的分类</a></li>
+        <li><a href="#两阶段封锁two-phase-locking2pl">两阶段封锁（Two-Phase Locking，2PL）</a></li>
+        <li><a href="#串行化图检测sgt">串行化图检测（SGT）</a>
+          <ul>
+            <li><a href="#理论来源postgresql">理论来源：PostgreSQL</a></li>
+            <li><a href="#工程实现cockroachdb">工程实现：CockroachDB</a></li>
+          </ul>
+        </li>
+        <li><a href="#相对乐观">相对乐观</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+        <li><a href="#学习资料">学习资料</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是王磊，你也可以叫我 Ivan。</p>
+<p>我们今天的主题是悲观协议，我会结合第 13 讲的内容将并发控制技术和你说清楚。在第 13 讲我们以并发控制的三阶段作为工具，区分了广义上的乐观协议和悲观协议。因为狭义乐观很少使用，所以我们将重点放在了相对乐观上。</p>
+<p>其实，相对乐观和局部悲观是一体两面的关系，识别它的要点就在于是否有全局有效性验证，这也和分布式数据库的架构特点息息相关。但是关于悲观协议，还有很多内容没有提及，下面我们就来填补这一大块空白。</p>
+<h2 id="悲观协议的分类">悲观协议的分类</h2>
+<p>要搞清楚悲观协议的分类，其实是要先跳出来，从并发控制技术整体的分类体系来看。</p>
+<p>事实上，并发控制的分类体系，连学术界的标准也不统一。比如，在第 13 讲提到的两本经典教材中，“Principles of Distributed Database Systems”的分类是按照比较宽泛的乐观协议和悲观协议进行分类，子类之间又有很多重叠的概念，理解起来有点复杂。</p>
+<p>而“Transactional Information Systems : Theory, Algorithms, and the Practice of Concurrency Control and Recovery”采用的划分方式，是狭义乐观协议和其他悲观协议。这里狭义乐观协议，就是指我们在第 13 讲提到过的，基于有效性验证的并发控制，也是学术上定义的 OCC。</p>
+<p>我个人认为，狭义乐观协议和其他悲观协议这种分类方式更清晰些，所以就选择了“Transactional Information Systems : Theory, Algorithms, and the Practice of Concurrency Control and Recovery”中的划分体系。下面我摘录了书中的一幅图，用来梳理不同的并发控制协议。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/8e179a71b941e9c3e3a4959b5b3dff04.png" alt=""></p>
+<p>这个体系首先分为悲观和乐观两个大类。因为这里的乐观协议是指狭义乐观并发控制，所以包含内容就比较少，只有前向乐观并发控制和后向乐观并发控制；而悲观协议又分为基于锁和非锁两大类，其中基于锁的协议是数量最多的。</p>
+<h2 id="两阶段封锁two-phase-locking2pl">两阶段封锁（Two-Phase Locking，2PL）</h2>
+<p>基于锁的协议显然不只是 2PL，还包括有序共享（Ordered Sharing 2PL, O2PL）、利他锁（Altruistic Locking, AL）、只写封锁树（Write-only Tree Locking, WTL）和读写封锁树（Read/Write Tree Locking，RWTL）。但这几种协议在真正的数据库系统中很少使用，所以就不过多介绍了，我们还是把重点放在数据库系统主要使用的 2PL 上。</p>
+<p>2PL 就是事务具备两阶段特点的并发控制协议，这里的两个阶段指加锁阶段和释放锁阶段，并且加锁阶段严格区别于紧接着的释放锁阶段。我们可以通过一张图来加深对 2PL 理解。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/e920884a809a9a504525976fbedd20c7.png" alt=""></p>
+<p>在 t1 时刻之前是加锁阶段，在 t1 之后则是释放锁阶段，我们可以从时间上明确地把事务执行过程划分为两个阶段。2PL 的关键点就是释放锁之后不能再加锁。而根据加锁和释放锁时机的不同，2PL 又有一些变体。</p>
+<p><strong>保守两阶段封锁协议</strong>（Conservative 2PL，C2PL），事务在开始时设置它需要的所有锁。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/f91b39dba6ddcb420f85957bb42057c9.png" alt=""></p>
+<p><strong>严格两阶段封锁协议</strong>（Strict 2PL，S2PL），事务一直持有已经获得的所有写锁，直到事务终止。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/b08fdea3d78e6665139460e8b6697fb9.png" alt=""></p>
+<p><strong>强两阶段封锁协议</strong>（Strong Strict 2PL，SS2PL），事务一直持有已经获得的所有锁，包括写锁和读锁，直到事务终止。SS2PL 与 S2PL 差别只在于一直持有的锁的类型，所以它们的图形是相同的。</p>
+<p>理解了这几种 2PL 的变体后，我们再回想一下第 13 讲中的 Percolator 模型。当主锁（Primary Lock）没有释放前，所有的记录上的从锁（Secondary Lock）实质上都没有释放，在主锁释放后，所有从锁自然释放。所以，Percolator 也属于 S2PL。TiDB 的乐观锁机制是基于 Percolator 的，那么 TiDB 就也是 S2PL。</p>
+<p>事实上，S2PL 可能是使用最广泛的悲观协议，几乎所有单体数据都依赖 S2PL 实现可串行化。而在分布式数据库中，甚至需要使用 SS2PL 来保证可串行化执行，典型的例子是 TDSQL。但 S2PL 模式下，事务持有锁的时间过长，导致系统并发性能较差，所以实际使用中往往不会配置到可串行化级别。这就意味着我们还是没有生产级技术方案，只能期望出现新的方式，既达到可串行化隔离级别，又能有更好的性能。最终，我们等到了一种可能是性能更优的工程化实现，这就是 CockroachDB 的串行化快照隔离（SSI）。而 SSI 的核心，就是串行化图检测（SGT）。</p>
+<h2 id="串行化图检测sgt">串行化图检测（SGT）</h2>
+<p>SSI 是一种隔离级别的命名，最早来自 PostgreSQL，CockroachDB 沿用了这个名称。它是在 SI 基础上实现的可串行化隔离。同样，作为 SSI 核心的 SGT 也不是 CockroachDB 首创，学术界早就提出了这个理论，但真正的工程化实现要晚得多。</p>
+<h3 id="理论来源postgresql">理论来源：PostgreSQL</h3>
+<p>PostgreSQL 在论文“Serializable Snapshot Isolation in PostgreSQL”中最早提出了 SSI 的工程实现方案，这篇论文也被 VLDB2012 收录。</p>
+<p>为了更清楚地描述 SSI 方案，我们先要了解一点理论知识。</p>
+<p>串行化理论的核心是串行化图（Serializable Graph，SG）。这个图用来分析数据库事务操作的冲突情况。每个事务是一个节点，事务之间的关系则表示为一条有向边。那么，什么样的关系可以表示为边呢？</p>
+<p>串行化图的构建规则是这样的，事务作为节点，当一个操作与另一个操作冲突时，在两个事务节点之间就可以画上一条有向边。</p>
+<p>具体来说，事务之间的边又分为三类情况：</p>
+<ol>
+<li>写读依赖（WR-Dependencies），第二个操作读取了第一个操作写入的值。</li>
+<li>写写依赖（WW-Dependencies），第二个操作覆盖了第一个操作写入的值。</li>
+<li>读写反依赖（RW-Antidependencies），第二个操作覆盖了第一个操作读取的值，可能导致读取值过期。</li>
+</ol>
+<p>我们通过一个例子，看看如何用这几条规则来构建一个简单的串行化图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/5340102119d3629c2d585a4835fda45d.png" alt=""></p>
+<p>图中一共有三个事务先后执行，事务 T1 先执行 W(A)，T2 再执行 R(A)，所以 T1 与 T2 之间存在 WR 依赖，因此形成一条 T1 指向 T2 的边；同理，T2 的 W(B) 与 T3 的 R(B) 也存在 WR 依赖，T1 的 W(A) 与 T3 的 R(A) 之间也是 WR 依赖，这样就又形成两条有向边，分别是 T2 指向 T3 和 T1 指向 T3。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/944b3b72fb688efad1a7e1dc023b2249.png" alt=""></p>
+<p>最终，我们看到产生了一个有向无环图（Directed Acyclic Graph，DAG）。能够构建出 DAG，就说明相关事务是可串行化执行的，不需要中断任何事务。</p>
+<p>我们可以使用 SGT，验证一下典型的死锁情况。我们知道，事务 T1 和 T2 分别以不同的顺序写两个数据项，那么就会形成死锁。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/9bcf660393df031323cd1a8bcf5731aa.png" alt=""></p>
+<p>用串行化图来体现就是这个样子，显然构成了环。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/bd9598fceb1f3653635e09e816f69957.png" alt=""></p>
+<p>在 SGT 中，WR 依赖和 WW 依赖都与我们的直觉相符，而 RW 反向依赖就比较难理解了。在 PostgreSQL 的论文中，专门描述了一个 RW 反向依赖的场景，这里我把它引用过来，我们一起学习一下。</p>
+<p>这个场景一共需要维护两张表：一张收入表（reciepts）会记入当日的收入情况，每行都会记录一个批次号；另一张独立的控制表（current_batch），里面只有一条记录，就是当前的批次号。你也可以把这里的批次号理解为一个工作日。</p>
+<p>同时，还有三个事务 T1、T2、T3。</p>
+<ol>
+<li>T2 是记录新的收入（NEW-RECEIPT），从控制表中读取当前的批次号，然后在收入表中插入一条新的记录。</li>
+<li>T3 负责关闭当前批次（CLOSE-BATCH），而具体实现是通过将控制表中的批次号递增的方式，这就意味着后续再发生的收入会划归到下一个批次。</li>
+<li>T1 是报告（REPORT），读取当前控制表的批次号，处理逻辑是用当前已经加一的批次号再减一。T1 用这个批次号作为条件，读取收据表中的所有记录。查询到这个批次，也就是这一日，所有的交易。</li>
+</ol>
+<p>其实，这个例子很像银行存款系统的日终翻牌。</p>
+<p>因为 T1 要报告当天的收入情况，所以它必须要在 T3 之后执行。事务 T2 记录了当天的每笔入账，必须在 T3 之前执行，这样才能出现在当天的报表中。三者顺序执行可以正常工作，否则就会出现异常，比如下面这样的：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/8dd80aee22bb980b8b70ab32a2b02f53.png" alt=""></p>
+<p>T2 先拿到一个批次号 x，随后 T3 执行，批次号关闭后，x 这个批次号其实已经过期，但是 T2 还继续使用 x，记录当前的这笔收入。T1 正常在 T3 后执行，此时 T2 尚未提交，所以 T1 的报告中漏掉了 T2 的那笔收入。因为 T2 使用时过期的批次号 x，第二天的报告中也不会统计到这笔收入，最终这笔收入就神奇地消失了。</p>
+<p>在理解了这个例子的异常现象后，我们用串行化图方法来验证一下。我们是把事务中的 SQL 抽象为对数据项的操作，可以得到下面这张图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/38f5f7142bd4c9ee426c6175c58a273c.png" alt=""></p>
+<p>图中 batch 是指批次号，reps 是指收入情况。</p>
+<p>接下来，我们按照先后顺序提取有向边，先由 T2.R(batch) -&gt; T3.W(batch)，得到 T2 到 T3 的 RW 依赖；再由 T3.W(batch)-&gt;T1.R(batch)，得到 T3 到 T1 的 WR 依赖；最后由 T1.R(reps)-&gt;T2.W(reps)，得到 T1 到 T2 的 RW 依赖。这样就构成了下面的串行化图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/894b636787674b48f211cf0f298e6736.png" alt=""></p>
+<p>显然这三个事务之间是存在环的，那么这三个事务就是不能串行化的。</p>
+<p>这个异常现象中很有意思的一点是，虽然 T1 是一个只读事务，但如果没有 T1 的话，T2 与 T3 不会形成环，依然是可串行化执行的。这里就为我们澄清了一点：我们直觉上认为的只读事务不会影响事务并发机制，其实是不对的。</p>
+<h3 id="工程实现cockroachdb">工程实现：CockroachDB</h3>
+<p>RW 反向依赖是一个非常特别的存在，而特别之处就在于传统的锁机制无法记录这种情况。因此在论文“Serializable Snapshot Isolation in PostgreSQL”中提出，增加一种锁 SIREAD，用来记录快照隔离（SI）上所有执行过的读操作（Read），从而识别 RW 反向依赖。本质上，SIREAD 并不是锁，只是一种标识。但这个方案面临的困境是，读操作涉及到的数据范围实在太大，跟踪标识带来的成本可能比 S2PL 还要高，也就无法达到最初的目标。</p>
+<p>针对这个问题，CockroachDB 做了一个关键设计，<strong>读时间戳缓存</strong>（Read Timestamp Cache），简称 RTC。</p>
+<p>基于 RTC 的新方案是这样的，当执行任何的读取操作时，操作的时间戳都会被记录在所访问节点的本地 RTC 中。当任何写操作访问这个节点时，都会以将要访问的 Key 为输入，向 RTC 查询最大的读时间戳（MRT），如果 MRT 大于这个写入操作的时间戳，那继续写入就会形成 RW 依赖。这时就必须终止并重启写入事务，让写入事务拿到一个更大的时间戳重新尝试。</p>
+<p>具体来说，RTC 是以 Key 的范围来组织读时间戳的。这样，当读取操作携带了谓词条件，比如 where 子句，对应的操作就是一个范围读取，会覆盖若干个 Key，那么整个 Key 的范围也可以被记录在 RTC 中。这样处理的好处是，可以兼容一种特殊情况。</p>
+<p>例如，事务 T1 第一次范围读取（Range Scan）数据表，where 条件是“&gt;=1 and &lt;=5”，读取到 1、2、5 三个值，T1 完成后，事务 T2 在该表插入了 4，因为 RTC 记录的是范围区间 [1,5]，所以 4 也可以被检测出存在 RW 依赖。这个地方，有点像 MySQL 间隙锁的原理。</p>
+<p>RTC 是一个大小有限的，采用 LRU（Least Recently Used，最近最少使用）淘汰算法的缓存。当达到存储上限时，最老的时间戳会被抛弃。为了应对缓存超限的情况，会将 RTC 中出现过的所有 Key 上最早的那个读时间戳记录下来，作为低水位线（Low Water Mark）。如果一个写操作将要写的 Key 不在 RTC 中，则会返回这个低水位线。</p>
+<h2 id="相对乐观">相对乐观</h2>
+<p>到这里，你应该大概理解了 SGT 的运行机制，它和传统的 S2PL 一样属于悲观协议。但 SGT 没有锁的管理成本，所以性能比 S2PL 更好。</p>
+<p>CockroachDB 基于 SGT 理论进行工程化，使可串行化真正成为生产级可用的隔离级别。从整体并发控制机制看，CockroachDB 和上一讲的 TiDB 一样，虽然在局部看是悲观协议，但因为不符合严格的 VRW 顺序，所以在全局来看仍是一个相对乐观的协议。</p>
+<p>这种乐观协议同样存在第 13 讲提到的问题，所以 CockroachDB 也在原有基础上进行了改良，通过增加全局的锁表（Lock Table），使用加锁的方式，先进行一轮全局有效性验证，确定无冲突的情况下，再使用单个节点的 SGT。</p>
+<h2 id="小结">小结</h2>
+<p>有关悲观协议的内容就聊到这里了，我们一起梳理下今天课程的重点。</p>
+<ol>
+<li>并发控制机制的划分方法很多，没有统一标准，我们使用了Transactional Information Systems : Theory, Algorithms, and the Practice of Concurrency Control and Recovery提出的划分标准，分为悲观协议与乐观协议两种。这里的乐观协议是上一讲提到的狭义乐观协议，悲观协议又分为锁和非锁两大类，我们简单介绍了 2PL 这一个分支。</li>
+<li>我们回顾了 Percolator 模型，按照 S2PL 的定义，Percoloatro 本质就是 S2PL，因此 TiDB 的乐观锁也属于 S2PL。</li>
+<li>S2PL 是数据库并发控制的主流技术，但是锁管理复杂，在实现串行化隔离级别时开销太大。而后，我们讨论了非锁协议中的串行化图检测（SGT）。PostgreSQL 最早提出了 SGT 的工程实现方式 SSI。CockroachDB 在此基础上又进行了优化，降低了 SIREAD 的开销，是生产级的可串行化隔离。</li>
+<li>CockroachDB 最初和 TiDB 一样都是局部采用悲观协议，而不做全局有效性验证，是广义的乐观协议。后来，CockroachDB 同样也将乐观协议改为悲观协议，采用的方式是增加全局的锁表，进行全局有效性验证，而后再转入单个的 SGT 处理。</li>
+</ol>
+<p>今天的课程中，我们提到了串行化理论，只有当相关事务形成 DAG 图时，这些事务才是可串行化的。这个理论不仅适用于 SGT，2PL 的最终调度结果也同样是 DAG 图。在更大范围内，批量任务调度时 DAG 也同样被作为衡量标准，例如 Spark。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/4181034f052364e76f3aeec8b0427e48.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<p>课程的最后，我们来看看今天的思考题。</p>
+<p>在第 11 讲中我们提到了 MVCC。有的数据库教材中将 MVCC 作为一种重要的并发控制技术，与乐观协议、悲观协议并列，但我们今天并没有单独提到它。所以，我的问题是，你觉得该如何理解 MVCC 与乐观协议、悲观协议的关系呢？</p>
+<p>欢迎你在评论区留言和我一起讨论，我会在答疑篇回复这个问题。如果你身边的朋友也对悲观协议或者并发控制技术这个话题感兴趣，你也可以把今天这一讲分享给他，我们一起讨论。</p>
+<h2 id="学习资料">学习资料</h2>
+<p>最早的 SSI 工程实现方案：Serializable Snapshot Isolation in PostgreSQL</p>
+<p>按照狭义乐观协议和其他悲观协议划分并发控制协议：Transactional Information Systems : Theory, Algorithms, and the Practice of Concurrency Control and Recovery</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/">分布式数据库30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/14__%E9%AB%98%E5%8F%AF%E7%94%A8%E6%9E%B6%E6%9E%84%E6%A1%88%E4%BE%8B%E4%BA%8C%E5%A6%82%E4%BD%95%E7%AC%AC%E4%B8%80%E6%97%B6%E9%97%B4%E7%9F%A5%E9%81%93%E7%B3%BB%E7%BB%9F%E5%93%AA%E9%87%8C%E6%9C%89%E9%97%AE%E9%A2%98/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">14__高可用架构案例（二）：如何第一时间知道系统哪里有问题？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/14__%E6%9B%B4%E6%8E%A5%E8%BF%91%E4%B8%9A%E5%8A%A1%E7%9A%84%E6%8A%BD%E8%B1%A1%E8%AE%A9%E8%87%AA%E5%8A%A8%E5%8C%96%E6%B5%8B%E8%AF%95%E8%84%9A%E6%9C%AC%E6%9B%B4%E5%A5%BD%E5%9C%B0%E6%8F%8F%E8%BF%B0%E4%B8%9A%E5%8A%A1/">
+            <span class="next-text nav-default">14__更接近业务的抽象：让自动化测试脚本更好地描述业务</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

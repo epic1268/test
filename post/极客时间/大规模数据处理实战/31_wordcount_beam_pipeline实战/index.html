@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>31_WordCount_Beam_Pipeline实战 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是蔡元楠。
+今天我要与你分享的主题是“WordCount Beam Pipeline 实战”。
+前面我们已经学习了 Beam 的基础数据结构 PCollection，基本数据转换操作 Transform，还有 Pipeline 等技术。你一定跃跃欲试，想要在实际项目中使用了。这一讲我们就一起学习一下怎样用 Beam 解决数据处理领域的教科书级案例——WordCount。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/31_wordcount_beam_pipeline%E5%AE%9E%E6%88%98/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/31_wordcount_beam_pipeline%E5%AE%9E%E6%88%98/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="31_WordCount_Beam_Pipeline实战">
+  <meta property="og:description" content="你好，我是蔡元楠。
+今天我要与你分享的主题是“WordCount Beam Pipeline 实战”。
+前面我们已经学习了 Beam 的基础数据结构 PCollection，基本数据转换操作 Transform，还有 Pipeline 等技术。你一定跃跃欲试，想要在实际项目中使用了。这一讲我们就一起学习一下怎样用 Beam 解决数据处理领域的教科书级案例——WordCount。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="大规模数据处理实战">
+
+  <meta itemprop="name" content="31_WordCount_Beam_Pipeline实战">
+  <meta itemprop="description" content="你好，我是蔡元楠。
+今天我要与你分享的主题是“WordCount Beam Pipeline 实战”。
+前面我们已经学习了 Beam 的基础数据结构 PCollection，基本数据转换操作 Transform，还有 Pipeline 等技术。你一定跃跃欲试，想要在实际项目中使用了。这一讲我们就一起学习一下怎样用 Beam 解决数据处理领域的教科书级案例——WordCount。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3347">
+  <meta itemprop="keywords" content="大规模数据处理实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="31_WordCount_Beam_Pipeline实战">
+  <meta name="twitter:description" content="你好，我是蔡元楠。
+今天我要与你分享的主题是“WordCount Beam Pipeline 实战”。
+前面我们已经学习了 Beam 的基础数据结构 PCollection，基本数据转换操作 Transform，还有 Pipeline 等技术。你一定跃跃欲试，想要在实际项目中使用了。这一讲我们就一起学习一下怎样用 Beam 解决数据处理领域的教科书级案例——WordCount。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">31_WordCount_Beam_Pipeline实战</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3347 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#创建-pipeline">创建 Pipeline</a></li>
+        <li><a href="#应用-transform">应用 Transform</a></li>
+        <li><a href="#运行-pipeline">运行 Pipeline</a></li>
+        <li><a href="#改进代码的建议">改进代码的建议</a>
+          <ul>
+            <li><a href="#编写独立的-dofn">编写独立的 DoFn</a></li>
+            <li><a href="#创建-ptransform-合并相关联的-transform">创建 PTransform 合并相关联的 Transform</a></li>
+            <li><a href="#参数化-pipelineoptions">参数化 PipelineOptions</a></li>
+            <li><a href="#dofn-和-ptransform-的单元测试">DoFn 和 PTransform 的单元测试</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是蔡元楠。</p>
+<p>今天我要与你分享的主题是“WordCount Beam Pipeline 实战”。</p>
+<p>前面我们已经学习了 Beam 的基础数据结构 PCollection，基本数据转换操作 Transform，还有 Pipeline 等技术。你一定跃跃欲试，想要在实际项目中使用了。这一讲我们就一起学习一下怎样用 Beam 解决数据处理领域的教科书级案例——WordCount。</p>
+<p>WordCount 你一定不陌生，在<a href="./97658.md">第 18 讲</a>中，我们就已经接触过了。WordCount 问题是起源于 MapReduce 时代就广泛使用的案例。顾名思义，WordCount 想要解决的问题是统计一个文本库中的词频。</p>
+<p>比如，你可以用 WordCount 找出莎士比亚最喜欢使用的单词，那么你的输入是莎士比亚全集，输出就是每个单词出现的次数。举个例子，比如这一段：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">HAMLET
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> ACT I
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> SCENE I	Elsinore. A platform before the castle.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	[FRANCISCO at his post. Enter to him BERNARDO]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	Who&#39;s there?
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	Nay, answer me: stand, and unfold yourself.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	Long live the king!
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	Bernardo?
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	He.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	You come most carefully upon your hour.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	&#39;Tis now struck twelve; get thee to bed, Francisco.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	For this relief much thanks: &#39;tis bitter cold,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	And I am sick at heart.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	Have you had quiet guard?
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	Not a mouse stirring.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> BERNARDO	Well, good night.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	If you do meet Horatio and Marcellus,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	The rivals of my watch, bid them make haste.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> FRANCISCO	I think I hear them. Stand, ho! Who&#39;s there?
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这个文本库中，我们用“the: 数字”表示 the 出现了几次，数字就是单词出现的次数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">The: 3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">And: 3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Him: 1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那么我们怎样在 Beam 中处理这个问题呢？结合前面所学的知识，我们可以把 Pipeline 分为这样几步：</p>
+<ol>
+<li>用 Pipeline IO 读取文本库（参考<a href="./102578.md">第 27 讲</a>）；</li>
+<li>用 Transform 对文本进行分词和词频统计操作（参考<a href="./101735.md">第 25 讲</a>）；</li>
+<li>用 Pipeline IO 输出结果（参考<a href="./102578.md">第 27 讲</a>）；</li>
+<li>所有的步骤会被打包进一个 Beam Pipeline（参考<a href="./102182.md">第 26 讲</a>）。</li>
+</ol>
+<p>整个过程就如同下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/6f3dffda7bf06fd4668cc12245d6fa5f.png" alt=""></p>
+<h2 id="创建-pipeline">创建 Pipeline</h2>
+<p>首先，我们先用代码创建一个 PipelineOptions 的实例。PipelineOptions 能够让我们对 Pipeline 进行必要的配置，比如配置执行程序的 Runner，和 Runner 所需要的参数。我们在这里先采用默认配置。</p>
+<p>记得第 30 讲中我们讲过，Beam Pipeline 可以配置在不同的 Runner 上跑，比如 SparkRunner，FlinkRunner。如果 PipelineOptions 不配置的情况下，默认的就是 DirectRunner，也就是说会在本机执行。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">PipelineOptions options = PipelineOptionsFactory.create();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接下来，我们就可以用这个 PipelineOptions 去创建一个 Pipeline 了。一个 Pipeline 实例会去构建一个数据处理流水线所需要的数据处理 DAG，以及这个 DAG 所需要进行的 Transform。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Pipeline p = Pipeline.create(options);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="应用-transform">应用 Transform</h2>
+<p>在上面的设计框图中，我们可以看到，我们需要进行好几种 Transform。比如 TextIO.Read、ParDo、Count 去读取数据，操纵数据，以及存储数据。</p>
+<p>每一种 Transform 都需要一些参数，并且会输出特定的数据。输入和输出往往会用 PCollection 的数据结构表示。简单回顾一下，PCollection 是 Beam 对于数据集的抽象，表示任意大小、无序的数据，甚至可以是无边界的 Streaming 数据。</p>
+<p>在我们这个 WordCount 例子中，我们的 Transform 依次是这样几个。</p>
+<p>第一个 Transform，是先要用 TextIO.Read 来读取一个外部的莎士比亚文集，生成一个 PCollection，包含这个文集里的所有文本行。这个 PCollection 中的每个元素都是文本中的一行。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">PCollection&lt;String&gt; lines = p.apply(TextIO.read().from(&#34;gs://apache-beam-samples/shakespeare/*&#34;));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二个 Transform，我们要把文本行中的单词提取出来，也就是做分词（tokenization）。</p>
+<p>这一步的输入 PCollection 中的每个元素都表示了一行。那么输出呢？输出还是一个 PCollection，但是每个元素变成了单词。</p>
+<p>你可以留意一下，我们这里做分词时，用的正则表达式 [^\p{L}]+，意思是非 Unicode Letters 所以它会按空格或者标点符号等把词分开。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">PCollection&lt;String&gt; words = lines.apply(&#34;ExtractWords&#34;, FlatMapElements
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .into(TypeDescriptors.strings())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .via((String word) -&gt; Arrays.asList(word.split(&#34;[^\\p{L}]+&#34;))));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第三个 Transform，我们就会使用 Beam SDK 提供的 Count Transform。Count Transform 会把任意一个 PCollection 转换成有 key/value 的组合，每一个 key 是原来 PCollection 中的非重复的元素，value 则是元素出现的次数。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">PCollection&lt;KV&lt;String, Long&gt;&gt; counts = words.apply(Count.&lt;String&gt;perElement());
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第四个 Transform 会把刚才的 key/value 组成的 PCollection 转换成我们想要的输出格式，方便我们输出词频。因为大部分的时候，我们都是想要把输出存储到另一个文件里的。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">PCollection&lt;String&gt; formatted = counts.apply(&#34;FormatResults&#34;, MapElements
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    .into(TypeDescriptors.strings())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    .via((KV&lt;String, Long&gt; wordCount) -&gt; wordCount.getKey() + &#34;: &#34; + wordCount.getValue()));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最后一个 Transform 就是 TextIO.Write 用来把最终的 PCollection 写进文本文档。PCollection 中的每一个元素都会被写为文本文件中的独立一行。</p>
+<h2 id="运行-pipeline">运行 Pipeline</h2>
+<p>调用 Pipeline 的 run() 方法会把这个 Pipeline 所包含的 Transform 优化并放到你指定的 Runner 上执行。这里你需要注意，run() 方法是异步的，如果你想要同步等待 Pipeline 的执行结果，需要调用 waitUntilFinish() 方法。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">p.run().waitUntilFinish();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="改进代码的建议">改进代码的建议</h2>
+<p>代码看起来都完成了，不过，我们还可以对代码再做些改进。</p>
+<h3 id="编写独立的-dofn">编写独立的 DoFn</h3>
+<p>在上面的示例代码中，我们把 Transform 都 inline 地写在了 apply() 方法里。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lines.apply(&#34;ExtractWords&#34;, FlatMapElements
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .into(TypeDescriptors.strings())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .via((String word) -&gt; Arrays.asList(word.split(&#34;[^\\p{L}]+&#34;))));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>但是这样的写法在实际工作中很难维护。</p>
+<p>一是因为真实的业务逻辑往往比较复杂，很难用一两行的代码写清楚，强行写成 inline 的话可读性非常糟糕。</p>
+<p>二是因为这样 inline 的 Transform 几乎不可复用和测试。</p>
+<p>所以，实际工作中，我们更多地会去继承 DoFn 来实现我们的数据操作。这样每个 DoFn 我们都可以单独复用和测试。</p>
+<p>接下来，我们看看怎样用用 DoFn 来实现刚才的分词 Transform？</p>
+<p>其实很简单，我们继承 DoFn 作为我们的子类 ExtracrtWordsFn，然后把单词的拆分放在 DoFn 的 processElement 成员函数里。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static class ExtractWordsFn extends DoFn&lt;String, String&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Counter emptyLines = Metrics.counter(ExtractWordsFn.class, &#34;emptyLines&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Distribution lineLenDist =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Metrics.distribution(ExtractWordsFn.class, &#34;lineLenDistro&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @ProcessElement
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void processElement(@Element String element, OutputReceiver&lt;String&gt; receiver) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      lineLenDist.update(element.length());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      if (element.trim().isEmpty()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        emptyLines.inc();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // Split the line into words.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      String[] words = element.split(“[^\\p{L}]+”, -1);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       // Output each word encountered into the output PCollection.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      for (String word : words) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (!word.isEmpty()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          receiver.output(word);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="创建-ptransform-合并相关联的-transform">创建 PTransform 合并相关联的 Transform</h3>
+<p>PTransform 类可以用来整合一些相关联的 Transform。</p>
+<p>比如你有一些数据处理的操作包含几个 Transform 或者 ParDo，你可以把他们封装在一个 PTransform 里。</p>
+<p>我们这里试着把上面的 ExtractWordsFn 和 Count 两个 Transform 封装起来。这样可以对这样一整套数据处理操作复用和测试。当定义 PTransform 的子类时，它的输入输出类型就是一连串 Transform 的最初输入和最终输出。那么在这里，输入类型是 String，输出类型是 KV&lt;String, Long&gt;。就如同下面的代码一样。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  /**
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   * A PTransform that converts a PCollection containing lines of text into a PCollection of
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   * formatted word counts.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   *
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   * &lt;p&gt;This is a custom composite transform that bundles two transforms (ParDo and
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   * Count) as a reusable PTransform subclass. Using composite transforms allows for easy reuse,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   * modular testing, and an improved monitoring experience.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   public static class CountWords
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      extends PTransform&lt;PCollection&lt;String&gt;, PCollection&lt;KV&lt;String, Long&gt;&gt;&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public PCollection&lt;KV&lt;String, Long&gt;&gt; expand(PCollection&lt;String&gt; lines) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       // Convert lines of text into individual words.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      PCollection&lt;String&gt; words = lines.apply(ParDo.of(new ExtractWordsFn()));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       // Count the number of times each word occurs.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      PCollection&lt;KV&lt;String, Long&gt;&gt; wordCounts = words.apply(Count.perElement());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       return wordCounts;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="参数化-pipelineoptions">参数化 PipelineOptions</h3>
+<p>刚才我们把输入文件的路径和输出文件的路径都写在了代码中。但实际工作中我们很少会这样做。</p>
+<p>因为这些文件的路径往往是运行时才会决定，比如测试环境和生产环境会去操作不同的文件。在真正的实际工作中，我们往往把它们作为命令行参数放在 PipelineOptions 里面。这就需要去继承 PipelineOptions。</p>
+<p>比如，我们创建一个 WordCountOptions，把输出文件作为参数 output。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public static interface WordCountOptions extends PipelineOptions {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Description(&#34;Path of the file to write to&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Required
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    String getOutput();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     void setOutput(String value);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>完成上面两个方面的改进后，我们最终的数据处理代码会是这个样子：</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public static void main(String[] args) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  WordCountOptions options =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        PipelineOptionsFactory.fromArgs(args).withValidation().as(WordCountOptions.class);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   Pipeline p = Pipeline.create(options);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   p.apply(&#34;ReadLines&#34;, TextIO.read().from(options.getInputFile()))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(new CountWords())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(ParDo.of(new FormatAsTextFn()))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(&#34;WriteCounts&#34;, TextIO.write().to(options.getOutput()));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     p.run().waitUntilFinish();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="dofn-和-ptransform-的单元测试">DoFn 和 PTransform 的单元测试</h3>
+<p>如同<a href="./103750.md">第 29 讲</a>“如何测试 Pipeline”中所讲的那样，我们用 PAssert 测试 Beam Pipeline。具体在我们这个例子中，我一再强调要把数据处理操作封装成 DoFn 和 PTransform，因为它们可以独立地进行测试。</p>
+<p>什么意思呢？比如，ExtractWordsFn 我们想要测试它能把一个句子分拆出单词，比如“&quot; some input words &ldquo;，我们期待的输出是 [“some”, “input”, “words”]。在测试中，我们可以这样表达：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/** Example test that tests a specific {@link DoFn}. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Test
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void testExtractWordsFn() throws Exception {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    DoFnTester&lt;String, String&gt; extractWordsFn = DoFnTester.of(new ExtractWordsFn());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     Assert.assertThat(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        extractWordsFn.processBundle(&#34; some  input  words &#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        CoreMatchers.hasItems(&#34;some&#34;, &#34;input&#34;, &#34;words&#34;));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Assert.assertThat(extractWordsFn.processBundle(&#34; &#34;), CoreMatchers.hasItems());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Assert.assertThat(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        extractWordsFn.processBundle(&#34; some &#34;, &#34; input&#34;, &#34; words&#34;),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        CoreMatchers.hasItems(&#34;some&#34;, &#34;input&#34;, &#34;words&#34;));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="小结">小结</h2>
+<p>这一讲我们应用前面学习的 PCollection，Pipeline，Pipeline IO，Transform 知识去解决了一个数据处理领域经典的 WordCount 问题。并且学会了一些在实际工作中改进数据处理代码质量的贴士，比如写成单独可测试的 DoFn，和把程序参数封装进 PipelineOptions。</p>
+<h2 id="思考题">思考题</h2>
+<p>文中提供了分词的 DoFn——ExtractWordsFn，你能利用相似的思路把输出文本的格式化写成一个 DoFn 吗？也就是文中的 FormatAsTextFn，把 PCollection&lt;KV&lt;String, Long&raquo; 转化成 PCollection，每一个元素都是 : 的格式。</p>
+<p>欢迎你把答案写在留言区，与我和其他同学一起讨论。如果你觉得有所收获，也欢迎把文章分享给你的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/a0f5b0b51dbfc98740637837dc0ae117.png" alt="unpreview"></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/">大规模数据处理实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%88%90%E4%B8%BAai%E4%BA%A7%E5%93%81%E7%BB%8F%E7%90%86/31_ai%E4%BA%A7%E5%93%81%E7%BB%8F%E7%90%86%E9%9D%A2%E8%AF%95%E8%BF%99%E4%BA%9B%E9%97%AE%E9%A2%98%E4%BD%A0%E5%BF%85%E9%A1%BB%E4%BC%9A%E7%AD%94/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">31_AI产品经理面试，这些问题你必须会答！</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%81%9A%E5%A2%9E%E9%95%BF/31_%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90%E5%94%A4%E9%86%92%E6%B2%89%E7%9D%A1%E7%94%A8%E6%88%B7%E4%B8%8B/">
+            <span class="next-text nav-default">31_案例解析：唤醒沉睡用户（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

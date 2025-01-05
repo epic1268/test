@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>21__poll：另一种I_O多路复用 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这是网络编程实战第 21 讲，欢迎回来。
+上一讲我们讲到了 I/O 多路复用技术，并以 select 为核心，展示了 I/O 多路复用技术的能力。select 方法是多个 UNIX 平台支持的非常常见的 I/O 多路复用技术，它通过描述符集合来表示检测的 I/O 对象，通过三个不同的描述符集合来描述 I/O 事件：可读、可写和异常。但是 select 有一个缺点，那就是所支持的文件描述符的个数是有限的。在 Linux 系统中，select 的默认最大值为 1024。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/21__poll%E5%8F%A6%E4%B8%80%E7%A7%8Di_o%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/21__poll%E5%8F%A6%E4%B8%80%E7%A7%8Di_o%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="21__poll：另一种I_O多路复用">
+  <meta property="og:description" content="你好，我是盛延敏，这是网络编程实战第 21 讲，欢迎回来。
+上一讲我们讲到了 I/O 多路复用技术，并以 select 为核心，展示了 I/O 多路复用技术的能力。select 方法是多个 UNIX 平台支持的非常常见的 I/O 多路复用技术，它通过描述符集合来表示检测的 I/O 对象，通过三个不同的描述符集合来描述 I/O 事件：可读、可写和异常。但是 select 有一个缺点，那就是所支持的文件描述符的个数是有限的。在 Linux 系统中，select 的默认最大值为 1024。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="21__poll：另一种I_O多路复用">
+  <meta itemprop="description" content="你好，我是盛延敏，这是网络编程实战第 21 讲，欢迎回来。
+上一讲我们讲到了 I/O 多路复用技术，并以 select 为核心，展示了 I/O 多路复用技术的能力。select 方法是多个 UNIX 平台支持的非常常见的 I/O 多路复用技术，它通过描述符集合来表示检测的 I/O 对象，通过三个不同的描述符集合来描述 I/O 事件：可读、可写和异常。但是 select 有一个缺点，那就是所支持的文件描述符的个数是有限的。在 Linux 系统中，select 的默认最大值为 1024。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3836">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="21__poll：另一种I_O多路复用">
+  <meta name="twitter:description" content="你好，我是盛延敏，这是网络编程实战第 21 讲，欢迎回来。
+上一讲我们讲到了 I/O 多路复用技术，并以 select 为核心，展示了 I/O 多路复用技术的能力。select 方法是多个 UNIX 平台支持的非常常见的 I/O 多路复用技术，它通过描述符集合来表示检测的 I/O 对象，通过三个不同的描述符集合来描述 I/O 事件：可读、可写和异常。但是 select 有一个缺点，那就是所支持的文件描述符的个数是有限的。在 Linux 系统中，select 的默认最大值为 1024。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">21__poll：另一种I_O多路复用</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3836 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#poll-函数介绍">poll 函数介绍</a></li>
+        <li><a href="#基于-poll-的服务器程序">基于 poll 的服务器程序</a></li>
+        <li><a href="#实验">实验</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这是网络编程实战第 21 讲，欢迎回来。</p>
+<p>上一讲我们讲到了 I/O 多路复用技术，并以 select 为核心，展示了 I/O 多路复用技术的能力。select 方法是多个 UNIX 平台支持的非常常见的 I/O 多路复用技术，它通过描述符集合来表示检测的 I/O 对象，通过三个不同的描述符集合来描述 I/O 事件：可读、可写和异常。但是 select 有一个缺点，那就是所支持的文件描述符的个数是有限的。在 Linux 系统中，select 的默认最大值为 1024。</p>
+<p>那么有没有别的 I/O 多路复用技术可以突破文件描述符个数限制呢？当然有，这就是 poll 函数。这一讲，我们就来学习一下另一种 I/O 多路复用的技术：poll。</p>
+<h2 id="poll-函数介绍">poll 函数介绍</h2>
+<p>poll 是除了 select 之外，另一种普遍使用的 I/O 多路复用技术，和 select 相比，它和内核交互的数据结构有所变化，另外，也突破了文件描述符的个数限制。</p>
+<p>下面是 poll 函数的原型：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int poll(struct pollfd *fds, unsigned long nfds, int timeout); 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   返回值：若有就绪描述符则为其数目，若超时则为 0，若出错则为 -1
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个函数里面输入了三个参数，第一个参数是一个 pollfd 的数组。其中 pollfd 的结构如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct pollfd {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int    fd;       /* file descriptor */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    short  events;   /* events to look for */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    short  revents;  /* events returned */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> };
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个结构体由三个部分组成，首先是描述符 fd，然后是描述符上待检测的事件类型 events，注意这里的 events 可以表示多个不同的事件，具体的实现可以通过使用二进制掩码位操作来完成，例如，POLLIN 和 POLLOUT 可以表示读和写事件。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define    POLLIN    0x0001    /* any readable data available */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define    POLLPRI   0x0002    /* OOB/Urgent readable data */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define    POLLOUT   0x0004    /* file descriptor is writeable */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>和 select 非常不同的地方在于，poll 每次检测之后的结果不会修改原来的传入值，而是将结果保留在 revents 字段中，这样就不需要每次检测完都得重置待检测的描述字和感兴趣的事件。我们可以把 revents 理解成“returned events”。</p>
+<p>events 类型的事件可以分为两大类。</p>
+<p>第一类是可读事件，有以下几种：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLIN     0x0001    /* any readable data available */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLPRI    0x0002    /* OOB/Urgent readable data */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLRDNORM 0x0040    /* non-OOB/URG data available */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLRDBAND 0x0080    /* OOB/Urgent readable data */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一般我们在程序里面有 POLLIN 即可。套接字可读事件和 select 的 readset 基本一致，是系统内核通知应用程序有数据可以读，通过 read 函数执行操作不会被阻塞。</p>
+<p>第二类是可写事件，有以下几种：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLOUT    0x0004    /* file descriptor is writeable */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLWRNORM POLLOUT   /* no write type differentiation */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLWRBAND 0x0100    /* OOB/Urgent data can be written */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一般我们在程序里面统一使用 POLLOUT。套接字可写事件和 select 的 writeset 基本一致，是系统内核通知套接字缓冲区已准备好，通过 write 函数执行写操作不会被阻塞。</p>
+<p>以上两大类的事件都可以在“returned events”得到复用。还有另一大类事件，没有办法通过 poll 向系统内核递交检测请求，只能通过“returned events”来加以检测，这类事件是各种错误事件。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLERR    0x0008    /* 一些错误发送 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLHUP    0x0010    /* 描述符挂起 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define POLLNVAL   0x0020    /* 请求的事件无效 */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们再回过头看一下 poll 函数的原型。参数 nfds 描述的是数组 fds 的大小，简单说，就是向 poll 申请的事件检测的个数。</p>
+<p>最后一个参数 timeout，描述了 poll 的行为。</p>
+<p>如果是一个 &lt;0 的数，表示在有事件发生之前永远等待；如果是 0，表示不阻塞进程，立即返回；如果是一个 &gt;0 的数，表示 poll 调用方等待指定的毫秒数后返回。</p>
+<p>关于返回值，当有错误发生时，poll 函数的返回值为 -1；如果在指定的时间到达之前没有任何事件发生，则返回 0，否则就返回检测到的事件个数，也就是“returned events”中非 0 的描述符个数。</p>
+<p>poll 函数有一点非常好，如果我们**不想对某个 pollfd 结构进行事件检测，**可以把它对应的 pollfd 结构的 fd 成员设置成一个负值。这样，poll 函数将忽略这样的 events 事件，检测完成以后，所对应的“returned events”的成员值也将设置为 0。</p>
+<p>和 select 函数对比一下，我们发现 poll 函数和 select 不一样的地方就是，在 select 里面，文件描述符的个数已经随着 fd_set 的实现而固定，没有办法对此进行配置；而在 poll 函数里，我们可以控制 pollfd 结构的数组大小，这意味着我们可以突破原来 select 函数最大描述符的限制，在这种情况下，应用程序调用者需要分配 pollfd 数组并通知 poll 函数该数组的大小。</p>
+<h2 id="基于-poll-的服务器程序">基于 poll 的服务器程序</h2>
+<p>下面我们将开发一个基于 poll 的服务器程序。这个程序可以同时处理多个客户端连接，并且一旦有客户端数据接收后，同步地回显回去。这已经是一个颇具高并发处理的服务器原型了，再加上后面讲到的非阻塞 I/O 和多线程等技术，基本上就是可使用的准生产级别了。</p>
+<p>所以，让我们打起精神，一起来看这个程序。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define INIT_SIZE 128
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int argc, char **argv) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int listen_fd, connected_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int ready_number;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ssize_t n;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char buf[MAXLINE];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct sockaddr_in client_addr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     listen_fd = tcp_server_listen(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始化 pollfd 数组，这个数组的第一个元素是 listen_fd，其余的用来记录将要连接的 connect_fd
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct pollfd event_set[INIT_SIZE];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    event_set[0].fd = listen_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    event_set[0].events = POLLRDNORM;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 用 -1 表示这个数组位置还没有被占用
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int i;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (i = 1; i &lt; INIT_SIZE; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        event_set[i].fd = -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     for (;;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if ((ready_number = poll(event_set, INIT_SIZE, -1)) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;poll failed &#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (event_set[0].revents &amp; POLLRDNORM) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            socklen_t client_len = sizeof(client_addr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            connected_fd = accept(listen_fd, (struct sockaddr *) &amp;client_addr, &amp;client_len);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 找到一个可以记录该连接套接字的位置
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            for (i = 1; i &lt; INIT_SIZE; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (event_set[i].fd &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    event_set[i].fd = connected_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    event_set[i].events = POLLRDNORM;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             if (i == INIT_SIZE) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                error(1, errno, &#34;can not hold so many clients&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             if (--ready_number &lt;= 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         for (i = 1; i &lt; INIT_SIZE; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            int socket_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if ((socket_fd = event_set[i].fd) &lt; 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (event_set[i].revents &amp; (POLLRDNORM | POLLERR)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if ((n = read(socket_fd, buf, MAXLINE)) &gt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (write(socket_fd, buf, n) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        error(1, errno, &#34;write error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else if (n == 0 || errno == ECONNRESET) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    close(socket_fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    event_set[i].fd = -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    error(1, errno, &#34;read error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 if (--ready_number &lt;= 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然，一开始需要创建一个监听套接字，并绑定在本地的地址和端口上，这在第 10 行调用 tcp_server_listen 函数来完成。</p>
+<p>在第 13 行，我初始化了一个 pollfd 数组，并命名为 event_set，之所以叫这个名字，是引用 pollfd 数组确实代表了检测的事件集合。这里数组的大小固定为 INIT_SIZE，这在实际的生产环境肯定是需要改进的。</p>
+<p>我在前面讲过，监听套接字上如果有连接建立完成，也是可以通过 I/O 事件复用来检测到的。在第 14-15 行，将监听套接字 listen_fd 和对应的 POLLRDNORM 事件加入到 event_set 里，表示我们期望系统内核检测监听套接字上的连接建立完成事件。</p>
+<p>在前面介绍 poll 函数时，我们提到过，如果对应 pollfd 里的文件描述字 fd 为负数，poll 函数将会忽略这个 pollfd，所以我们在第 18-21 行将 event_set 数组里其他没有用到的 fd 统统设置为 -1。这里 -1 也表示了当前 pollfd 没有被使用的意思。</p>
+<p>下面我们的程序进入一个无限循环，在这个循环体内，第 24 行调用 poll 函数来进行事件检测。poll 函数传入的参数为 event_set 数组，数组大小 INIT_SIZE 和 -1。这里之所以传入 INIT_SIZE，是因为 poll 函数已经能保证可以自动忽略 fd 为 -1 的 pollfd，否则我们每次都需要计算一下 event_size 里真正需要被检测的元素大小；timeout 设置为 -1，表示在 I/O 事件发生之前 poll 调用一直阻塞。</p>
+<p>如果系统内核检测到监听套接字上的连接建立事件，就进入到第 28 行的判断分支。我们看到，使用了如 event_set[0].revent 来和对应的事件类型进行位与操作，这个技巧大家一定要记住，这是因为 event 都是通过二进制位来进行记录的，位与操作是和对应的二进制位进行操作，一个文件描述字是可以对应到多个事件类型的。</p>
+<p>在这个分支里，调用 accept 函数获取了连接描述字。接下来，33-38 行做了一件事，就是把连接描述字 connect_fd 也加入到 event_set 里，而且说明了我们感兴趣的事件类型为 POLLRDNORM，也就是套集字上有数据可以读。在这里，我们从数组里查找一个没有没占用的位置，也就是 fd 为 -1 的位置，然后把 fd 设置为新的连接套接字 connect_fd。</p>
+<p>如果在数组里找不到这样一个位置，说明我们的 event_set 已经被很多连接充满了，没有办法接收更多的连接了，这就是第 41-42 行所做的事情。</p>
+<p>第 45-46 行是一个加速优化能力，因为 poll 返回的一个整数，说明了这次 I/O 事件描述符的个数，如果处理完监听套接字之后，就已经完成了这次 I/O 复用所要处理的事情，那么我们就可以跳过后面的处理，再次进入 poll 调用。</p>
+<p>接下来的循环处理是查看 event_set 里面其他的事件，也就是已连接套接字的可读事件。这是通过遍历 event_set 数组来完成的。</p>
+<p>如果数组里的 pollfd 的 fd 为 -1，说明这个 pollfd 没有递交有效的检测，直接跳过；来到第 53 行，通过检测 revents 的事件类型是 POLLRDNORM 或者 POLLERR，我们可以进行读操作。在第 54 行，读取数据正常之后，再通过 write 操作回显给客户端；在第 58 行，如果读到 EOF 或者是连接重置，则关闭这个连接，并且把 event_set 对应的 pollfd 重置；第 61 行读取数据失败。</p>
+<p>和前面的优化加速处理一样，第 65-66 行是判断如果事件已经被完全处理完之后，直接跳过对 event_set 的循环处理，再次来到 poll 调用。</p>
+<h2 id="实验">实验</h2>
+<p>我们启动这个服务器程序，然后通过 telnet 连接到这个服务器程序。为了检验这个服务器程序的 I/O 复用能力，我们可以多开几个 telnet 客户端，并且在屏幕上输入各种字符串。</p>
+<p>客户端 1：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to 127.0.0.1.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">a
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">a
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">aaaaaaaaaaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">aaaaaaaaaaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">afafasfa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">afafasfa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fbaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fbaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>客户端 2：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to 127.0.0.1.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">b
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">b
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">bbbbbbb
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">bbbbbbb
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">bbbbbbb
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">bbbbbbb
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，这两个客户端互不影响，每个客户端输入的字符很快会被回显到客户端屏幕上。一个客户端断开连接，也不会影响到其他客户端。</p>
+<h2 id="总结">总结</h2>
+<p>poll 是另一种在各种 UNIX 系统上被广泛支持的 I/O 多路复用技术，虽然名声没有 select 那么响，能力一点不比 select 差，而且因为可以突破 select 文件描述符的个数限制，在高并发的场景下尤其占优势。这一讲我们编写了一个基于 poll 的服务器程序，希望你从中学会 poll 的用法。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，给大家留两道思考题：</p>
+<p>第一道，在我们的程序里 event_set 数组的大小固定为 INIT_SIZE，这在实际的生产环境肯定是需要改进的。你知道如何改进吗？</p>
+<p>第二道，如果我们进行了改进，那么接下来把连接描述字 connect_fd 也加入到 event_set 里，如何配合进行改造呢？</p>
+<p>欢迎你在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/21__panic%E5%87%BD%E6%95%B0recover%E5%87%BD%E6%95%B0%E4%BB%A5%E5%8F%8Adefer%E8%AF%AD%E5%8F%A5_%E4%B8%8A/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">21__panic函数、recover函数以及defer语句_（上）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spring%E7%BC%96%E7%A8%8B%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF50%E4%BE%8B/21__spring_rest_template_%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF/">
+            <span class="next-text nav-default">21__Spring_Rest_Template_常见错误</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>26_多个活动要安排（下）：如何实现进程的等待与唤醒机制？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+上节课，我带你一起设计了我们 Cosmos 的进程调度器，但有了进程调度器还不够，因为调度器它始终只是让一个进程让出 CPU，切换到它选择的下一个进程上去运行。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/26_%E5%A4%9A%E4%B8%AA%E6%B4%BB%E5%8A%A8%E8%A6%81%E5%AE%89%E6%8E%92%E4%B8%8B%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E7%9A%84%E7%AD%89%E5%BE%85%E4%B8%8E%E5%94%A4%E9%86%92%E6%9C%BA%E5%88%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/26_%E5%A4%9A%E4%B8%AA%E6%B4%BB%E5%8A%A8%E8%A6%81%E5%AE%89%E6%8E%92%E4%B8%8B%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E7%9A%84%E7%AD%89%E5%BE%85%E4%B8%8E%E5%94%A4%E9%86%92%E6%9C%BA%E5%88%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="26_多个活动要安排（下）：如何实现进程的等待与唤醒机制？">
+  <meta property="og:description" content="你好，我是 LMOS。
+上节课，我带你一起设计了我们 Cosmos 的进程调度器，但有了进程调度器还不够，因为调度器它始终只是让一个进程让出 CPU，切换到它选择的下一个进程上去运行。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="26_多个活动要安排（下）：如何实现进程的等待与唤醒机制？">
+  <meta itemprop="description" content="你好，我是 LMOS。
+上节课，我带你一起设计了我们 Cosmos 的进程调度器，但有了进程调度器还不够，因为调度器它始终只是让一个进程让出 CPU，切换到它选择的下一个进程上去运行。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3852">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="26_多个活动要安排（下）：如何实现进程的等待与唤醒机制？">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+上节课，我带你一起设计了我们 Cosmos 的进程调度器，但有了进程调度器还不够，因为调度器它始终只是让一个进程让出 CPU，切换到它选择的下一个进程上去运行。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">26_多个活动要安排（下）：如何实现进程的等待与唤醒机制？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3852 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#进程的等待与唤醒">进程的等待与唤醒</a>
+          <ul>
+            <li><a href="#进程等待结构">进程等待结构</a></li>
+            <li><a href="#进程等待">进程等待</a></li>
+            <li><a href="#进程唤醒">进程唤醒</a></li>
+          </ul>
+        </li>
+        <li><a href="#空转进程">空转进程</a>
+          <ul>
+            <li><a href="#建立空转进程">建立空转进程</a></li>
+            <li><a href="#空转进程运行">空转进程运行</a></li>
+          </ul>
+        </li>
+        <li><a href="#多进程运行">多进程运行</a></li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>上节课，我带你一起设计了我们 Cosmos 的进程调度器，但有了进程调度器还不够，因为调度器它始终只是让一个进程让出 CPU，切换到它选择的下一个进程上去运行。</p>
+<p>结合前面我们对进程生命周期的讲解，估计你已经反应过来了。没错，多进程调度方面，我们还要实现进程的等待与唤醒机制，今天我们就来搞定它。</p>
+<p>这节课的配套代码，你可以从这里下载。</p>
+<h2 id="进程的等待与唤醒">进程的等待与唤醒</h2>
+<p>我们已经知道，进程得不到所需的某个资源时就会进入等待状态，直到这种资源可用时，才会被唤醒。那么进程的等待与唤醒机制到底应该这样设计呢，请听我慢慢为你梳理。</p>
+<h3 id="进程等待结构">进程等待结构</h3>
+<p>很显然，在实现进程的等待与唤醒的机制之前，我们需要设计一种数据结构，用于挂载等待的进程，在唤醒的时候才可以找到那些等待的进程，这段代码如下所示。</p>
+<p>typedef struct s_KWLST<br>
+{  <br>
+spinlock_t wl_lock;  //自旋锁<br>
+uint_t   wl_tdnr;    //等待进程的个数<br>
+list_h_t wl_list;    //挂载等待进程的链表头<br>
+}kwlst_t;</p>
+<p>其实，这个结构在前面讲信号量的时候，我们已经见过了。这是因为它经常被包含在信号量等上层数据结构中，而信号量结构，通常用于保护访问受限的共享资源。这个结构非常简单，我们不用多说。</p>
+<h3 id="进程等待">进程等待</h3>
+<p>现在我们来实现让进程进入等待状态的机制，它也是一个函数。这个函数会设置进程状态为等待状态，让进程从调度系统数据结构中脱离，最后让进程加入到 kwlst_t 等待结构中，代码如下所示。</p>
+<p>void krlsched_wait(kwlst_t *wlst)<br>
+{<br>
+cpuflg_t cufg, tcufg;<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+//获取当前正在运行的进程<br>
+thread_t *tdp = krlsched_retn_currthread();<br>
+uint_t pity = tdp-&gt;td_priority;<br>
+krlspinlock_cli(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+krlspinlock_cli(&amp;tdp-&gt;td_lock, &amp;tcufg);<br>
+tdp-&gt;td_stus = TDSTUS_WAIT;//设置进程状态为等待状态<br>
+list_del(&amp;tdp-&gt;td_list);//脱链<br>
+krlspinunlock_sti(&amp;tdp-&gt;td_lock, &amp;tcufg);<br>
+if (schdap-&gt;sda_thdlst[pity].tdl_curruntd == tdp)<br>
+{<br>
+schdap-&gt;sda_thdlst[pity].tdl_curruntd = NULL;<br>
+}<br>
+schdap-&gt;sda_thdlst[pity].tdl_nr&ndash;;<br>
+krlspinunlock_sti(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+krlwlst_add_thread(wlst, tdp);//将进程加入等待结构中<br>
+return;<br>
+}</p>
+<p>上述代码也不难，你结合注释就能理解。有一点需要注意，这个函数使进程进入等待状态，而这个<strong>进程是当前正在运行的进程，而当前正在运行的进程正是调用这个函数的进程</strong>，所以一个进程想要进入等待状态，只要调用这个函数就好了。</p>
+<h3 id="进程唤醒">进程唤醒</h3>
+<p>进程的唤醒则是进程等待的反向操作行为，即从等待数据结构中获取进程，然后设置进程的状态为运行状态，最后将这个进程加入到进程调度系统数据结构中。这个函数的代码如下所示。</p>
+<p>void krlsched_up(kwlst_t *wlst)<br>
+{<br>
+cpuflg_t cufg, tcufg;<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+thread_t *tdp;<br>
+uint_t pity;<br>
+//取出等待数据结构第一个进程并从等待数据结构中删除<br>
+tdp = krlwlst_del_thread(wlst);<br>
+pity = tdp-&gt;td_priority;//获取进程的优先级<br>
+krlspinlock_cli(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+krlspinlock_cli(&amp;tdp-&gt;td_lock, &amp;tcufg);<br>
+tdp-&gt;td_stus = TDSTUS_RUN;//设置进程的状态为运行状态<br>
+krlspinunlock_sti(&amp;tdp-&gt;td_lock, &amp;tcufg);<br>
+list_add_tail(&amp;tdp-&gt;td_list, &amp;(schdap-&gt;sda_thdlst[pity].tdl_lsth));//加入进程优先级链表<br>
+schdap-&gt;sda_thdlst[pity].tdl_nr++;<br>
+krlspinunlock_sti(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+return;<br>
+}</p>
+<p>上面的代码相对简单，我想以你的能力，还能写出比以上更好的代码。好了，到这里，我们进程的等待与唤醒的机制已经实现了。</p>
+<h2 id="空转进程">空转进程</h2>
+<p>下面我们一起来建立空转进程，它也是我们系统下的第一个进程。空转进程是操作系统在没任何进程可以调度运行的时候，就选择调度空转进程来运行，可以说<strong>空转进程是进程调度器最后的选择。</strong></p>
+<p>请注意，这个最后的选择一定要有，现在几乎所有的操作系统，都有一个或者几个空转进程（多 CPU 的情况下，每个 CPU 一个空转进程）。我们的 Cosmos 虽然是简单了些，但也必须要有空转进程，而且这是我们 Cosmos 上的第一个进程。</p>
+<h3 id="建立空转进程">建立空转进程</h3>
+<p>我们 Cosmos 的空转进程是个内核进程，按照常理，我们只要调用上节课实现的建立进程的接口，创建一个内核进程就好了。</p>
+<p>但是我们的空转进程有点特殊，它是内核进程没错，但它不加入调度系统，而是一个专用的指针指向它的。</p>
+<p>下面我们来建立一个空转进程。由于空转进程是个独立的模块，我们建立一个新的 C 语言文件 Cosmos/kernel/krlcpuidle.c，代码如下所示。</p>
+<p>thread_t *new_cpuidle_thread()<br>
+{</p>
+<pre><code>thread_t *ret_td = NULL;  
+bool_t acs = FALSE;  
+adr_t krlstkadr = NULL;  
+uint_t cpuid = hal_retn_cpuid();  
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];  
+krlstkadr = krlnew(DAFT_TDKRLSTKSZ);//分配进程的内核栈  
+if (krlstkadr == NULL)  
+{  
+    return NULL;  
+}  
+//分配 thread_t 结构体变量  
+ret_td = krlnew_thread_dsc();  
+if (ret_td == NULL)  
+{  
+    acs = krldelete(krlstkadr, DAFT_TDKRLSTKSZ);  
+    if (acs == FALSE)  
+    {  
+        return NULL;  
+    }  
+    return NULL;  
+}  
+//设置进程具有系统权限  
+ret_td-&gt;td_privilege = PRILG_SYS;  
+ret_td-&gt;td_priority = PRITY_MIN;  
+//设置进程的内核栈顶和内核栈开始地址  
+ret_td-&gt;td_krlstktop = krlstkadr + (adr_t)(DAFT_TDKRLSTKSZ - 1);  
+ret_td-&gt;td_krlstkstart = krlstkadr;  
+//初始化进程的内核栈  
+krlthread_kernstack_init(ret_td, (void *)krlcpuidle_main, KMOD_EFLAGS);  
+//设置调度系统数据结构的空转进程和当前进程为 ret_td  
+schdap-&gt;sda_cpuidle = ret_td;  
+schdap-&gt;sda_currtd = ret_td;  
+return ret_td;  
+</code></pre>
+<p>}<br>
+//新建空转进程<br>
+void new_cpuidle()<br>
+{<br>
+thread_t *thp = new_cpuidle_thread();//建立空转进程<br>
+if (thp == NULL)<br>
+{//失败则主动死机<br>
+hal_sysdie(&ldquo;newcpuilde err&rdquo;);<br>
+}<br>
+kprint(&ldquo;CPUIDLETASK: %x\n&rdquo;, (uint_t)thp);<br>
+return;<br>
+}</p>
+<p>上述代码中，建立空转进程由 new_cpuidle 函数调用 new_cpuidle_thread 函数完成，new_cpuidle_thread 函数的操作和前面建立内核进程差不多，只不过在函数的最后，让调度系统数据结构的空转进程和当前进程的指针，指向了刚刚建立的进程。</p>
+<p>但是你要注意，上述代码中调用初始内核栈函数时，将 krlcpuidle_main 函数传了进去，这就是空转进程的主函数，下面我们来写好。</p>
+<p>void krlcpuidle_main()<br>
+{<br>
+uint_t i = 0;<br>
+for (;; i++)<br>
+{<br>
+kprint(&ldquo;空转进程运行:%x\n&rdquo;, i);//打印<br>
+krlschedul();//调度进程<br>
+}<br>
+return;<br>
+}</p>
+<p>我给你解释一下，空转进程的主函数本质就是个死循环，在死循环中打印一行信息，然后进行进程调度，这个函数就是永无休止地执行这两个步骤。</p>
+<h3 id="空转进程运行">空转进程运行</h3>
+<p>我们已经建立了空转进程，下面就要去运行它了。</p>
+<p>由于是第一进程，所以没法用调度器来调度它，我们得手动启动它，才可以运行。其实上节课我们已经写了启动一个新建进程运行的函数，我们现在只要调用它就好了，代码如下所示。</p>
+<p>void krlcpuidle_start()<br>
+{<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+//取得空转进程<br>
+thread_t *tdp = schdap-&gt;sda_cpuidle;<br>
+//设置空转进程的 tss 和 R0 特权级的栈<br>
+tdp-&gt;td_context.ctx_nexttss = &amp;x64tss[cpuid];<br>
+tdp-&gt;td_context.ctx_nexttss-&gt;rsp0 = tdp-&gt;td_krlstktop;<br>
+//设置空转进程的状态为运行状态<br>
+tdp-&gt;td_stus = TDSTUS_RUN;<br>
+//启动进程运行<br>
+retnfrom_first_sched(tdp);<br>
+return;<br>
+}</p>
+<p>上述代码的逻辑也很容易理解，我为你梳理一下。首先就是取出空转进程，然后设置一下机器上下文结构和运行状态，最后调用 retnfrom_first_sched 函数，恢复进程内核栈中的内容，让进程启动运行。</p>
+<p>不过这还没完，我们应该把建立空转进程和启动空转进程运行函数封装起来，放在一个初始化空转进程的函数中，并在内核层初始化 init_krl 函数的最后调用，代码如下所示。</p>
+<p>void init_krl()<br>
+{<br>
+init_krlsched();//初始化进程调度器<br>
+init_krlcpuidle();//初始化空转进程<br>
+die(0);//防止 init_krl 函数返回<br>
+return;<br>
+}<br>
+//初始化空转进程<br>
+void init_krlcpuidle()<br>
+{<br>
+new_cpuidle();//建立空转进程<br>
+krlcpuidle_start();//启动空转进程运行<br>
+return;<br>
+}</p>
+<p>好了，所有的代码都已备好，终于到我们检验学习成果的时候了，我切换到这节课程的 cosmos 目录下执行 make vboxtest 命令，就会出现如下图的结果，如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/c2294f255230f3e164bb0c8f56d204eb.png" alt=""></p>
+<p>空转进程运行</p>
+<p>可以看到，现在空转进程和调度器输出的信息在屏幕上交替滚动出现，这说明我们的空转进程和进程调度器都已经正常工作了。</p>
+<h2 id="多进程运行">多进程运行</h2>
+<p>虽然我们的空转进程和调度器已经正常工作了，但你可能心里会有疑问，我们系统中就一个空转进程，那怎么证明我们进程调度器是正常工作的呢？</p>
+<p>其实我们在空转进程中调用了调度器函数，然后进程调度器会发现系统中没有进程，又不得不调度空转进程，所以最后结果就是：空转进程调用进程调度器，而调度器又选择了空转进程，导致形成了一个闭环。</p>
+<p>但是我们现在想要看看多个进程会是什么情况，就需要建立多个进程。下面我们马上就来实现这个想法，代码如下。</p>
+<p>void thread_a_main()//进程 A 主函数<br>
+{<br>
+uint_t i = 0;<br>
+for (;; i++) {<br>
+kprint(&ldquo;进程 A 运行:%x\n&rdquo;, i);<br>
+krlschedul();<br>
+}<br>
+return;<br>
+}<br>
+void thread_b_main()//进程 B 主函数<br>
+{<br>
+uint_t i = 0;<br>
+for (;; i++) {<br>
+kprint(&ldquo;进程 B 运行:%x\n&rdquo;, i);<br>
+krlschedul();<br>
+}<br>
+return;<br>
+}<br>
+void init_ab_thread()<br>
+{<br>
+krlnew_thread((void*)thread_a_main, KERNTHREAD_FLG,<br>
+PRILG_SYS, PRITY_MIN, DAFT_TDUSRSTKSZ, DAFT_TDKRLSTKSZ);//建立进程 A<br>
+krlnew_thread((void*)thread_b_main, KERNTHREAD_FLG,<br>
+PRILG_SYS, PRITY_MIN, DAFT_TDUSRSTKSZ, DAFT_TDKRLSTKSZ);//建立进程 B<br>
+return;<br>
+}<br>
+void init_krlcpuidle()<br>
+{<br>
+new_cpuidle();//建立空转进程<br>
+init_ab_thread();//初始化建立 A、B 进程<br>
+krlcpuidle_start();//开始运行空转进程<br>
+return;<br>
+}</p>
+<p>上述代码中，我们在 init_ab_thread 函数中建立两个内核进程，分别运行两个函数，这两个函数会打印信息，init_ab_thread 函数由 init_krlcpuidle 函数调用。这样在初始化空转进程的时候，就建立了进程 A 和进程 B。</p>
+<p>好了，现在我们在 Linux 终端下进入 cosmos 目录，在目录下输入 make vboxtest 运行一下，结果如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/4d03dd67ed92bce35d562a5b5b3cc69b.png" alt=""></p>
+<p>两个进程结果截图</p>
+<p>上图中，进程 A 和进程 B 在调度器的调度下交替运行，而空转进程不再运行，这表明我们的多进程机制完全正确。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>这节课我们接着上一节课，实现了进程的等待与唤醒机制，然后建立了空转进程，最后对进程调度进行了测试。下面我来为你梳理一下要点。</p>
+<p>1.**等待和唤醒机制。**为了让进程能进入等待状态随后又能在其它条件满足的情况下被唤醒，我们实现了进程等待和唤醒机制。</p>
+<p>2.**空转进程。**是我们 Cosmos 系统下的第一个进程，它只干一件事情就是调用调度器函数调度进程，在系统中没有其它可以运行进程时，调度器又会调度空转进程，形成了一个闭环。</p>
+<p>3.**测试。**为了验证我们的进程调度器是否是正常工作的，我们建立了两个进程，让它们运行，结果在屏幕上出现了它们交替输出的信息。这证明了我们的进程调度器是功能正常的。</p>
+<p>你也许发现了，我们的进程中都调用了 krlschedul 函数，不调用它就是始终只有一个进程运行了，你在开发应用程序中，需要调用调度器主动让出 CPU 吗？</p>
+<p>这是什么原因呢？这是因为我们的 Cosmos 没有定时器驱动，系统的 TICK 机制无法工作，一旦我们系统 TICK 机开始工作，就能控制进程运行了多长时间，然后强制调度进程。系统 TICK 设备我们等到驱动与设备相关的模块，再给你展开讲解。</p>
+<h2 id="思考题">思考题</h2>
+<p>请问，我们让进程进入等待状态后，这进程会立马停止运行吗？</p>
+<p>欢迎你在留言区和我交流，相信通过积极参与，你将更好地理解这节课的内容。</p>
+<p>好，我是 LMOS，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/26_%E4%BA%A7%E5%93%81%E5%AE%89%E5%85%A8%E6%96%B9%E6%A1%88%E5%A6%82%E4%BD%95%E9%99%8D%E4%BD%8E%E4%B8%9A%E5%8A%A1%E5%AF%B9%E9%BB%91%E7%81%B0%E4%BA%A7%E7%9A%84%E8%AF%B1%E6%83%91/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">26_产品安全方案：如何降低业务对黑灰产的诱惑？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%9E%B6%E6%9E%84/26_%E9%AB%98%E5%8F%AF%E7%94%A8%E5%AD%98%E5%82%A8%E6%9E%B6%E6%9E%84%E9%9B%86%E7%BE%A4%E5%92%8C%E5%88%86%E5%8C%BA/">
+            <span class="next-text nav-default">26_高可用存储架构：集群和分区</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

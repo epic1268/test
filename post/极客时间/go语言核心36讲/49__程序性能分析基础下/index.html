@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>49__程序性能分析基础（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是郝林，今天我们继续分享程序性能分析基础的内容。
+在上一篇文章中，我们围绕着“怎样让程序对 CPU 概要信息进行采样”这一问题进行了探讨，今天，我们再来一起看看它的拓展问题。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/49__%E7%A8%8B%E5%BA%8F%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%9F%BA%E7%A1%80%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/49__%E7%A8%8B%E5%BA%8F%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%9F%BA%E7%A1%80%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="49__程序性能分析基础（下）">
+  <meta property="og:description" content="你好，我是郝林，今天我们继续分享程序性能分析基础的内容。
+在上一篇文章中，我们围绕着“怎样让程序对 CPU 概要信息进行采样”这一问题进行了探讨，今天，我们再来一起看看它的拓展问题。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go语言核心36讲">
+
+  <meta itemprop="name" content="49__程序性能分析基础（下）">
+  <meta itemprop="description" content="你好，我是郝林，今天我们继续分享程序性能分析基础的内容。
+在上一篇文章中，我们围绕着“怎样让程序对 CPU 概要信息进行采样”这一问题进行了探讨，今天，我们再来一起看看它的拓展问题。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5296">
+  <meta itemprop="keywords" content="Go语言核心36讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="49__程序性能分析基础（下）">
+  <meta name="twitter:description" content="你好，我是郝林，今天我们继续分享程序性能分析基础的内容。
+在上一篇文章中，我们围绕着“怎样让程序对 CPU 概要信息进行采样”这一问题进行了探讨，今天，我们再来一起看看它的拓展问题。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">49__程序性能分析基础（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5296 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#知识扩展">知识扩展</a>
+          <ul>
+            <li><a href="#问题-1怎样设定内存概要信息的采样频率">问题 1：怎样设定内存概要信息的采样频率？</a></li>
+            <li><a href="#问题-2怎样获取到阻塞概要信息">问题 2：怎样获取到阻塞概要信息？</a></li>
+            <li><a href="#问题-3runtimepproflookup函数的正确调用方式是什么">问题 3：<code>runtime/pprof.Lookup</code>函数的正确调用方式是什么？</a></li>
+            <li><a href="#问题-4如何为基于-http-协议的网络服务添加性能分析接口">问题 4：如何为基于 HTTP 协议的网络服务添加性能分析接口？</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是郝林，今天我们继续分享程序性能分析基础的内容。</p>
+<p>在上一篇文章中，我们围绕着“怎样让程序对 CPU 概要信息进行采样”这一问题进行了探讨，今天，我们再来一起看看它的拓展问题。</p>
+<h2 id="知识扩展">知识扩展</h2>
+<h3 id="问题-1怎样设定内存概要信息的采样频率">问题 1：怎样设定内存概要信息的采样频率？</h3>
+<p>针对内存概要信息的采样会按照一定比例收集 Go 程序在运行期间的堆内存使用情况。设定内存概要信息采样频率的方法很简单，只要为<code>runtime.MemProfileRate</code>变量赋值即可。</p>
+<p>这个变量的含义是，平均每分配多少个字节，就对堆内存的使用情况进行一次采样。如果把该变量的值设为<code>0</code>，那么，Go 语言运行时系统就会完全停止对内存概要信息的采样。该变量的缺省值是<code>512 KB</code>，也就是<code>512</code>千字节。</p>
+<p>注意，如果你要设定这个采样频率，那么越早设定越好，并且只应该设定一次，否则就可能会对 Go 语言运行时系统的采样工作，造成不良影响。比如，只在<code>main</code>函数的开始处设定一次。</p>
+<p>在这之后，当我们想获取内存概要信息的时候，还需要调用<code>runtime/pprof</code>包中的<code>WriteHeapProfile</code>函数。该函数会把收集好的内存概要信息，写到我们指定的写入器中。</p>
+<p>注意，我们通过<code>WriteHeapProfile</code>函数得到的内存概要信息并不是实时的，它是一个快照，是在最近一次的内存垃圾收集工作完成时产生的。如果你想要实时的信息，那么可以调用<code>runtime.ReadMemStats</code>函数。不过要特别注意，该函数会引起 Go 语言调度器的短暂停顿。</p>
+<p>以上，就是关于内存概要信息的采样频率设定问题的简要回答。</p>
+<h3 id="问题-2怎样获取到阻塞概要信息">问题 2：怎样获取到阻塞概要信息？</h3>
+<p>我们调用<code>runtime</code>包中的<code>SetBlockProfileRate</code>函数，即可对阻塞概要信息的采样频率进行设定。该函数有一个名叫<code>rate</code>的参数，它是<code>int</code>类型的。</p>
+<p>这个参数的含义是，只要发现一个阻塞事件的持续时间达到了多少个纳秒，就可以对其进行采样。如果这个参数的值小于或等于<code>0</code>，那么就意味着 Go 语言运行时系统将会完全停止对阻塞概要信息的采样。</p>
+<p>在<code>runtime</code>包中，还有一个名叫<code>blockprofilerate</code>的包级私有变量，它是<code>uint64</code>类型的。这个变量的含义是，只要发现一个阻塞事件的持续时间跨越了多少个 CPU 时钟周期，就可以对其进行采样。它的含义与我们刚刚提到的<code>rate</code>参数的含义非常相似，不是吗？</p>
+<p>实际上，这两者的区别仅仅在于单位不同。<code>runtime.SetBlockProfileRate</code>函数会先对参数<code>rate</code>的值进行单位换算和必要的类型转换，然后，它会把换算结果用原子操作赋给<code>blockprofilerate</code>变量。由于此变量的缺省值是<code>0</code>，所以 Go 语言运行时系统在默认情况下并不会记录任何在程序中发生的阻塞事件。</p>
+<p>另一方面，当我们需要获取阻塞概要信息的时候，需要先调用<code>runtime/pprof</code>包中的<code>Lookup</code>函数并传入参数值<code>&quot;block&quot;</code>，从而得到一个<code>*runtime/pprof.Profile</code>类型的值（以下简称<code>Profile</code>值）。在这之后，我们还需要调用这个<code>Profile</code>值的<code>WriteTo</code>方法，以驱使它把概要信息写进我们指定的写入器中。</p>
+<p>这个<code>WriteTo</code>方法有两个参数，一个参数就是我们刚刚提到的写入器，它是<code>io.Writer</code>类型的。而另一个参数则是代表了概要信息详细程度的<code>int</code>类型参数<code>debug</code>。</p>
+<p><code>debug</code>参数主要的可选值有两个，即：<code>0</code>和<code>1</code>。当<code>debug</code>的值为<code>0</code>时，通过<code>WriteTo</code>方法写进写入器的概要信息仅会包含<code>go tool pprof</code>工具所需的内存地址，这些内存地址会以十六进制的形式展现出来。</p>
+<p>当该值为<code>1</code>时，相应的包名、函数名、源码文件路径、代码行号等信息就都会作为注释被加入进去。另外，<code>debug</code>为<code>0</code>时的概要信息，会经由 protocol buffers 转换为字节流。而在<code>debug</code>为<code>1</code>的时候，<code>WriteTo</code>方法输出的这些概要信息就是我们可以读懂的普通文本了。</p>
+<p>除此之外，<code>debug</code>的值也可以是<code>2</code>。这时，被输出的概要信息也会是普通的文本，并且通常会包含更多的细节。至于这些细节都包含了哪些内容，那就要看我们调用<code>runtime/pprof.Lookup</code>函数的时候传入的是什么样的参数值了。下面，我们就来一起看一下这个函数。</p>
+<h3 id="问题-3runtimepproflookup函数的正确调用方式是什么">问题 3：<code>runtime/pprof.Lookup</code>函数的正确调用方式是什么？</h3>
+<p><code>runtime/pprof.Lookup</code>函数（以下简称<code>Lookup</code>函数）的功能是，提供与给定的名称相对应的概要信息。这个概要信息会由一个<code>Profile</code>值代表。如果该函数返回了一个<code>nil</code>，那么就说明不存在与给定名称对应的概要信息。</p>
+<p><code>runtime/pprof</code>包已经为我们预先定义了 6 个概要名称。它们对应的概要信息收集方法和输出方法也都已经准备好了。我们直接拿来使用就可以了。它们是：<code>goroutine</code>、<code>heap</code>、<code>allocs</code>、<code>threadcreate</code>、<code>block</code>和<code>mutex</code>。</p>
+<p>当我们把<code>&quot;goroutine&quot;</code>传入<code>Lookup</code>函数的时候，该函数会利用相应的方法，收集到当前正在使用的所有 goroutine 的堆栈跟踪信息。注意，这样的收集会引起 Go 语言调度器的短暂停顿。</p>
+<p>当调用该函数返回的<code>Profile</code>值的<code>WriteTo</code>方法时，如果参数<code>debug</code>的值大于或等于<code>2</code>，那么该方法就会输出所有 goroutine 的堆栈跟踪信息。这些信息可能会非常多。如果它们占用的空间超过了<code>64 MB</code>（也就是<code>64</code>兆字节），那么相应的方法就会将超出的部分截掉。</p>
+<p>如果<code>Lookup</code>函数接到的参数值是<code>&quot;heap&quot;</code>，那么它就会收集与堆内存的分配和释放有关的采样信息。这实际上就是我们在前面讨论过的内存概要信息。在我们传入<code>&quot;allocs&quot;</code>的时候，后续的操作会与之非常的相似。</p>
+<p>在这两种情况下，<code>Lookup</code>函数返回的<code>Profile</code>值也会极其相像。只不过，在这两种<code>Profile</code>值的<code>WriteTo</code>方法被调用时，它们输出的概要信息会有细微的差别，而且这仅仅体现在参数<code>debug</code>等于<code>0</code>的时候。</p>
+<p><code>&quot;heap&quot;</code>会使得被输出的内存概要信息默认以“在用空间”（inuse_space）的视角呈现，而<code>&quot;allocs&quot;</code>对应的默认视角则是“已分配空间”（alloc_space）。</p>
+<p>“在用空间”是指，已经被分配但还未被释放的内存空间。在这个视角下，<code>go tool pprof</code>工具并不会去理会与已释放空间有关的那部分信息。而在“已分配空间”的视角下，所有的内存分配信息都会被展现出来，无论这些内存空间在采样时是否已被释放。</p>
+<p>此外，无论是<code>&quot;heap&quot;</code>还是<code>&quot;allocs&quot;</code>，在我们调用<code>Profile</code>值的<code>WriteTo</code>方法的时候，只要赋予<code>debug</code>参数的值大于<code>0</code>，那么该方法输出内容的规格就会是相同的。</p>
+<p>参数值<code>&quot;threadcreate&quot;</code>会使<code>Lookup</code>函数去收集一些堆栈跟踪信息。这些堆栈跟踪信息中的每一个都会描绘出一个代码调用链，这些调用链上的代码都导致新的操作系统线程产生。这样的<code>Profile</code>值的输出规格也只有两种，取决于我们传给其<code>WriteTo</code>方法的参数值是否大于<code>0</code>。</p>
+<p>再说<code>&quot;block&quot;</code>和<code>&quot;mutex&quot;</code>。<code>&quot;block&quot;</code>代表的是，因争用同步原语而被阻塞的那些代码的堆栈跟踪信息。还记得吗？这就是我们在前面讲过的阻塞概要信息。</p>
+<p>与之相对应，<code>&quot;mutex&quot;</code>代表的是，曾经作为同步原语持有者的那些代码，它们的堆栈跟踪信息。它们的输出规格也都只有两种，取决于<code>debug</code>是否大于<code>0</code>。</p>
+<p>这里所说的同步原语，指的是存在于 Go 语言运行时系统内部的一种底层的同步工具，或者说一种同步机制。</p>
+<p>它是直接面向内存地址的，并以异步信号量和原子操作作为实现手段。我们已经熟知的通道、互斥锁、条件变量、”WaitGroup“，以及 Go 语言运行时系统本身，都会利用它来实现自己的功能。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/271cbfc802799c33da79f5543a9175db.png" alt=""><br>
+runtime/pprof.Lookup 函数一瞥</p>
+<p>好了，关于这个问题，我们已经谈了不少了。我相信，你已经对<code>Lookup</code>函数的调用方式及其背后的含义有了比较深刻的理解了。demo99.go 文件中包含了一些示例代码，可供你参考。</p>
+<h3 id="问题-4如何为基于-http-协议的网络服务添加性能分析接口">问题 4：如何为基于 HTTP 协议的网络服务添加性能分析接口？</h3>
+<p>这个问题说起来还是很简单的。这是因为我们在一般情况下只要在程序中导入<code>net/http/pprof</code>代码包就可以了，就像这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">import _ &#34;net/http/pprof&#34;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后，启动网络服务并开始监听，比如：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">log.Println(http.ListenAndServe(&#34;localhost:8082&#34;, nil))
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在运行这个程序之后，我们就可以通过在网络浏览器中访问<code>http://localhost:8082/debug/pprof</code>这个地址看到一个简约的网页。如果你认真地看了上一个问题的话，那么肯定可以快速搞明白这个网页中各个部分的含义。</p>
+<p>在<code>/debug/pprof/</code>这个 URL 路径下还有很多可用的子路径，这一点你通过点选网页中的链接就可以了解到。像<code>allocs</code>、<code>block</code>、<code>goroutine</code>、<code>heap</code>、<code>mutex</code>、<code>threadcreate</code>这 6 个子路径，在底层其实都是通过<code>Lookup</code>函数来处理的。关于这个函数，你应该已经很熟悉了。</p>
+<p>这些子路径都可以接受查询参数<code>debug</code>。它用于控制概要信息的格式和详细程度。至于它的可选值，我就不再赘述了。它的缺省值是<code>0</code>。另外，还有一个名叫<code>gc</code>的查询参数。它用于控制是否在获取概要信息之前强制地执行一次垃圾回收。只要它的值大于<code>0</code>，程序就会这样做。不过，这个参数仅在<code>/debug/pprof/heap</code>路径下有效。</p>
+<p>一旦<code>/debug/pprof/profile</code>路径被访问，程序就会去执行对 CPU 概要信息的采样。它接受一个名为<code>seconds</code>的查询参数。该参数的含义是，采样工作需要持续多少秒。如果这个参数未被显式地指定，那么采样工作会持续<code>30</code>秒。注意，在这个路径下，程序只会响应经 protocol buffers 转换的字节流。我们可以通过<code>go tool pprof</code>工具直接读取这样的 HTTP 响应，例如：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">go</span> <span class="k">tool</span> <span class="n">pprof</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="mi">6060</span><span class="o">/</span><span class="n">debug</span><span class="o">/</span><span class="n">pprof</span><span class="o">/</span><span class="n">profile</span><span class="err">?</span><span class="n">seconds</span><span class="o">=</span><span class="mi">60</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>除此之外，还有一个值得我们关注的路径，即：<code>/debug/pprof/trace</code>。在这个路径下，程序主要会利用<code>runtime/trace</code>代码包中的 API 来处理我们的请求。</p>
+<p>更具体地说，程序会先调用<code>trace.Start</code>函数，然后在查询参数<code>seconds</code>指定的持续时间之后再调用<code>trace.Stop</code>函数。这里的<code>seconds</code>的缺省值是<code>1</code>秒。至于<code>runtime/trace</code>代码包的功用，我就留给你自己去查阅和探索吧。</p>
+<p>前面说的这些 URL 路径都是固定不变的。这是默认情况下的访问规则。我们还可以对它们进行定制，就像这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux := http.NewServeMux()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">pathPrefix := &#34;/d/pprof/&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux.HandleFunc(pathPrefix,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	func(w http.ResponseWriter, r *http.Request) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		name := strings.TrimPrefix(r.URL.Path, pathPrefix)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if name != &#34;&#34; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			pprof.Handler(name).ServeHTTP(w, r)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			return
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		pprof.Index(w, r)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	})
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux.HandleFunc(pathPrefix+&#34;cmdline&#34;, pprof.Cmdline)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux.HandleFunc(pathPrefix+&#34;profile&#34;, pprof.Profile)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux.HandleFunc(pathPrefix+&#34;symbol&#34;, pprof.Symbol)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mux.HandleFunc(pathPrefix+&#34;trace&#34;, pprof.Trace)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> server := http.Server{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	Addr:    &#34;localhost:8083&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	Handler: mux,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，我们几乎只使用了<code>net/http/pprof</code>代码包中的几个程序实体，就完成了这样的定制。这在我们使用第三方的网络服务开发框架时尤其有用。</p>
+<p>我们自定义的 HTTP 请求多路复用器<code>mux</code>所包含的访问规则与默认的规则很相似，只不过 URL 路径的前缀更短了一些而已。</p>
+<p>我们定制<code>mux</code>的过程与<code>net/http/pprof</code>包中的<code>init</code>函数所做的事情也是类似的。这个<code>init</code>函数的存在，其实就是我们在前面仅仅导入&quot;net/http/pprof&quot;代码包就能够访问相关路径的原因。</p>
+<p>在我们编写网络服务程序的时候，使用<code>net/http/pprof</code>包要比直接使用<code>runtime/pprof</code>包方便和实用很多。通过合理运用，这个代码包可以为网络服务的监测提供有力的支撑。关于这个包的知识，我就先介绍到这里。</p>
+<h2 id="总结">总结</h2>
+<p>这两篇文章中，我们主要讲了 Go 程序的性能分析，提到的很多内容都是你必备的知识和技巧。这些有助于你真正地理解以采样、收集、输出为代表的一系列操作步骤。</p>
+<p>我提到的几种概要信息有关的问题。你需要记住的是，每一种概要信息都代表了什么，它们分别都包含了什么样的内容。</p>
+<p>你还需要知道获取它们的正确方式，包括怎样启动和停止采样、怎样设定采样频率，以及怎样控制输出内容的格式和详细程度。</p>
+<p>此外，<code>runtime/pprof</code>包中的<code>Lookup</code>函数的正确调用方式也很重要。对于除了 CPU 概要信息之外的其他概要信息，我们都可以通过调用这个函数获取到。</p>
+<p>除此之外，我还提及了一个上层的应用，即：为基于 HTTP 协议的网络服务，添加性能分析接口。这也是很实用的一个部分。</p>
+<p>虽然<code>net/http/pprof</code>包提供的程序实体并不多，但是它却能够让我们用不同的方式，实现性能分析接口的嵌入。这些方式有的是极简的、开箱即用的，而有的则用于满足各种定制需求。</p>
+<p>以上这些，就是我今天为你讲述的 Go 语言知识，它们是程序性能分析的基础。如果你把 Go 语言程序运用于生产环境，那么肯定会涉及它们。对于这里提到的所有内容和问题，我都希望你能够认真地去思考和领会。这样才能够让你在真正使用它们的时候信手拈来。</p>
+<h2 id="思考题">思考题</h2>
+<p>我今天留给你的思考题其实在前面已经透露了，那就是：<code>runtime/trace</code>代码包的功用是什么？</p>
+<p>感谢你的收听，我们下期再见。</p>
+<p><a href="./Golang%5FPuzzlers.md">戳此查看 Go 语言专栏文章配套详细代码。</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/6d035e7ef07f11a615a16b7e601fabe9.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/">Go语言核心36讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/49__%E6%A1%88%E4%BE%8B%E7%AF%87%E5%86%85%E6%A0%B8%E7%BA%BF%E7%A8%8B_cpu_%E5%88%A9%E7%94%A8%E7%8E%87%E5%A4%AA%E9%AB%98%E6%88%91%E8%AF%A5%E6%80%8E%E4%B9%88%E5%8A%9E/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">49__案例篇：内核线程_CPU_利用率太高，我该怎么办？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/49__%E5%BC%B9%E5%8A%9B%E8%AE%BE%E8%AE%A1%E7%AF%87%E4%B9%8B%E9%99%90%E6%B5%81%E8%AE%BE%E8%AE%A1/">
+            <span class="next-text nav-default">49__弹力设计篇之“限流设计”</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

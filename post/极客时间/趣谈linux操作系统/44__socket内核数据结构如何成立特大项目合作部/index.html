@@ -1,0 +1,2925 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>44__Socket内核数据结构：如何成立特大项目合作部？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="上一节我们讲了 Socket 在 TCP 和 UDP 场景下的调用流程。这一节，我们就沿着这个流程到内核里面一探究竟，看看在内核里面，都创建了哪些数据结构，做了哪些事情。
+解析 socket 函数 我们从 Socket 系统调用开始。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/44__socket%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%A6%82%E4%BD%95%E6%88%90%E7%AB%8B%E7%89%B9%E5%A4%A7%E9%A1%B9%E7%9B%AE%E5%90%88%E4%BD%9C%E9%83%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/44__socket%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%A6%82%E4%BD%95%E6%88%90%E7%AB%8B%E7%89%B9%E5%A4%A7%E9%A1%B9%E7%9B%AE%E5%90%88%E4%BD%9C%E9%83%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="44__Socket内核数据结构：如何成立特大项目合作部？">
+  <meta property="og:description" content="上一节我们讲了 Socket 在 TCP 和 UDP 场景下的调用流程。这一节，我们就沿着这个流程到内核里面一探究竟，看看在内核里面，都创建了哪些数据结构，做了哪些事情。
+解析 socket 函数 我们从 Socket 系统调用开始。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="趣谈Linux操作系统">
+
+  <meta itemprop="name" content="44__Socket内核数据结构：如何成立特大项目合作部？">
+  <meta itemprop="description" content="上一节我们讲了 Socket 在 TCP 和 UDP 场景下的调用流程。这一节，我们就沿着这个流程到内核里面一探究竟，看看在内核里面，都创建了哪些数据结构，做了哪些事情。
+解析 socket 函数 我们从 Socket 系统调用开始。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7977">
+  <meta itemprop="keywords" content="趣谈Linux操作系统">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="44__Socket内核数据结构：如何成立特大项目合作部？">
+  <meta name="twitter:description" content="上一节我们讲了 Socket 在 TCP 和 UDP 场景下的调用流程。这一节，我们就沿着这个流程到内核里面一探究竟，看看在内核里面，都创建了哪些数据结构，做了哪些事情。
+解析 socket 函数 我们从 Socket 系统调用开始。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">44__Socket内核数据结构：如何成立特大项目合作部？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7977 字 </span>
+          <span class="more-meta"> 预计阅读 16 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#解析-socket-函数">解析 socket 函数</a></li>
+        <li><a href="#解析-bind-函数">解析 bind 函数</a></li>
+        <li><a href="#解析-listen-函数">解析 listen 函数</a></li>
+        <li><a href="#解析-accept-函数">解析 accept 函数</a></li>
+        <li><a href="#解析-connect-函数">解析 connect 函数</a></li>
+        <li><a href="#总结时刻">总结时刻</a></li>
+        <li><a href="#课堂练习">课堂练习</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>上一节我们讲了 Socket 在 TCP 和 UDP 场景下的调用流程。这一节，我们就沿着这个流程到内核里面一探究竟，看看在内核里面，都创建了哪些数据结构，做了哪些事情。</p>
+<h2 id="解析-socket-函数">解析 socket 函数</h2>
+<p>我们从 Socket 系统调用开始。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int retval;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct socket *sock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int flags;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (SOCK_NONBLOCK != O_NONBLOCK &amp;&amp; (flags &amp; SOCK_NONBLOCK))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		flags = (flags &amp; ~SOCK_NONBLOCK) | O_NONBLOCK;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	retval = sock_create(family, type, protocol, &amp;sock);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	retval = sock_map_fd(sock, flags &amp; (O_CLOEXEC | O_NONBLOCK));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return retval;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里面的代码比较容易看懂，Socket 系统调用会调用 sock_create 创建一个 struct socket 结构，然后通过 sock_map_fd 和文件描述符对应起来。</p>
+<p>在创建 Socket 的时候，有三个参数。</p>
+<p>一个是<strong>family</strong>，表示地址族。不是所有的 Socket 都要通过 IP 进行通信，还有其他的通信方式。例如，下面的定义中，domain sockets 就是通过本地文件进行通信的，不需要 IP 地址。只不过，通过 IP 地址只是最常用的模式，所以我们这里着重分析这种模式。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_UNIX 1/* Unix domain sockets */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_INET 2/* Internet IP Protocol */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二个参数是<strong>type</strong>，也即 Socket 的类型。类型是比较少的。</p>
+<p>第三个参数是<strong>protocol</strong>，是协议。协议数目是比较多的，也就是说，多个协议会属于同一种类型。</p>
+<p>常用的 Socket 类型有三种，分别是 SOCK_STREAM、SOCK_DGRAM 和 SOCK_RAW。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">enum</span> <span class="n">sock_type</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">SOCK_STREAM</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">SOCK_DGRAM</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">SOCK_RAW</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>SOCK_STREAM 是面向数据流的，协议 IPPROTO_TCP 属于这种类型。SOCK_DGRAM 是面向数据报的，协议 IPPROTO_UDP 属于这种类型。如果在内核里面看的话，IPPROTO_ICMP 也属于这种类型。SOCK_RAW 是原始的 IP 包，IPPROTO_IP 属于这种类型。</p>
+<p><strong>这一节，我们重点看 SOCK_STREAM 类型和 IPPROTO_TCP 协议。</strong></p>
+<p>为了管理 family、type、protocol 这三个分类层次，内核会创建对应的数据结构。</p>
+<p>接下来，我们打开 sock_create 函数看一下。它会调用 __sock_create。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">__sock_create</span><span class="p">(</span><span class="n">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="ne">int</span> <span class="n">family</span><span class="p">,</span> <span class="ne">int</span> <span class="n">type</span><span class="p">,</span> <span class="ne">int</span> <span class="n">protocol</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			 <span class="n">struct</span> <span class="n">socket</span> <span class="o">**</span><span class="n">res</span><span class="p">,</span> <span class="ne">int</span> <span class="n">kern</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">struct</span> <span class="n">net_proto_family</span> <span class="o">*</span><span class="n">pf</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sock</span> <span class="o">=</span> <span class="n">sock_alloc</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sock</span><span class="o">-&gt;</span><span class="n">type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">pf</span> <span class="o">=</span> <span class="n">rcu_dereference</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">]);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">err</span> <span class="o">=</span> <span class="n">pf</span><span class="o">-&gt;</span><span class="n">create</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">kern</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">*</span><span class="n">res</span> <span class="o">=</span> <span class="n">sock</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里先是分配了一个 struct socket 结构。接下来我们要用到 family 参数。这里有一个 net_families 数组，我们可以以 family 参数为下标，找到对应的 struct net_proto_family。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/* Supported address families. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_UNSPEC	0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_UNIX		1	/* Unix domain sockets 		*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_LOCAL	1	/* POSIX name for AF_UNIX	*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_INET		2	/* Internet IP Protocol 	*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_INET6	10	/* IP version 6			*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_MPLS		28	/* MPLS */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define AF_MAX		44	/* For now.. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define NPROTO		AF_MAX
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> struct net_proto_family __rcu *net_families[NPROTO] __read_mostly;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以找到 net_families 的定义。每一个地址族在这个数组里面都有一项，里面的内容是 net_proto_family。每一种地址族都有自己的 net_proto_family，IP 地址族的 net_proto_family 定义如下，里面最重要的就是，create 函数指向 inet_create。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">//</span><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">af_inet</span><span class="o">.</span><span class="n">c</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="k">const</span> <span class="n">struct</span> <span class="n">net_proto_family</span> <span class="n">inet_family_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">.</span><span class="n">family</span> <span class="o">=</span> <span class="n">PF_INET</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">.</span><span class="n">create</span> <span class="o">=</span> <span class="n">inet_create</span><span class="p">,</span><span class="o">//</span> <span class="err">这个用于</span> <span class="n">socket</span> <span class="err">系统调用创建</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们回到函数 __sock_create。接下来，在这里面，这个 inet_create 会被调用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">inet_create</span><span class="p">(</span><span class="n">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="n">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span> <span class="ne">int</span> <span class="n">protocol</span><span class="p">,</span> <span class="ne">int</span> <span class="n">kern</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_protosw</span> <span class="o">*</span><span class="n">answer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_sock</span> <span class="o">*</span><span class="n">inet</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">proto</span> <span class="o">*</span><span class="n">answer_prot</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">unsigned</span> <span class="n">char</span> <span class="n">answer_flags</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">try_loading_module</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="o">/*</span> <span class="n">Look</span> <span class="k">for</span> <span class="n">the</span> <span class="n">requested</span> <span class="n">type</span><span class="o">/</span><span class="n">protocol</span> <span class="n">pair</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">lookup_protocol</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">list_for_each_entry_rcu</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">inetsw</span><span class="p">[</span><span class="n">sock</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">],</span> <span class="n">list</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="o">/*</span> <span class="n">Check</span> <span class="n">the</span> <span class="n">non</span><span class="o">-</span><span class="n">wild</span> <span class="n">match</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="p">(</span><span class="n">protocol</span> <span class="o">!=</span> <span class="n">IPPROTO_IP</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="o">/*</span> <span class="n">Check</span> <span class="k">for</span> <span class="n">the</span> <span class="n">two</span> <span class="n">wild</span> <span class="n">cases</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="p">(</span><span class="n">IPPROTO_IP</span> <span class="o">==</span> <span class="n">protocol</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="n">protocol</span> <span class="o">=</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="p">(</span><span class="n">IPPROTO_IP</span> <span class="o">==</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EPROTONOSUPPORT</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sock</span><span class="o">-&gt;</span><span class="n">ops</span> <span class="o">=</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">ops</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">answer_prot</span> <span class="o">=</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">prot</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">answer_flags</span> <span class="o">=</span> <span class="n">answer</span><span class="o">-&gt;</span><span class="n">flags</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sk</span> <span class="o">=</span> <span class="n">sk_alloc</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">PF_INET</span><span class="p">,</span> <span class="n">GFP_KERNEL</span><span class="p">,</span> <span class="n">answer_prot</span><span class="p">,</span> <span class="n">kern</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span> <span class="o">=</span> <span class="n">inet_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">nodefrag</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">SOCK_RAW</span> <span class="o">==</span> <span class="n">sock</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_num</span> <span class="o">=</span> <span class="n">protocol</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">IPPROTO_RAW</span> <span class="o">==</span> <span class="n">protocol</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">inet</span><span class="o">-&gt;</span><span class="n">hdrincl</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sock_init_data</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_destruct</span>	   <span class="o">=</span> <span class="n">inet_sock_destruct</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_protocol</span>	   <span class="o">=</span> <span class="n">protocol</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_backlog_rcv</span> <span class="o">=</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_prot</span><span class="o">-&gt;</span><span class="n">backlog_rcv</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">uc_ttl</span>	<span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">mc_loop</span>	<span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">mc_ttl</span>	<span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">mc_all</span>	<span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">mc_index</span>	<span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">mc_list</span>	<span class="o">=</span> <span class="n">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">inet</span><span class="o">-&gt;</span><span class="n">rcv_tos</span>	<span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">if</span> <span class="p">(</span><span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_num</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_sport</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_num</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="o">/*</span> <span class="n">Add</span> <span class="n">to</span> <span class="n">protocol</span> <span class="nb">hash</span> <span class="n">chains</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_prot</span><span class="o">-&gt;</span><span class="nb">hash</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_prot</span><span class="o">-&gt;</span><span class="n">init</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_prot</span><span class="o">-&gt;</span><span class="n">init</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 inet_create 中，我们先会看到一个循环 list_for_each_entry_rcu。在这里，第二个参数 type 开始起作用。因为循环查看的是 inetsw[sock-&gt;type]。</p>
+<p>这里的 inetsw 也是一个数组，type 作为下标，里面的内容是 struct inet_protosw，是协议，也即 inetsw 数组对于每个类型有一项，这一项里面是属于这个类型的协议。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static struct list_head inetsw[SOCK_MAX];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> static int __init inet_init(void)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* Register the socket-side information for inet_create. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	for (r = &amp;inetsw[0]; r &lt; &amp;inetsw[SOCK_MAX]; ++r)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		INIT_LIST_HEAD(r);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	for (q = inetsw_array; q &lt; &amp;inetsw_array[INETSW_ARRAY_LEN]; ++q)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		inet_register_protosw(q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>inetsw 数组是在系统初始化的时候初始化的，就像下面代码里面实现的一样。</p>
+<p>首先，一个循环会将 inetsw 数组的每一项，都初始化为一个链表。咱们前面说了，一个 type 类型会包含多个 protocol，因而我们需要一个链表。接下来一个循环，是将 inetsw_array 注册到 inetsw 数组里面去。inetsw_array 的定义如下，这个数组里面的内容很重要，后面会用到它们。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static struct inet_protosw inetsw_array[] =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.type =       SOCK_STREAM,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.protocol =   IPPROTO_TCP,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.prot =       &amp;tcp_prot,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.ops =        &amp;inet_stream_ops,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.flags =      INET_PROTOSW_PERMANENT |
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      INET_PROTOSW_ICSK,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	},
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.type =       SOCK_DGRAM,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.protocol =   IPPROTO_UDP,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.prot =       &amp;udp_prot,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.ops =        &amp;inet_dgram_ops,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.flags =      INET_PROTOSW_PERMANENT,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     },
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.type =       SOCK_DGRAM,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.protocol =   IPPROTO_ICMP,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.prot =       &amp;ping_prot,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.ops =        &amp;inet_sockraw_ops,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		.flags =      INET_PROTOSW_REUSE,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     },
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .type =       SOCK_RAW,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	    .protocol =   IPPROTO_IP,	/* wild card */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	    .prot =       &amp;raw_prot,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	    .ops =        &amp;inet_sockraw_ops,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	    .flags =      INET_PROTOSW_REUSE,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们回到 inet_create 的 list_for_each_entry_rcu 循环中。到这里就好理解了，这是在 inetsw 数组中，根据 type 找到属于这个类型的列表，然后依次比较列表中的 struct inet_protosw 的 protocol 是不是用户指定的 protocol；如果是，就得到了符合用户指定的 family-&gt;type-&gt;protocol 的 struct inet_protosw *answer 对象。</p>
+<p>接下来，struct socket *sock 的 ops 成员变量，被赋值为 answer 的 ops。对于 TCP 来讲，就是 inet_stream_ops。后面任何用户对于这个 socket 的操作，都是通过 inet_stream_ops 进行的。</p>
+<p>接下来，我们创建一个 struct sock *sk 对象。这里比较让人困惑。socket 和 sock 看起来几乎一样，容易让人混淆，这里需要说明一下，socket 是用于负责对上给用户提供接口，并且和文件系统关联。而 sock，负责向下对接内核网络协议栈。</p>
+<p>在 sk_alloc 函数中，struct inet_protosw *answer 结构的 tcp_prot 赋值给了 struct sock *sk 的 sk_prot 成员。tcp_prot 的定义如下，里面定义了很多的函数，都是 sock 之下内核协议栈的动作。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct proto tcp_prot = {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.name			= &#34;TCP&#34;,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.owner			= THIS_MODULE,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.close			= tcp_close,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.connect		= tcp_v4_connect,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.disconnect		= tcp_disconnect,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.accept			= inet_csk_accept,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.ioctl			= tcp_ioctl,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.init			= tcp_v4_init_sock,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.destroy		= tcp_v4_destroy_sock,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.shutdown		= tcp_shutdown,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.setsockopt		= tcp_setsockopt,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.getsockopt		= tcp_getsockopt,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.keepalive		= tcp_set_keepalive,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.recvmsg		= tcp_recvmsg,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.sendmsg		= tcp_sendmsg,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.sendpage		= tcp_sendpage,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.backlog_rcv		= tcp_v4_do_rcv,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.release_cb		= tcp_release_cb,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.hash			= inet_hash,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    .get_port		= inet_csk_get_port,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 inet_create 函数中，接下来创建一个 struct inet_sock 结构，这个结构一开始就是 struct sock，然后扩展了一些其他的信息，剩下的代码就填充这些信息。这一幕我们会经常看到，将一个结构放在另一个结构的开始位置，然后扩展一些成员，通过对于指针的强制类型转换，来访问这些成员。</p>
+<p>socket 的创建至此结束。</p>
+<h2 id="解析-bind-函数">解析 bind 函数</h2>
+<p>接下来，我们来看 bind。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct socket *sock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sockaddr_storage address;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err, fput_needed;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	sock = sockfd_lookup_light(fd, &amp;err, &amp;fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (sock) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		err = move_addr_to_kernel(umyaddr, addrlen, &amp;address);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (err &gt;= 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			err = sock-&gt;ops-&gt;bind(sock,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						      (struct sockaddr *)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						      &amp;address, addrlen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		fput_light(sock-&gt;file, fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return err;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 bind 中，sockfd_lookup_light 会根据 fd 文件描述符，找到 struct socket 结构。然后将 sockaddr 从用户态拷贝到内核态，然后调用 struct socket 结构里面 ops 的 bind 函数。根据前面创建 socket 的时候的设定，调用的是 inet_stream_ops 的 bind 函数，也即调用 inet_bind。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sock *sk = sock-&gt;sk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inet_sock *inet = inet_sk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct net *net = sock_net(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned short snum;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	snum = ntohs(addr-&gt;sin_port);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet-&gt;inet_rcv_saddr = inet-&gt;inet_saddr = addr-&gt;sin_addr.s_addr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* Make sure we are allowed to bind here. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if ((snum || !inet-&gt;bind_address_no_port) &amp;&amp;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	    sk-&gt;sk_prot-&gt;get_port(sk, snum)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet-&gt;inet_sport = htons(inet-&gt;inet_num);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet-&gt;inet_daddr = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet-&gt;inet_dport = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk_dst_reset(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>bind 里面会调用 sk_prot 的 get_port 函数，也即 inet_csk_get_port 来检查端口是否冲突，是否可以绑定。如果允许，则会设置 struct inet_sock 的本方的地址 inet_saddr 和本方的端口 inet_sport，对方的地址 inet_daddr 和对方的端口 inet_dport 都初始化为 0。</p>
+<p>bind 的逻辑相对比较简单，就到这里了。</p>
+<h2 id="解析-listen-函数">解析 listen 函数</h2>
+<p>接下来我们来看 listen。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE2(listen, int, fd, int, backlog)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct socket *sock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err, fput_needed;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int somaxconn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	sock = sockfd_lookup_light(fd, &amp;err, &amp;fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (sock) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		somaxconn = sock_net(sock-&gt;sk)-&gt;core.sysctl_somaxconn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if ((unsigned int)backlog &gt; somaxconn)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			backlog = somaxconn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		err = sock-&gt;ops-&gt;listen(sock, backlog);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		fput_light(sock-&gt;file, fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return err;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 listen 中，我们还是通过 sockfd_lookup_light，根据 fd 文件描述符，找到 struct socket 结构。接着，我们调用 struct socket 结构里面 ops 的 listen 函数。根据前面创建 socket 的时候的设定，调用的是 inet_stream_ops 的 listen 函数，也即调用 inet_listen。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int inet_listen(struct socket *sock, int backlog)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sock *sk = sock-&gt;sk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned char old_state;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	old_state = sk-&gt;sk_state;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* Really, if the socket is already in listen state
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * we can only allow the backlog to be adjusted.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (old_state != TCP_LISTEN) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		err = inet_csk_listen_start(sk, backlog);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk-&gt;sk_max_ack_backlog = backlog;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果这个 socket 还不在 TCP_LISTEN 状态，会调用 inet_csk_listen_start 进入监听状态。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int inet_csk_listen_start(struct sock *sk, int backlog)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inet_connection_sock *icsk = inet_csk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inet_sock *inet = inet_sk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err = -EADDRINUSE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	reqsk_queue_alloc(&amp;icsk-&gt;icsk_accept_queue);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	sk-&gt;sk_max_ack_backlog = backlog;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk-&gt;sk_ack_backlog = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet_csk_delack_init(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	sk_state_store(sk, TCP_LISTEN);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (!sk-&gt;sk_prot-&gt;get_port(sk, inet-&gt;inet_num)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里面建立了一个新的结构 inet_connection_sock，这个结构一开始是 struct inet_sock，inet_csk 其实做了一次强制类型转换，扩大了结构，看到了吧，又是这个套路。</p>
+<p>struct inet_connection_sock 结构比较复杂。如果打开它，你能看到处于各种状态的队列，各种超时时间、拥塞控制等字眼。我们说 TCP 是面向连接的，就是客户端和服务端都是有一个结构维护连接的状态，就是指这个结构。我们这里先不详细分析里面的变量，因为太多了，后面我们遇到一个分析一个。</p>
+<p>首先，我们遇到的是 icsk_accept_queue。它是干什么的呢？</p>
+<p>在 TCP 的状态里面，有一个 listen 状态，当调用 listen 函数之后，就会进入这个状态，虽然我们写程序的时候，一般要等待服务端调用 accept 后，等待在哪里的时候，让客户端就发起连接。其实服务端一旦处于 listen 状态，不用 accept，客户端也能发起连接。其实 TCP 的状态中，没有一个是否被 accept 的状态，那 accept 函数的作用是什么呢？</p>
+<p>在内核中，为每个 Socket 维护两个队列。一个是已经建立了连接的队列，这时候连接三次握手已经完毕，处于 established 状态；一个是还没有完全建立连接的队列，这个时候三次握手还没完成，处于 syn_rcvd 的状态。</p>
+<p>服务端调用 accept 函数，其实是在第一个队列中拿出一个已经完成的连接进行处理。如果还没有完成就阻塞等待。这里的 icsk_accept_queue 就是第一个队列。</p>
+<p>初始化完之后，将 TCP 的状态设置为 TCP_LISTEN，再次调用 get_port 判断端口是否冲突。</p>
+<p>至此，listen 的逻辑就结束了。</p>
+<h2 id="解析-accept-函数">解析 accept 函数</h2>
+<p>接下来，我们解析服务端调用 accept。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		int __user *, upeer_addrlen)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		int __user *, upeer_addrlen, int, flags)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct socket *sock, *newsock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct file *newfile;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err, len, newfd, fput_needed;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sockaddr_storage address;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sock = sockfd_lookup_light(fd, &amp;err, &amp;fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newsock = sock_alloc();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newsock-&gt;type = sock-&gt;type;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newsock-&gt;ops = sock-&gt;ops;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newfd = get_unused_fd_flags(flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newfile = sock_alloc_file(newsock, flags, sock-&gt;sk-&gt;sk_prot_creator-&gt;name);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = sock-&gt;ops-&gt;accept(sock, newsock, sock-&gt;file-&gt;f_flags, false);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (upeer_sockaddr) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (newsock-&gt;ops-&gt;getname(newsock, (struct sockaddr *)&amp;address, &amp;len, 2) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		err = move_addr_to_user(&amp;address,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					len, upeer_sockaddr, upeer_addrlen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	fd_install(newfd, newfile);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>accept 函数的实现，印证了 socket 的原理中说的那样，原来的 socket 是监听 socket，这里我们会找到原来的 struct socket，并基于它去创建一个新的 newsock。这才是连接 socket。除此之外，我们还会创建一个新的 struct file 和 fd，并关联到 socket。</p>
+<p>这里面还会调用 struct socket 的 sock-&gt;ops-&gt;accept，也即会调用 inet_stream_ops 的 accept 函数，也即 inet_accept。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int inet_accept(struct socket *sock, struct socket *newsock, int flags, bool kern)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sock *sk1 = sock-&gt;sk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err = -EINVAL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sock *sk2 = sk1-&gt;sk_prot-&gt;accept(sk1, flags, &amp;err, kern);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sock_rps_record_flow(sk2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sock_graft(sk2, newsock);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newsock-&gt;state = SS_CONNECTED;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>inet_accept 会调用 struct sock 的 sk1-&gt;sk_prot-&gt;accept，也即 tcp_prot 的 accept 函数，inet_csk_accept 函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">/*</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span> <span class="n">This</span> <span class="n">will</span> <span class="n">accept</span> <span class="n">the</span> <span class="n">next</span> <span class="n">outstanding</span> <span class="n">connection</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">inet_csk_accept</span><span class="p">(</span><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="ne">int</span> <span class="n">flags</span><span class="p">,</span> <span class="ne">int</span> <span class="o">*</span><span class="n">err</span><span class="p">,</span> <span class="ne">bool</span> <span class="n">kern</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request_sock_queue</span> <span class="o">*</span><span class="n">queue</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_accept_queue</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request_sock</span> <span class="o">*</span><span class="n">req</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">newsk</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">error</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">!=</span> <span class="n">TCP_LISTEN</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">goto</span> <span class="n">out_err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="o">/*</span> <span class="n">Find</span> <span class="n">already</span> <span class="n">established</span> <span class="n">connection</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">reqsk_queue_empty</span><span class="p">(</span><span class="n">queue</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">long</span> <span class="n">timeo</span> <span class="o">=</span> <span class="n">sock_rcvtimeo</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">flags</span> <span class="o">&amp;</span> <span class="n">O_NONBLOCK</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">error</span> <span class="o">=</span> <span class="n">inet_csk_wait_for_connect</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">timeo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">req</span> <span class="o">=</span> <span class="n">reqsk_queue_remove</span><span class="p">(</span><span class="n">queue</span><span class="p">,</span> <span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">newsk</span> <span class="o">=</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">sk</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">/*</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span> <span class="n">Wait</span> <span class="k">for</span> <span class="n">an</span> <span class="n">incoming</span> <span class="n">connection</span><span class="p">,</span> <span class="n">avoid</span> <span class="n">race</span> <span class="n">conditions</span><span class="o">.</span> <span class="n">This</span> <span class="n">must</span> <span class="n">be</span> <span class="n">called</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span> <span class="n">with</span> <span class="n">the</span> <span class="n">socket</span> <span class="n">locked</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">inet_csk_wait_for_connect</span><span class="p">(</span><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">long</span> <span class="n">timeo</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">DEFINE_WAIT</span><span class="p">(</span><span class="n">wait</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">prepare_to_wait_exclusive</span><span class="p">(</span><span class="n">sk_sleep</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">wait</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					  <span class="n">TASK_INTERRUPTIBLE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">release_sock</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">reqsk_queue_empty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_accept_queue</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">timeo</span> <span class="o">=</span> <span class="n">schedule_timeout</span><span class="p">(</span><span class="n">timeo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">sched_annotate_sleep</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">lock_sock</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">reqsk_queue_empty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_accept_queue</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">!=</span> <span class="n">TCP_LISTEN</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="n">sock_intr_errno</span><span class="p">(</span><span class="n">timeo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">signal_pending</span><span class="p">(</span><span class="n">current</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EAGAIN</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">timeo</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">finish_wait</span><span class="p">(</span><span class="n">sk_sleep</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">wait</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>inet_csk_accept 的实现，印证了上面我们讲的两个队列的逻辑。如果 icsk_accept_queue 为空，则调用 inet_csk_wait_for_connect 进行等待；等待的时候，调用 schedule_timeout，让出 CPU，并且将进程状态设置为 TASK_INTERRUPTIBLE。</p>
+<p>如果再次 CPU 醒来，我们会接着判断 icsk_accept_queue 是否为空，同时也会调用 signal_pending 看有没有信号可以处理。一旦 icsk_accept_queue 不为空，就从 inet_csk_wait_for_connect 中返回，在队列中取出一个 struct sock 对象赋值给 newsk。</p>
+<h2 id="解析-connect-函数">解析 connect 函数</h2>
+<p>什么情况下，icsk_accept_queue 才不为空呢？当然是三次握手结束才可以。接下来我们来分析三次握手的过程。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/5a172fe7ad4c507668bbec42f51e4da1.png" alt=""></p>
+<p>三次握手一般是由客户端调用 connect 发起。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		int, addrlen)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct socket *sock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sockaddr_storage address;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err, fput_needed;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sock = sockfd_lookup_light(fd, &amp;err, &amp;fput_needed);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = move_addr_to_kernel(uservaddr, addrlen, &amp;address);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = sock-&gt;ops-&gt;connect(sock, (struct sockaddr *)&amp;address, addrlen, sock-&gt;file-&gt;f_flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>connect 函数的实现一开始你应该很眼熟，还是通过 sockfd_lookup_light，根据 fd 文件描述符，找到 struct socket 结构。接着，我们会调用 struct socket 结构里面 ops 的 connect 函数，根据前面创建 socket 的时候的设定，调用 inet_stream_ops 的 connect 函数，也即调用 inet_stream_connect。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">/*</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span>	<span class="n">Connect</span> <span class="n">to</span> <span class="n">a</span> <span class="n">remote</span> <span class="n">host</span><span class="o">.</span> <span class="n">There</span> <span class="n">is</span> <span class="n">regrettably</span> <span class="n">still</span> <span class="n">a</span> <span class="n">little</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span>	<span class="n">TCP</span> <span class="s1">&#39;magic&#39;</span> <span class="ow">in</span> <span class="n">here</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">__inet_stream_connect</span><span class="p">(</span><span class="n">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span> <span class="n">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="n">uaddr</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			  <span class="ne">int</span> <span class="n">addr_len</span><span class="p">,</span> <span class="ne">int</span> <span class="n">flags</span><span class="p">,</span> <span class="ne">int</span> <span class="n">is_sendmsg</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span> <span class="o">=</span> <span class="n">sock</span><span class="o">-&gt;</span><span class="n">sk</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">long</span> <span class="n">timeo</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">switch</span> <span class="p">(</span><span class="n">sock</span><span class="o">-&gt;</span><span class="n">state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="n">SS_UNCONNECTED</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EISCONN</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">!=</span> <span class="n">TCP_CLOSE</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">goto</span> <span class="n">out</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 		<span class="n">err</span> <span class="o">=</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_prot</span><span class="o">-&gt;</span><span class="n">connect</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">uaddr</span><span class="p">,</span> <span class="n">addr_len</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">sock</span><span class="o">-&gt;</span><span class="n">state</span> <span class="o">=</span> <span class="n">SS_CONNECTING</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="n">timeo</span> <span class="o">=</span> <span class="n">sock_sndtimeo</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">flags</span> <span class="o">&amp;</span> <span class="n">O_NONBLOCK</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">if</span> <span class="p">((</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">TCPF_SYN_SENT</span> <span class="o">|</span> <span class="n">TCPF_SYN_RECV</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">timeo</span> <span class="o">||</span> <span class="o">!</span><span class="n">inet_wait_for_connect</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">timeo</span><span class="p">,</span> <span class="n">writebias</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">goto</span> <span class="n">out</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 		<span class="n">err</span> <span class="o">=</span> <span class="n">sock_intr_errno</span><span class="p">(</span><span class="n">timeo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">signal_pending</span><span class="p">(</span><span class="n">current</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">goto</span> <span class="n">out</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">sock</span><span class="o">-&gt;</span><span class="n">state</span> <span class="o">=</span> <span class="n">SS_CONNECTED</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 __inet_stream_connect 里面，我们发现，如果 socket 处于 SS_UNCONNECTED 状态，那就调用 struct sock 的 sk-&gt;sk_prot-&gt;connect，也即 tcp_prot 的 connect 函数——tcp_v4_connect 函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inet_sock *inet = inet_sk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct tcp_sock *tp = tcp_sk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	__be16 orig_sport, orig_dport;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	__be32 daddr, nexthop;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct flowi4 *fl4;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct rtable *rt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	orig_sport = inet-&gt;inet_sport;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	orig_dport = usin-&gt;sin_port;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	rt = ip_route_connect(fl4, nexthop, inet-&gt;inet_saddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      RT_CONN_FLAGS(sk), sk-&gt;sk_bound_dev_if,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      IPPROTO_TCP,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      orig_sport, orig_dport, sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_set_state(sk, TCP_SYN_SENT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = inet_hash_connect(tcp_death_row, sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk_set_txhash(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	rt = ip_route_newports(fl4, rt, orig_sport, orig_dport,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			       inet-&gt;inet_sport, inet-&gt;inet_dport, sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* OK, now commit destination to socket.  */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk-&gt;sk_gso_type = SKB_GSO_TCPV4;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sk_setup_caps(sk, &amp;rt-&gt;dst);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (likely(!tp-&gt;repair)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (!tp-&gt;write_seq)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			tp-&gt;write_seq = secure_tcp_seq(inet-&gt;inet_saddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						       inet-&gt;inet_daddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						       inet-&gt;inet_sport,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						       usin-&gt;sin_port);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		tp-&gt;tsoffset = secure_tcp_ts_off(sock_net(sk),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						 inet-&gt;inet_saddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						 inet-&gt;inet_daddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	rt = NULL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = tcp_connect(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 tcp_v4_connect 函数中，ip_route_connect 其实是做一个路由的选择。为什么呢？因为三次握手马上就要发送一个 SYN 包了，这就要凑齐源地址、源端口、目标地址、目标端口。目标地址和目标端口是服务端的，已经知道源端口是客户端随机分配的，源地址应该用哪一个呢？这时候要选择一条路由，看从哪个网卡出去，就应该填写哪个网卡的 IP 地址。</p>
+<p>接下来，在发送 SYN 之前，我们先将客户端 socket 的状态设置为 TCP_SYN_SENT。然后初始化 TCP 的 seq num，也即 write_seq，然后调用 tcp_connect 进行发送。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/* Build a SYN and send it off. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int tcp_connect(struct sock *sk)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct tcp_sock *tp = tcp_sk(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct sk_buff *buff;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int err;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_connect_init(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	buff = sk_stream_alloc_skb(sk, 0, sk-&gt;sk_allocation, true);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_init_nondata_skb(buff, tp-&gt;write_seq++, TCPHDR_SYN);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_mstamp_refresh(tp);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tp-&gt;retrans_stamp = tcp_time_stamp(tp);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_connect_queue_skb(sk, buff);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tcp_ecn_send_syn(sk, buff);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	/* Send off SYN; include data in Fast Open. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	err = tp-&gt;fastopen_req ? tcp_send_syn_data(sk, buff) :
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	      tcp_transmit_skb(sk, buff, 1, sk-&gt;sk_allocation);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tp-&gt;snd_nxt = tp-&gt;write_seq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	tp-&gt;pushed_seq = tp-&gt;write_seq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	buff = tcp_send_head(sk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (unlikely(buff)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		tp-&gt;snd_nxt	= TCP_SKB_CB(buff)-&gt;seq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		tp-&gt;pushed_seq	= TCP_SKB_CB(buff)-&gt;seq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* Timer for repeating the SYN until an answer. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				  inet_csk(sk)-&gt;icsk_rto, TCP_RTO_MAX);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 tcp_connect 中，有一个新的结构 struct tcp_sock，如果打开他，你会发现他是 struct inet_connection_sock 的一个扩展，struct inet_connection_sock 在 struct tcp_sock 开头的位置，通过强制类型转换访问，故伎重演又一次。</p>
+<p>struct tcp_sock 里面维护了更多的 TCP 的状态，咱们同样是遇到了再分析。</p>
+<p>接下来 tcp_init_nondata_skb 初始化一个 SYN 包，tcp_transmit_skb 将 SYN 包发送出去，inet_csk_reset_xmit_timer 设置了一个 timer，如果 SYN 发送不成功，则再次发送。</p>
+<p>发送网络包的过程，我们放到下一节讲解。这里我们姑且认为 SYN 已经发送出去了。</p>
+<p>我们回到 __inet_stream_connect 函数，在调用 sk-&gt;sk_prot-&gt;connect 之后，inet_wait_for_connect 会一直等待客户端收到服务端的 ACK。而我们知道，服务端在 accept 之后，也是在等待中。</p>
+<p>网络包是如何接收的呢？对于解析的详细过程，我们会在下下节讲解，这里为了解析三次握手，我们简单的看网络包接收到 TCP 层做的部分事情。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static struct net_protocol tcp_protocol = {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.early_demux	=	tcp_v4_early_demux,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.early_demux_handler =  tcp_v4_early_demux,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.handler	=	tcp_v4_rcv,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.err_handler	=	tcp_v4_err,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.no_policy	=	1,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.netns_ok	=	1,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	.icmp_strict_tag_validation = 1,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们通过 struct net_protocol 结构中的 handler 进行接收，调用的函数是 tcp_v4_rcv。接下来的调用链为 tcp_v4_rcv-&gt;tcp_v4_do_rcv-&gt;tcp_rcv_state_process。tcp_rcv_state_process，顾名思义，是用来处理接收一个网络包后引起状态变化的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">tcp_rcv_state_process</span><span class="p">(</span><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">tcp_sock</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="n">tcp_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">struct</span> <span class="n">tcphdr</span> <span class="o">*</span><span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request_sock</span> <span class="o">*</span><span class="n">req</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">queued</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">bool</span> <span class="n">acceptable</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">switch</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="n">TCP_LISTEN</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">syn</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">acceptable</span> <span class="o">=</span> <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">conn_request</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">acceptable</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">consume_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>目前服务端是处于 TCP_LISTEN 状态的，而且发过来的包是 SYN，因而就有了上面的代码，调用 icsk-&gt;icsk_af_ops-&gt;conn_request 函数。struct inet_connection_sock 对应的操作是 inet_connection_sock_af_ops，按照下面的定义，其实调用的是 tcp_v4_conn_request。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">struct</span> <span class="n">inet_connection_sock_af_ops</span> <span class="n">ipv4_specific</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">queue_xmit</span>        <span class="o">=</span> <span class="n">ip_queue_xmit</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">send_check</span>        <span class="o">=</span> <span class="n">tcp_v4_send_check</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">rebuild_header</span>    <span class="o">=</span> <span class="n">inet_sk_rebuild_header</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">sk_rx_dst_set</span>     <span class="o">=</span> <span class="n">inet_sk_rx_dst_set</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">conn_request</span>      <span class="o">=</span> <span class="n">tcp_v4_conn_request</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">syn_recv_sock</span>     <span class="o">=</span> <span class="n">tcp_v4_syn_recv_sock</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">net_header_len</span>    <span class="o">=</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">struct</span> <span class="n">iphdr</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">setsockopt</span>        <span class="o">=</span> <span class="n">ip_setsockopt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">getsockopt</span>        <span class="o">=</span> <span class="n">ip_getsockopt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">addr2sockaddr</span>     <span class="o">=</span> <span class="n">inet_csk_addr2sockaddr</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">sockaddr_len</span>      <span class="o">=</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">struct</span> <span class="n">sockaddr_in</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">.</span><span class="n">mtu_reduced</span>       <span class="o">=</span> <span class="n">tcp_v4_mtu_reduced</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>tcp_v4_conn_request 会调用 tcp_conn_request，这个函数也比较长，里面调用了 send_synack，但实际调用的是 tcp_v4_send_synack。具体发送的过程我们不去管它，看注释我们能知道，这是收到了 SYN 后，回复一个 SYN-ACK，回复完毕后，服务端处于 TCP_SYN_RECV。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">tcp_conn_request</span><span class="p">(</span><span class="n">struct</span> <span class="n">request_sock_ops</span> <span class="o">*</span><span class="n">rsk_ops</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		     <span class="k">const</span> <span class="n">struct</span> <span class="n">tcp_request_sock_ops</span> <span class="o">*</span><span class="n">af_ops</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		     <span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">af_ops</span><span class="o">-&gt;</span><span class="n">send_synack</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fl</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">foc</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				    <span class="o">!</span><span class="n">want_cookie</span> <span class="err">?</span> <span class="n">TCP_SYNACK_NORMAL</span> <span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						   <span class="n">TCP_SYNACK_COOKIE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">/*</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*</span>	<span class="n">Send</span> <span class="n">a</span> <span class="n">SYN</span><span class="o">-</span><span class="n">ACK</span> <span class="n">after</span> <span class="n">having</span> <span class="n">received</span> <span class="n">a</span> <span class="n">SYN</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">tcp_v4_send_synack</span><span class="p">(</span><span class="k">const</span> <span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">struct</span> <span class="n">dst_entry</span> <span class="o">*</span><span class="n">dst</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      <span class="n">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      <span class="n">struct</span> <span class="n">request_sock</span> <span class="o">*</span><span class="n">req</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      <span class="n">struct</span> <span class="n">tcp_fastopen_cookie</span> <span class="o">*</span><span class="n">foc</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      <span class="k">enum</span> <span class="n">tcp_synack_type</span> <span class="n">synack_type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span><span class="o">......</span><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个时候，轮到客户端接收网络包了。都是 TCP 协议栈，所以过程和服务端没有太多区别，还是会走到 tcp_rcv_state_process 函数的，只不过由于客户端目前处于 TCP_SYN_SENT 状态，就进入了下面的代码分支。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">tcp_rcv_state_process</span><span class="p">(</span><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">tcp_sock</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="n">tcp_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">struct</span> <span class="n">tcphdr</span> <span class="o">*</span><span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request_sock</span> <span class="o">*</span><span class="n">req</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">queued</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">bool</span> <span class="n">acceptable</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">switch</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="n">TCP_SYN_SENT</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tp</span><span class="o">-&gt;</span><span class="n">rx_opt</span><span class="o">.</span><span class="n">saw_tstamp</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tcp_mstamp_refresh</span><span class="p">(</span><span class="n">tp</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">queued</span> <span class="o">=</span> <span class="n">tcp_rcv_synsent_state_process</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">queued</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">return</span> <span class="n">queued</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="o">/*</span> <span class="n">Do</span> <span class="n">step6</span> <span class="n">onward</span> <span class="n">by</span> <span class="n">hand</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tcp_urg</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">__kfree_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tcp_data_snd_check</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>tcp_rcv_synsent_state_process 会调用 tcp_send_ack，发送一个 ACK-ACK，发送后客户端处于 TCP_ESTABLISHED 状态。</p>
+<p>又轮到服务端接收网络包了，我们还是归 tcp_rcv_state_process 函数处理。由于服务端目前处于状态 TCP_SYN_RECV 状态，因而又走了另外的分支。当收到这个网络包的时候，服务端也处于 TCP_ESTABLISHED 状态，三次握手结束。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">tcp_rcv_state_process</span><span class="p">(</span><span class="n">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="n">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">tcp_sock</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="n">tcp_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">struct</span> <span class="n">tcphdr</span> <span class="o">*</span><span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request_sock</span> <span class="o">*</span><span class="n">req</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">queued</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">bool</span> <span class="n">acceptable</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="n">TCP_SYN_RECV</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">req</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">icsk_retransmits</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">reqsk_fastopen_remove</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="bp">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="o">/*</span> <span class="n">Make</span> <span class="n">sure</span> <span class="n">socket</span> <span class="n">is</span> <span class="n">routed</span><span class="p">,</span> <span class="k">for</span> <span class="n">correct</span> <span class="n">metrics</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">rebuild_header</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">tcp_call_bpf</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">tcp_init_congestion_control</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 			<span class="n">tcp_mtup_init</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">tp</span><span class="o">-&gt;</span><span class="n">copied_seq</span> <span class="o">=</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">rcv_nxt</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">tcp_init_buffer_space</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">smp_mb</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tcp_set_state</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">TCP_ESTABLISHED</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state_change</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_socket</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">sk_wake_async</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">SOCK_WAKE_IO</span><span class="p">,</span> <span class="n">POLL_OUT</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tp</span><span class="o">-&gt;</span><span class="n">snd_una</span> <span class="o">=</span> <span class="n">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">ack_seq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tp</span><span class="o">-&gt;</span><span class="n">snd_wnd</span> <span class="o">=</span> <span class="n">ntohs</span><span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">window</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">rx_opt</span><span class="o">.</span><span class="n">snd_wscale</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">tcp_init_wl</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">seq</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结时刻">总结时刻</h2>
+<p>这一节除了网络包的接收和发送，其他的系统调用我们都分析到了。可以看出来，它们有一个统一的数据结构和流程。具体如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/71e1fd97c0f60f53d4bcd9a4dbd93d7c.png" alt=""></p>
+<p>首先，Socket 系统调用会有三级参数 family、type、protocal，通过这三级参数，分别在 net_proto_family 表中找到 type 链表，在 type 链表中找到 protocal 对应的操作。这个操作分为两层，对于 TCP 协议来讲，第一层是 inet_stream_ops 层，第二层是 tcp_prot 层。</p>
+<p>于是，接下来的系统调用规律就都一样了：</p>
+<ul>
+<li>bind 第一层调用 inet_stream_ops 的 inet_bind 函数，第二层调用 tcp_prot 的 inet_csk_get_port 函数；</li>
+<li>listen 第一层调用 inet_stream_ops 的 inet_listen 函数，第二层调用 tcp_prot 的 inet_csk_get_port 函数；</li>
+<li>accept 第一层调用 inet_stream_ops 的 inet_accept 函数，第二层调用 tcp_prot 的 inet_csk_accept 函数；</li>
+<li>connect 第一层调用 inet_stream_ops 的 inet_stream_connect 函数，第二层调用 tcp_prot 的 tcp_v4_connect 函数。</li>
+</ul>
+<h2 id="课堂练习">课堂练习</h2>
+<p>TCP 的三次握手协议非常重要，请你务必跟着代码走读一遍。另外我们这里重点关注了 TCP 的场景，请走读代码的时候，也看一下 UDP 是如何实现各层的函数的。</p>
+<p>欢迎留言和我分享你的疑惑和见解，也欢迎可以收藏本节内容，反复研读。你也可以把今天的内容分享给你的朋友，和他一起学习和进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/1a5564dd4e1c9f25d4772c7f844ca84a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/">趣谈Linux操作系统</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/44__openresty_%E7%9A%84%E6%9D%80%E6%89%8B%E9%94%8F%E5%8A%A8%E6%80%81/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">44__OpenResty_的杀手锏：动态</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/44__%E6%B5%8B%E8%AF%95%E5%85%88%E8%A1%8C%E6%B5%8B%E8%AF%95%E9%A9%B1%E5%8A%A8%E5%BC%80%E5%8F%91tdd/">
+            <span class="next-text nav-default">44__测试先行：测试驱动开发(TDD)</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

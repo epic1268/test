@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>45__弹力设计篇之“服务的状态” - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="之前在我们讲的幂等设计中，为了过滤掉已经处理过的请求，其中需要保存处理过的状态，为了把服务做成无状态的，我们引入了第三方的存储。而这一篇中，我们来聊聊服务的状态这个话题。我认为，只有清楚地了解了状态这个事，我们才有可能设计出更好或是更有弹力的系统架构。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/45__%E5%BC%B9%E5%8A%9B%E8%AE%BE%E8%AE%A1%E7%AF%87%E4%B9%8B%E6%9C%8D%E5%8A%A1%E7%9A%84%E7%8A%B6%E6%80%81/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/45__%E5%BC%B9%E5%8A%9B%E8%AE%BE%E8%AE%A1%E7%AF%87%E4%B9%8B%E6%9C%8D%E5%8A%A1%E7%9A%84%E7%8A%B6%E6%80%81/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="45__弹力设计篇之“服务的状态”">
+  <meta property="og:description" content="之前在我们讲的幂等设计中，为了过滤掉已经处理过的请求，其中需要保存处理过的状态，为了把服务做成无状态的，我们引入了第三方的存储。而这一篇中，我们来聊聊服务的状态这个话题。我认为，只有清楚地了解了状态这个事，我们才有可能设计出更好或是更有弹力的系统架构。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="左耳听风">
+
+  <meta itemprop="name" content="45__弹力设计篇之“服务的状态”">
+  <meta itemprop="description" content="之前在我们讲的幂等设计中，为了过滤掉已经处理过的请求，其中需要保存处理过的状态，为了把服务做成无状态的，我们引入了第三方的存储。而这一篇中，我们来聊聊服务的状态这个话题。我认为，只有清楚地了解了状态这个事，我们才有可能设计出更好或是更有弹力的系统架构。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3650">
+  <meta itemprop="keywords" content="左耳听风">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="45__弹力设计篇之“服务的状态”">
+  <meta name="twitter:description" content="之前在我们讲的幂等设计中，为了过滤掉已经处理过的请求，其中需要保存处理过的状态，为了把服务做成无状态的，我们引入了第三方的存储。而这一篇中，我们来聊聊服务的状态这个话题。我认为，只有清楚地了解了状态这个事，我们才有可能设计出更好或是更有弹力的系统架构。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">45__弹力设计篇之“服务的状态”</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3650 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#无状态的服务-stateless">无状态的服务 Stateless</a></li>
+    <li><a href="#有状态的服务-stateful">有状态的服务 Stateful</a></li>
+    <li><a href="#服务状态的容错设计">服务状态的容错设计</a></li>
+    <li><a href="#小结">小结</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>之前在我们讲的幂等设计中，为了过滤掉已经处理过的请求，其中需要保存处理过的状态，为了把服务做成无状态的，我们引入了第三方的存储。而这一篇中，我们来聊聊服务的状态这个话题。我认为，只有清楚地了解了状态这个事，我们才有可能设计出更好或是更有弹力的系统架构。</p>
+<p>所谓“状态”，就是为了保留程序的一些数据或是上下文。比如之前幂等性设计中所说的需要保留每一次请求的状态，或是像用户登录时的 Session，我们需要这个 Session 来判断这个请求的合法性，还有一个业务流程中需要让多个服务组合起来形成一个业务逻辑的运行上下文 Context。这些都是所谓的状态。</p>
+<p>我们的代码中基本上到处都是这样的状态。</p>
+<h1 id="无状态的服务-stateless">无状态的服务 Stateless</h1>
+<p>一直以来，无状态的服务都被当作分布式服务设计的最佳实践和铁律。因为无状态的服务对于扩展性和运维实在是太方便了。没有状态的服务，可以随意地增加和减少结点，同样可以随意地搬迁。而且，无状态的服务可以大幅度降低代码的复杂度以及 Bug 数，因为没有状态，所以也没有明显的“副作用”。</p>
+<p>基本上来说，无状态的服务和“函数式编程”的思维方式如出一辙。在函数式编程中，一个铁律是，函数是无状态的。换句话说，函数是 immutable 不变的，所有的函数只描述其逻辑和算法，根本不保存数据，也不会修改输入的数据，而是把计算好的结果返回出去，哪怕要把输入的数据重新拷贝一份并只做少量的修改（关于函数式编程可以参看我在 CoolShell 上的文章《<a href="./10822.md">函数式编程</a>》）。</p>
+<p>但是，现实世界是一定会有状态的。这些状态可能表现在如下的几个方面。</p>
+<ul>
+<li>程序调用的结果。</li>
+<li>服务组合下的上下文。</li>
+<li>服务的配置。</li>
+</ul>
+<p>为了做出无状态的服务，我们通常需要把状态保存到其他的地方。比如，不太重要的数据可以放到 Redis 中，重要的数据可以放到 MySQL 中，或是像 ZooKeeper/Etcd 这样的高可用的强一致性的存储中，或是分布式文件系统中。</p>
+<p>于是，我们为了做成无状态的服务，会导致这些服务需要耦合第三方有状态的存储服务。一方面是有依赖，另一方面也增加了网络开销，导致服务的响应时间也会变慢。</p>
+<p>所以，第三方的这些存储服务也必须要做成高可用高扩展的方式。而且，为了减少网络开销，还需要在无状态的服务中增加缓存机制。然而，下次这个用户的请求并不一定会在同一台机器，所以，这个缓存会在所有的机器上都创建，也算是一种浪费吧。</p>
+<p>这种“转移责任”的玩法也催生出了对分布式存储的强烈需求。正如之前在《分布式系统架构的本质》系列文章中谈到的关键技术之一的“<a href="./1609.md">状态 / 数据调度</a>”所说的，因为数据层的 scheme 众多，所以，很难做出一个放之四海皆准的分布式存储系统。</p>
+<p>这也是为什么无状态的服务需要依赖于像 ZooKeeper/Etcd 这样的高可用的有强一致的服务，或是依赖于底层的分布式文件系统（像开源的 Ceph 和 GlusterFS）。而现在分布式数据库也开始将服务和存储分离，也是为了让自己的系统更有弹力。</p>
+<h1 id="有状态的服务-stateful">有状态的服务 Stateful</h1>
+<p>在今天看来，有状态的服务在今天看上去的确比较“反动”，但是，我们也需要比较一下它和无状态服务的优劣。</p>
+<p>正如上面所说的，无状态服务在程序 Bug 上和水平扩展上有非常优秀的表现，但是其需要把状态存放在一个第三方存储上，增加了网络开销，而在服务内的缓存需要在所有的服务实例上都有（因为每次请求不会都落在同一个服务实例上），这是比较浪费资源的。</p>
+<p>而有状态的服务有这些好处。</p>
+<ul>
+<li><strong>数据本地化（Data Locality）</strong>。一方面状态和数据是本机保存，这方面不但有更低的延时，而且对于数据密集型的应用来说，这会更快。</li>
+<li><strong>更高的可用性和更强的一致性</strong>。也就是 CAP 原理中的 A 和 C。</li>
+</ul>
+<p>为什么会这样呢？因为对于有状态的服务，我们需要对于客户端传来的请求，都必需保证其落在同一个实例上，这叫 Sticky Session 或是 Sticky Connection。这样一来，我们完全不需要考虑数据要被加载到不同的结点上去，而且这样的模型更容易理解和实现。</p>
+<p>可见，最重要的区别就是，无状态的服务需要我们把数据同步到不同的结点上，而有状态的服务通过 Sticky Session 做数据分片（当然，同步有同步的问题，分片也有分片的问题，这两者没有谁比谁好，都有 trade-off）。</p>
+<p>这种 Sticky Session 是怎么实现的呢？</p>
+<p>最简单的实现就是用持久化的长连接。就算是 HTTP 协议也要用长连接。或是通过一个简单的哈希（hash）算法，比如，通过 uid 求模的方式，走一致性哈希的玩法，也可以方便地做水平扩展。</p>
+<p>然而，这种方式也会带来问题，那就是，结点的负载和数据并不会很均匀。尤其是长连接的方式，连上了就不断了。所以，玩长连接的玩法一般都会有一种叫“反向压力 (Back Pressure)”。也就是说，如果服务端成为了热点，那么就主动断连接，这种玩法也比较危险，需要客户端的配合，否则容易出 Bug。</p>
+<p>如果要做到负载和数据均匀的话，我们需要有一个元数据索引来映射后端服务实例和请求的对应关键，还需要一个路由结点，这个路由结点会根据元数据索引来路由，而这个元数据索引表会根据后端服务的压力来重新组织相关的映射。</p>
+<p>当然，我们可以把这个路由结点给去掉，让有状态的服务直接路由。要做到这点，一般来说，有两种方式。一种是直接使用配置，在节点启动时把其元数据读到内存中，但是这样一来增加或减少结点都需要更新这个配置，会导致其它结点也一同要重新读入。</p>
+<p>另一种比较好的做法是使用到 Gossip 协议，通过这个协议在各个节点之间互相散播消息来同步元数据，这样新增或减少结点，集群内部可以很容易重新分配（听起来要实现好真的好复杂）。</p>
+<p>在有状态的服务上做自动化伸缩的是有一些相关的真实案例的。比如，Facebook 的 Scuba，这是一个分布式的内存数据库，它使用了静态的方式，也就是上面的第一种方式。Uber 的 Ringpop 是一个开源的 Node.js 的根据地理位置分片的路由请求的库（开源地址为：<a href="https://github.com/uber-node/ringpop-node">https://github.com/uber-node/ringpop-node</a> ）。</p>
+<p>还有微软的 Orleans，Halo 4 就是基于其开发的，其使用了 Gossip 协议，一致性哈希和 DHT 技术相结合的方式。用户通过其 ID 的一致性哈希算法映射到一个节点上，而这个节点保存了这个用户对应的 DHT，再通过 DHT 定位到处理用户请求的位置，这个项目也是开源的（开源地址为： <a href="https://github.com/dotnet/orleans">https://github.com/dotnet/orleans</a> ）。</p>
+<p>关于可扩展的有状态服务，这里强烈推荐 Twitter 的美女工程师 Caitie McCaffrey 的演讲 Youtube 视频《Building Scalable Stateful Service》(演讲 PPT)，其文字版是在 High Scalability 上的这篇文章《Making the Case for Building Scalable Stateful Services in the Modern Era》</p>
+<h1 id="服务状态的容错设计">服务状态的容错设计</h1>
+<p>在容错设计中，服务状态是一件非常复杂的事。尤其对于运维来说，因为你要调度服务就需要调度服务的状态，迁移服务的状态就需要迁移服务的数据。在数据量比较大的情况下，这一点就变得更为困难了。</p>
+<p>虽然上述有状态的服务的调度通过 Sticky Session 的方式是一种方式，但我依然觉得理论上来说虽然可以这么干，这实际在运维的过程中，这么干还是件挺麻烦的事儿，不是很好的玩法。</p>
+<p>很多系统的高可用的设计都会采取数据在运行时就复制的方案，比如：ZooKeeper、Kafka、Redis 或是 ElasticSearch 等等。在运行时进行数据复制就需要考虑一致性的问题，所以，强一致性的系统一般会使用两阶段提交。</p>
+<p>这要求所有的结点都需要有一致的结果，这是 CAP 里的 CA 系统。而也有的系统采用的是大多数人一致就可以了，比如 Paxos 算法，这是 CP 系统。</p>
+<p>但我们需要知道，即使是这样，当一个结点挂掉了以后，在另外一个地方重新恢复这个结点时，这个结点需要把数据同步过来才能提供服务。然而，如果数据量过大，这个过程可能会很漫长，这也会影响我们系统的可用性。</p>
+<p>所以，我们需要使用底层的分布式文件系统，对于有状态的数据不但在运行时进行多结点间的复制，同时为了避免挂掉，还需要把数据持久化在硬盘上，这个硬盘可以是挂载到本地硬盘的一个外部分布式的文件卷。</p>
+<p>这样当结点挂掉以后，以另外一个宿主机上启动一个新的服务实例时，这个服务可以从远程把之前的文件系统挂载过来。然后，在启动的过程中就装载好了大多数的数据，从而可以从网络其它结点上同步少量的数据，因而可以快速地恢复和提供服务。</p>
+<p>这一点，对于有状态的服务来说非常关键。所以，使用一个分布式文件系统是调度有状态服务的关键。</p>
+<h1 id="小结">小结</h1>
+<p>好了，我们来总结一下今天分享的主要内容。首先，我讲了无状态的服务。无状态的服务就像一个函数一样，对于给定的输入，它会给出唯一确定的输出。它的好处是很容易运维和伸缩，但需要底层有分布式的数据库支持。</p>
+<p>接着，我讲了有状态的服务，它们通过 Sticky Session、一致性 Hash 和 DHT 等技术实现状态和请求的关联，并将数据同步到分布式数据库中；利用分布式文件系统，还能在节点挂掉时快速启动新实例。下篇文章中，我们讲述补偿事务。希望对你有帮助。</p>
+<p>也欢迎你分享一下你所实现的分布式服务是无状态的，还是有状态的？用到了哪些技术？</p>
+<p>文末给出了《分布式系统设计模式》系列文章的目录，希望你能在这个列表里找到自己感兴趣的内容。</p>
+<ul>
+<li>弹力设计篇
+<ul>
+<li><a href="./3912.md">认识故障和弹力设计</a></li>
+<li><a href="./3917.md">隔离设计 Bulkheads</a></li>
+<li><a href="./3926.md">异步通讯设计 Asynchronous</a></li>
+<li><a href="./4050.md">幂等性设计 Idempotency</a></li>
+<li><a href="./4086.md">服务的状态 State</a></li>
+<li><a href="./4087.md">补偿事务 Compensating Transaction</a></li>
+<li><a href="./4121.md">重试设计 Retry</a></li>
+<li><a href="./4241.md">熔断设计 Circuit Breaker</a></li>
+<li><a href="./4245.md">限流设计 Throttle</a></li>
+<li><a href="./4252.md">降级设计 degradation</a></li>
+<li><a href="./4253.md">弹力设计总结</a></li>
+</ul>
+</li>
+<li>管理设计篇
+<ul>
+<li><a href="./5175.md">分布式锁 Distributed Lock</a></li>
+<li><a href="./5819.md">配置中心 Configuration Management</a></li>
+<li><a href="./5909.md">边车模式 Sidecar</a></li>
+<li><a href="./5920.md">服务网格 Service Mesh</a></li>
+<li><a href="./6086.md">网关模式 Gateway</a></li>
+<li><a href="./6283.md">部署升级策略</a></li>
+</ul>
+</li>
+<li>性能设计篇
+<ul>
+<li><a href="./6282.md">缓存 Cache</a></li>
+<li><a href="./7036.md">异步处理 Asynchronous</a></li>
+<li><a href="./7045.md">数据库扩展</a></li>
+<li><a href="./7047.md">秒杀 Flash Sales</a></li>
+<li><a href="./7086.md">边缘计算 Edge Computing</a></li>
+</ul>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/1c1e992cf41f5294df097aabed82f9e4.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/">左耳听风</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/45__%E6%89%93%E8%9B%87%E6%89%93%E4%B8%83%E5%AF%B8%E7%B2%BE%E5%87%86%E6%B5%8B%E8%AF%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">45__打蛇打七寸：精准测试</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/45__%E5%8F%91%E9%80%81%E7%BD%91%E7%BB%9C%E5%8C%85%E4%B8%8A%E5%A6%82%E4%BD%95%E8%A1%A8%E8%BE%BE%E6%88%91%E4%BB%AC%E6%83%B3%E8%AE%A9%E5%90%88%E4%BD%9C%E4%BC%99%E4%BC%B4%E5%81%9A%E4%BB%80%E4%B9%88/">
+            <span class="next-text nav-default">45__发送网络包（上）：如何表达我们想让合作伙伴做什么？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

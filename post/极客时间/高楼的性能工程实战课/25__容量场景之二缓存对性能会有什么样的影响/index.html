@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25__容量场景之二：缓存对性能会有什么样的影响？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是高楼。
+上节课，我们经历了三个阶段的分析优化，分别解决了在压力线程不变的情况下，TPS 随时间增加而增加的问题，还有数据库加索引的问题，以及 Kubernetes 调度不均衡的问题。最后，TPS 曲线看起来挺正常了，但是命运不会因为我努力了就会放过我。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/25__%E5%AE%B9%E9%87%8F%E5%9C%BA%E6%99%AF%E4%B9%8B%E4%BA%8C%E7%BC%93%E5%AD%98%E5%AF%B9%E6%80%A7%E8%83%BD%E4%BC%9A%E6%9C%89%E4%BB%80%E4%B9%88%E6%A0%B7%E7%9A%84%E5%BD%B1%E5%93%8D/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/25__%E5%AE%B9%E9%87%8F%E5%9C%BA%E6%99%AF%E4%B9%8B%E4%BA%8C%E7%BC%93%E5%AD%98%E5%AF%B9%E6%80%A7%E8%83%BD%E4%BC%9A%E6%9C%89%E4%BB%80%E4%B9%88%E6%A0%B7%E7%9A%84%E5%BD%B1%E5%93%8D/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25__容量场景之二：缓存对性能会有什么样的影响？">
+  <meta property="og:description" content="你好，我是高楼。
+上节课，我们经历了三个阶段的分析优化，分别解决了在压力线程不变的情况下，TPS 随时间增加而增加的问题，还有数据库加索引的问题，以及 Kubernetes 调度不均衡的问题。最后，TPS 曲线看起来挺正常了，但是命运不会因为我努力了就会放过我。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="高楼的性能工程实战课">
+
+  <meta itemprop="name" content="25__容量场景之二：缓存对性能会有什么样的影响？">
+  <meta itemprop="description" content="你好，我是高楼。
+上节课，我们经历了三个阶段的分析优化，分别解决了在压力线程不变的情况下，TPS 随时间增加而增加的问题，还有数据库加索引的问题，以及 Kubernetes 调度不均衡的问题。最后，TPS 曲线看起来挺正常了，但是命运不会因为我努力了就会放过我。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6283">
+  <meta itemprop="keywords" content="高楼的性能工程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25__容量场景之二：缓存对性能会有什么样的影响？">
+  <meta name="twitter:description" content="你好，我是高楼。
+上节课，我们经历了三个阶段的分析优化，分别解决了在压力线程不变的情况下，TPS 随时间增加而增加的问题，还有数据库加索引的问题，以及 Kubernetes 调度不均衡的问题。最后，TPS 曲线看起来挺正常了，但是命运不会因为我努力了就会放过我。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25__容量场景之二：缓存对性能会有什么样的影响？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6283 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#第四阶段分析">第四阶段分析</a>
+          <ul>
+            <li><a href="#场景压力数据">场景压力数据</a></li>
+            <li><a href="#拆分响应时间">拆分响应时间</a></li>
+            <li><a href="#全局监控分析">全局监控分析</a></li>
+            <li><a href="#定向监控分析">定向监控分析</a></li>
+          </ul>
+        </li>
+        <li><a href="#第五阶段分析">第五阶段分析</a>
+          <ul>
+            <li><a href="#场景运行数据">场景运行数据</a></li>
+            <li><a href="#全局监控分析-1">全局监控分析</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后作业">课后作业</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是高楼。</p>
+<p>上节课，我们经历了三个阶段的分析优化，分别解决了在压力线程不变的情况下，TPS 随时间增加而增加的问题，还有数据库加索引的问题，以及 Kubernetes 调度不均衡的问题。最后，TPS 曲线看起来挺正常了，但是命运不会因为我努力了就会放过我。</p>
+<p>为什么这么说呢？因为在上节课中，我们的场景只持续了十几分钟，对于容量场景来说，时间还是不够长。你知道，压力持续十几分钟，且 TPS 显示正常，并不能说明系统没有问题。</p>
+<p>因此，我又对系统进行持续的压力测试，就是在这个过程中，又遇到了新的问题……</p>
+<h2 id="第四阶段分析">第四阶段分析</h2>
+<h3 id="场景压力数据">场景压力数据</h3>
+<p>这是我在进行持续加压过程中，得到的场景数据：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/456f538748e68dcd43124728956c9866.png" alt=""></p>
+<p>看上面的曲线图就能知道，这是在压力持续的过程中，出现了 TPS 掉下来的问题，这是不能接受的。</p>
+<h3 id="拆分响应时间">拆分响应时间</h3>
+<p>针对上述问题，我们先来看一下现在的时间消耗。这是已经运行了一段时间的响应时间图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/9934d388dbe1dbfd4adf93bdd7dfb099.png" alt=""></p>
+<p>我们可以根据整体的平均响应时间，一个个分析这些接口的时间消耗在了哪里。其实，从这张图就能看出，所有的业务时间相比上一节课的响应时间图都增加了。由于所有业务的响应时间都增加了，说明不是某个业务本身的问题，所以，我们任意分析一个接口就可以。</p>
+<p>这里我用生成确认订单这个接口做时间拆分。在之前部署系统的时候，我们把 SkyWalking 采样率设置得非常低，只有 5% 左右，目的为了不让 APM 影响性能和网络。</p>
+<p>下面这些数据是按分钟平均的。</p>
+<ol>
+<li>Gateway：</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/fa57c3b9a552174c065fbf4ec81ae4bb.png" alt=""></p>
+<ol start="2">
+<li>Order：</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/b3445c32160f02650308993129057523.png" alt=""></p>
+<ol start="3">
+<li>Cart：</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/71605ebe6118d3c354e12cff3e199180.png" alt=""></p>
+<ol start="4">
+<li>Member：</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/a1190241c49855978e8aece69a1946af.png" alt=""></p>
+<ol start="5">
+<li>Auth：</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/9e65d4960a38da5b7dcb1ebf860c7291.png" alt=""></p>
+<p>从数据上来看，似乎每个服务都和整体响应时间慢有关。悲催的场景总是这样。</p>
+<p>不过，别慌张，我们仍然按照全局到定向的分析思路来走就可以了。我们先看全局监控数据。</p>
+<h3 id="全局监控分析">全局监控分析</h3>
+<p>从全局监控的第一个界面来看，worker-4 上的 CPU 资源使用比较高，其次是 worker-6：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/64cefe0f6a762add99a892be2342fd7b.png" alt=""></p>
+<p>我们一个一个来收拾。</p>
+<p>我们先进入到 worker-4 中，执行 top/vmstat 命令，截取到一些重要的数据，下面这些是 worker-4 这个节点更为详细的全局监控数据：</p>
+<p>&ndash; vmstat 的数据<br>
+procs &mdash;&mdash;&mdash;&ndash;memory&mdash;&mdash;&mdash;- &mdash;swap&ndash; &mdash;&ndash;io&mdash;- -system&ndash; &mdash;&mdash;cpu&mdash;&ndash;<br>
+​r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa s<br>
+12  0      0 4484940   1100 4184984    0    0     0     0 45554 21961 58 25 14  0  3<br>
+9  0      0 4484460   1100 4185512    0    0     0     0 45505 20851 60 25 14  0  1<br>
+16  0      0 4483872   1100 4186016    0    0     0     0 44729 20750 62 24 12  0  2<br>
+15  0      0 4470944   1100 4186476    0    0     0     0 45309 25481 62 24 13  0  2<br>
+14  0      0 4431336   1100 4186972    0    0     0     0 48380 31344 60 25 14  0  1<br>
+16  0      0 4422728   1100 4187524    0    0     0     0 46735 27081 64 24 12  0  1<br>
+17  0      0 4412468   1100 4188004    0    0     0     0 45928 23809 60 25 13  0  2<br>
+22  0      0 4431204   1100 4188312    0    0     0     0 46013 24588 62 23 13  0  1<br>
+12  0      0 4411116   1100 4188784    0    0     0     0 49371 34817 59 24 15  0  2<br>
+16  1      0 4406048   1100 4189016    0    0     0     0 44410 21650 66 23 10  0  1<br>
+&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</p>
+<p>&mdash; top 的数据<br>
+​PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND                                                                                                                <br>
+935 root      20   0 6817896   1.3g  16388 S 301.7  8.7  71:26.27 java -Dapp.id=svc-mall-gateway -javaagent:/opt/skywalking/agent/skywalking-agent.jar -Dskywalking.agent.service_name=svc+<br>
+1009 101       20   0   13500   2980    632 R  37.6  0.0  10:13.51 nginx: worker process                                                                                                   <br>
+1007 101       20   0   13236   2764    632 R  20.8  0.0   3:17.14 nginx: worker process                                                                                                   <br>
+7690 root      20   0 3272448   3.0g   1796 S  14.2 19.1   2:58.31 redis-server 0.0.0.0:6379                                                                                               <br>
+6545 101       20   0  737896  48804  12640 S  13.9  0.3  12:36.09 /nginx-ingress -nginx-configmaps=nginx-ingress/nginx-config -default-server-tls-secret=nginx-ingress/default-server-secr+<br>
+1108 root      20   0 1423104 106236  29252 S  12.2  0.7  16:28.02 /usr/bin/dockerd -H fd:// &ndash;containerd=/run/containerd/containerd.sock                                                  <br>
+1008 101       20   0   13236   2760    628 S   6.9  0.0   0:46.30 nginx: worker process                                                                                                   <br>
+6526 root      20   0  109096   8412   2856 S   6.3  0.1   7:30.98 containerd-shim -namespace moby -workdir /var/lib/containerd/io.containerd.runtime.v1.linux/moby/6eb72c56b028b0d5bd7f8df+<br>
+1082 root      20   0 3157420 116036  36328 S   5.3  0.7  11:15.65 /usr/bin/kubelet &ndash;bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf &ndash;kubeconfig=/etc/kubernetes/kubelet.conf+<br>
+6319 nfsnobo+  20   0  759868  53880  18896 S   3.0  0.3   3:18.33 grafana-server &ndash;homepath=/usr/share/grafana &ndash;config=/etc/grafana/grafana.ini &ndash;packaging=docker cfg:default.log.mode=c+<br>
+6806 root      20   0 1632160  47276  17108 S   2.6  0.3   5:09.43 calico-node -felix                                                                                                      <br>
+6 root      20   0       0      0      0 S   1.0  0.0   0:14.19 [ksoftirqd/0]<br>
+&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</p>
+<p>从 vmstat 的 in 列可以看出，系统的中断数比较高；从 vmstat 中的 cs（context switch）来看，CS 也达到了 3 万左右。同时，sy cpu（syscall 消耗的 CPU）也占到了 25% 左右。这就说明我们需要着重关注 syscall（系统调用）层面。</p>
+<h3 id="定向监控分析">定向监控分析</h3>
+<p>我们先查看中断数据，下面这张图就是全部的中断数据截图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/34a8c4221173f7f1f517f83931c893ee.png" alt=""></p>
+<p>虽然从这张图里，我们可以看到整体的中断数据，也可以从白底黑字的数据上看到数据的变化，但是我们还没有结论。</p>
+<p>我们再看软中断的数据：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/8c8ab5211e604ab5368e732f3395138b.png" alt=""></p>
+<p>从白底黑字的数据可以看到，NET_RX 的变化较大（TIMER 是系统的时钟，我们不用做分析），而这个服务器 worker-4 上同时放了 Gateway 和 Redis，并且这两个服务都是用网络的大户，显然这是我们要分析的地方。</p>
+<p>由于网络的中断比较高，我们进入到 Pod 中，查看一下网络队列：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/2faeb5fcc8a78a2cc7fef3e15c313862.png" alt=""></p>
+<p>你看，这里面有 recv_Q。我们知道，recv_Q 是网络数据的接收队列，它持续有值说明了接收队列中确实有阻塞。</p>
+<p>请你注意，这个结论不是我只刷一次 netstat 得到的，而是刷了很多次。因为每次都有这样的队列出现，所以，我才会判断网络接收队列 recv_Q 中确实有未处理完的数据。如果它只是偶尔出现一次，那问题倒是不大。</p>
+<p>现在，我们继续分析这个问题，待会再给出解决方案。</p>
+<p>既然接收队列中有值，从数据传递的逻辑来看，这应该是上层的应用没有及时处理。因此，我们来跟踪一下方法的执行时间。</p>
+<p>在这里，我们先跟踪负责生成确认订单的 generateConfirmOrder 接口（其实这里要跟踪哪个方法倒是无所谓，因为前面说了所有业务都很慢）：</p>
+<p>Command execution times exceed limit: 5, so command will exit. You can set it with -n option.<br>
+Condition express: 1==1 , result: true<br>
+<code>---ts=2021-02-18 19:20:15;thread_name=http-nio-8086-exec-113;id=3528;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@20a46227   ​</code>&mdash;[151.845221ms] com.dunshan.mall.order.service.impl.PortalOrderServiceImpl$$EnhancerBySpringCGLIB$$11e4c326:generateConfirmOrder(<br>
+​<code>---[151.772564ms] org.springframework.cglib.proxy.MethodInterceptor:intercept() #5   ​</code>&mdash;[151.728833ms] com.dunshan.mall.order.service.impl.PortalOrderServiceImpl:generateConfirmOrder(<br>
+​+&mdash;[0.015801ms] com.dunshan.mall.order.domain.ConfirmOrderResult:<init>() #8<br>
+​+&mdash;[75.263121ms] com.dunshan.mall.order.feign.MemberService:getCurrentMember() #8<br>
+​+&mdash;[0.006396ms] com.dunshan.mall.model.UmsMember:getId() #9<br>
+​+&mdash;[0.004322ms] com.dunshan.mall.model.UmsMember:getId() #9<br>
+​+&mdash;[0.008234ms] java.util.List:toArray() #5<br>
+​+&mdash;[min=0.006794ms,max=0.012615ms,total=0.019409ms,count=2] org.slf4j.Logger:info() #5<br>
+​+&mdash;[0.005043ms] com.dunshan.mall.model.UmsMember:getId() #9<br>
+​+&mdash;[28.805315ms] com.dunshan.mall.order.feign.CartItemService:listPromotionnew() #5<br>
+​+&mdash;[0.007123ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setCartPromotionItemList() #9<br>
+​+&mdash;[0.012758ms] com.dunshan.mall.model.UmsMember:getList() #10<br>
+​+&mdash;[0.011984ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setMemberReceiveAddressList() #5<br>
+​+&mdash;[0.03736ms] com.alibaba.fastjson.JSON:toJSON() #11<br>
+​+&mdash;[0.010188ms] com.dunshan.mall.order.domain.OmsCartItemVo:<init>() #12<br>
+​+&mdash;[0.005661ms] com.dunshan.mall.order.domain.OmsCartItemVo:setCartItemList() #12<br>
+​+&mdash;[19.225703ms] com.dunshan.mall.order.feign.MemberService:listCart() #12<br>
+​+&mdash;[0.010474ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setCouponHistoryDetailList() #5<br>
+​+&mdash;[0.007807ms] com.dunshan.mall.model.UmsMember:getIntegration() #13<br>
+​+&mdash;[0.009189ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setMemberIntegration() #5<br>
+​+&mdash;[27.471129ms] com.dunshan.mall.mapper.UmsIntegrationConsumeSettingMapper:selectByPrimaryKey() #13<br>
+​+&mdash;[0.019764ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setIntegrationConsumeSetting() #13<br>
+​+&mdash;[0.154893ms] com.dunshan.mall.order.service.impl.PortalOrderServiceImpl:calcCartAmount() #13<br>
+​`&mdash;[0.013139ms] com.dunshan.mall.order.domain.ConfirmOrderResult:setCalcAmount() #13</p>
+<p>你看，这个接口中有一个 getCurrentMember 方法，它是 Member 上的一个服务，是用来获取当前用户信息的，而其他服务都会用到这个服务，因为需要 Token 嘛。</p>
+<p>从上面的栈信息看，getCurrentMember 用了 75ms 多，这个时间明显是慢了，我们跟踪一下这个方法，看看是哪里慢了：</p>
+<p>Condition express: 1==1 , result: true<br>
+<code>---ts=2021-02-18 19:43:18;thread_name=http-nio-8083-exec-25;id=34bd;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@6cb759d5   ​</code>&mdash;[36.139809ms] com.dunshan.mall.member.service.imp.MemberServiceImpl:getCurrentMember(<br>
+​+&mdash;[0.093398ms] javax.servlet.http.HttpServletRequest:getHeader() #18<br>
+​+&mdash;[0.020236ms] cn.hutool.core.util.StrUtil:isEmpty() #18<br>
+​+&mdash;[0.147621ms] cn.hutool.json.JSONUtil:toBean() #19<br>
+​+&mdash;[0.02041ms] com.dunshan.mall.common.domain.UserDto:getId() #19<br>
+​`&mdash;[35.686266ms] com.dunshan.mall.member.service.MemberCacheService:getMember() #5</p>
+<p>这种需要瞬间抓的数据，要反复抓很多遍才能确定。虽然我在这里只展示了一条，但是，我抓的时候可是抓了好多次才得到的。从上面的数据来看，getCurrentMember 中使用的 getMember 方法耗时比较长，达到了 35ms 多。</p>
+<p>我们看一下 getMember 的具体实现：</p>
+<p>@Override<br>
+public UmsMember getMember(Long memberId) {<br>
+String key = REDIS_DATABASE + &ldquo;:&rdquo; + REDIS_KEY_MEMBER + &ldquo;:&rdquo; + memberId;<br>
+return (UmsMember) redisService.get(key);<br>
+​</p>
+<p>这个代码的逻辑很简单：拼接 Key 信息，然后从 Redis 里找到相应的 Member 信息。</p>
+<p>既然 getMember 函数是从 Redis 里获取数据，那我们就到 Redis 里检查一下 slowlog：</p>
+<p>127.0.0.1:6379&gt; slowlog get</p>
+<ol>
+<li>
+<ol>
+<li>(integer) 5</li>
+<li>(integer) 1613647620</li>
+<li>(integer) 30577</li>
+<li>
+<ol>
+<li>&ldquo;GET&rdquo;</li>
+<li>&ldquo;mall:ums:member:2070064&rdquo;</li>
+</ol>
+</li>
+<li>&ldquo;10.100.140.46:53152&rdquo;</li>
+<li>&quot;&quot;</li>
+</ol>
+</li>
+<li>
+<ol>
+<li>(integer) 4</li>
+<li>(integer) 1613647541</li>
+<li>(integer) 32878</li>
+<li>
+<ol>
+<li>&ldquo;GET&rdquo;</li>
+<li>&ldquo;mall:ums:member:955622&rdquo;</li>
+</ol>
+</li>
+<li>&ldquo;10.100.140.46:53152&rdquo;</li>
+<li>&quot;&quot;<br>
+&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;</li>
+</ol>
+</li>
+</ol>
+<p>你看，确实是 get 命令慢了，看时间都超过了 10ms（slowlog 默认设置是 10ms 以上才记录）。如果这个命令执行的次数不多，倒也没啥。关键是这个命令是验证用户的时候用的，这样的时间是没办法容忍的。</p>
+<p>为什么这么说呢？</p>
+<p>因为在业务上来看，除了打开首页和查询商品不用它之外，其他的脚本似乎都需要用它。所以，它慢了不是影响一个业务，而是影响一堆业务。</p>
+<p>然而，正当我们分析到这里，还没来得及做优化的时候，又&hellip;&hellip; 出现了新问题。我在接着压的过程中，发现了这样的现象：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/90ccc633d6fcb0a805b73f4694ecc973.png" alt=""></p>
+<p>你瞧瞧，TPS 不稳定就算了，后面居然还全报错了，这也太不合适了吧！</p>
+<p>于是，我开始对报错日志一通查，最后发现了 Redis 的容器都飘红了，下面是 Redis 在架构中的状态截图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/7bd00c276746a5fadb9d1e9ceaf70ec0.png" alt=""></p>
+<p>这明显是 Redis 没了呀！这时候我们再去看应用的状态：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/a70230bc39eb09e5e2b0cd1045f92512.png" alt=""></p>
+<p>满目疮痍呀！</p>
+<p>接着，我们登录到 Redis 服务所在的 worker 节点，查看日志：</p>
+<p>[ 7490.807349] redis-server invoked oom-killer: gfp_mask=0xd0, order=0, oom_score_adj=807<br>
+[ 7490.821216] redis-server cpuset=docker-18cc9a81d8a58856ecf5fed45d7db431885b33236e5ad50919297cec453cebe1.scope mems_allowed=0<br>
+[ 7490.826286] CPU: 2 PID: 27225 Comm: redis-server Kdump: loaded Tainted: G               &mdash;&mdash;&mdash;&mdash; T 3.10.0-1127.el7.x86_64 #1<br>
+[ 7490.832929] Hardware name: Red Hat KVM, BIOS 0.5.1 01/01/2011<br>
+[ 7490.836240] Call Trace:<br>
+[ 7490.838006]  [<ffffffff9af7ff85>] dump_stack+0x19/0x1b<br>
+[ 7490.841975]  [<ffffffff9af7a8a3>] dump_header+0x90/0x229<br>
+[ 7490.844690]  [<ffffffff9aa9c4a8>] ? ep_poll_callback+0xf8/0x220<br>
+[ 7490.847625]  [<ffffffff9a9c246e>] oom_kill_process+0x25e/0x3f0<br>
+[ 7490.850515]  [<ffffffff9a933a41>] ? cpuset_mems_allowed_intersects+0x21/0x30<br>
+[ 7490.853893]  [<ffffffff9aa40ba6>] mem_cgroup_oom_synchronize+0x546/0x570<br>
+[ 7490.857075]  [<ffffffff9aa40020>] ? mem_cgroup_charge_common+0xc0/0xc0<br>
+[ 7490.860348]  [<ffffffff9a9c2d14>] pagefault_out_of_memory+0x14/0x90<br>
+[ 7490.863651]  [<ffffffff9af78db3>] mm_fault_error+0x6a/0x157<br>
+[ 7490.865928]  [<ffffffff9af8d8d1>] __do_page_fault+0x491/0x500<br>
+[ 7490.868661]  [<ffffffff9af8da26>] trace_do_page_fault+0x56/0x150<br>
+[ 7490.871811]  [<ffffffff9af8cfa2>] do_async_page_fault+0x22/0xf0<br>
+[ 7490.874423]  [<ffffffff9af897a8>] async_page_fault+0x28/0x30<br>
+[ 7490.877127] Task in /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod6e897c3a_8b9f_479b_9f53_33d2898977b0.slice/docker-18cc9a81d8a58856ecf5fed45d7db431885b33236e5ad50919297cec453cebe1.scope killed as a result of limit of /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod6e897c3a_8b9f_479b_9f53_33d2898977b0.slice/docker-18cc9a81d8a58856ecf5fed45d7db431885b33236e5ad50919297cec453cebe1.scope<br>
+[ 7490.893825] memory: usage 3145728kB, limit 3145728kB, failcnt 176035<br>
+[ 7490.896099] memory+swap: usage 3145728kB, limit 3145728kB, failcnt 0<br>
+[ 7490.899137] kmem: usage 0kB, limit 9007199254740988kB, failcnt 0<br>
+[ 7490.902012] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod6e897c3a_8b9f_479b_9f53_33d2898977b0.slice/docker-18cc9a81d8a58856ecf5fed45d7db431885b33236e5ad50919297cec453cebe1.scope: cache:72KB rss:3145656KB rss_huge:0KB mapped_file:0KB swap:0KB inactive_anon:0KB active_anon:3145652KB inactive_file:0KB active_file:20KB unevictable:0KB<br>
+[ 7490.962494] [ pid ]   uid  tgid total_vm      rss nr_ptes swapents oom_score_adj name<br>
+[ 7490.966577] [27197]     0 27197      596      166       5        0           807 sh<br>
+[ 7490.970286] [27225]     0 27225   818112   786623    1550        0           807 redis-server<br>
+[ 7490.974006] [28322]     0 28322      999      304       6        0           807 bash<br>
+[ 7490.978178] Memory cgroup out of memory: Kill process 27242 (redis-server) score 1808 or sacrifice child<br>
+[ 7490.983765] Killed process 27225 (redis-server), UID 0, total-vm:3272448kB, anon-rss:3144732kB, file-rss:1760kB, shmem-rss:0kB</p>
+<p>原来是 worker 节点的内存不够用了，而 Redis 在计算 OOM 评分时也达到了 1808 分。于是，操作系统就义无反顾地把 Redis 给杀了。</p>
+<p>我们再次把 Redis 启动之后，观察它的内存消耗，结果如下：</p>
+<p>[root@k8s-worker-4 ~]# pidstat -r -p 5356 1<br>
+Linux 3.10.0-1127.el7.x86_64 (k8s-worker-4)   2021 年 02 月 18 日   <em>x86_64</em>  (6 CPU)</p>
+<p>19 时 55 分 52 秒   UID       PID  minflt/s  majflt/s     VSZ    RSS   %MEM  Command<br>
+19 时 55 分 53 秒     0      5356     32.00      0.00 3272448 1122152   6.90  redis-server<br>
+19 时 55 分 54 秒     0      5356     27.00      0.00 3272448 1122416   6.90  redis-server<br>
+19 时 55 分 55 秒     0      5356     28.00      0.00 3272448 1122416   6.90  redis-server<br>
+19 时 55 分 56 秒     0      5356     28.00      0.00 3272448 1122680   6.90  redis-server<br>
+19 时 55 分 57 秒     0      5356     21.78      0.00 3272448 1122680   6.90  redis-server<br>
+19 时 55 分 58 秒     0      5356     38.00      0.00 3272448 1122880   6.90  redis-server<br>
+19 时 55 分 59 秒     0      5356     21.00      0.00 3272448 1122880   6.90  redis-server<br>
+19 时 56 分 00 秒     0      5356     25.00      0.00 3272448 1122880   6.90  redis-server</p>
+<p>我只是截取了 Redis 没死之前的一小段数据，然后通过 RSS（实际使用内存）来不断观察这段数据，发现内存确实会一直往上涨。我又查了一下 Redis 的配置文件，发现没配置 maxmemory。</p>
+<p>没配置倒是没什么，内存不够就不够了呗，Pod 不是还有内存限制吗？但可惜的是，worker 上的内存不够了，导致了 Redis 进程被操作系统杀掉了，这就解释了 TPS 图中后半段会报错的问题。</p>
+<p>但是响应时间慢，我们还是得接着分析。我们在前面看到软中断和带宽有关，为了减少服务中断之间的相互影响，待会我把 Redis 和 Gateway 两个服务分开。</p>
+<p>我们都知道，Redis 是靠内存来维护数据的，如果只做内存的操作，它倒是会很快。但是 Redis 还有一块跟内存比较有关的功能，就是持久化。我们现在采用的是 AOF 持久化策略，并且没有限制 AOF 的文件大小。</p>
+<p>这个持久化文件是放到 NFS 文件服务器上面的，既然是放到文件服务器上，那就需要有足够的磁盘 IO 能力才可以。因此，我们到 nfs 服务器上查看一下 IO 的能力，截取部分数据如下：</p>
+<p>Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util<br>
+sda               0.00     0.00   65.00    0.00  6516.00     0.00   200.49     1.85   28.43   28.43    0.00   3.95  25.70</p>
+<p>Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util<br>
+sda               0.00     0.00   24.00    0.00   384.00     0.00    32.00     0.15    6.46    6.46    0.00   6.46  15.50</p>
+<p>Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util<br>
+sda               0.00     0.00    8.00    0.00  1124.00     0.00   281.00     0.07    8.38    8.38    0.00   4.00   3.20</p>
+<p>&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;&hellip;..</p>
+<p>Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util<br>
+sda               0.00     0.00   11.00    0.00   556.00     0.00   101.09     0.15   13.55   13.55    0.00  10.36  11.40</p>
+<p>Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util<br>
+sda               0.00     0.00    4.00    0.00    32.00     0.00    16.00     0.08   19.25   19.25    0.00  15.25</p>
+<p>通过 svctm（IO 响应时间计数器）这个参数可以看到，IO 的响应时间也增加了。虽然在 sysstat 的新版本中已经不建议使用 svctm 了，但是在我们当前使用的版本中，仍然有这个参数。并且通过它，我们可以看到 IO 的响应时间确实在增加。</p>
+<p>为了证明 IO 的响应时间是和 AOF 有关，我们先把 AOF 关掉，设置 appendonly no 看看效果。如果有效果，那优化方向就非常明确了，我们要做的就是这几个优化动作：</p>
+<ol>
+<li>把 Redis 先移到一个网络需求没那么大的 Worker 上去，观察一下 TPS 能不能好一点。如果这一步有效果，我们就不用再折腾下一步了；</li>
+<li>如果上一步做完之后没有效果，就再把 AOF 关掉，再观察 TPS。如果 AOF 关掉后有效果，那我们就得分析下这个应用有没有必要做 Redis 的持久化了。如果有必要，就得换个快一点的硬盘；</li>
+<li>不管上面两步有用没用，对 Redis 来说，我们都应该考虑限制内存的大小和 AOF 文件的大小。</li>
+</ol>
+<p>我们看一下把 Redis 从 worker-4 移到 worker-7 上之后的 TPS 如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/acc2a8ce8b29e01716af10231b4e0880.png" alt=""></p>
+<p>TPS 还是在下降，并且没有一开始的那么高了，之前都能达到 1000TPS。这个看似非常正确的优化动作却导致了 TPS 下降的现象，显然不是我们期望的。</p>
+<p>现在还不知道问题在哪里，不过，我们一直想达到的目标是降队列。所以，我们先确认下网络队列有没有降下来，再来考虑 TPS 怎么提升。</p>
+<p>你看 worker-4 上的队列，没有 recv_Q 的值了：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/c1a3c026cc58e59d0b535484287deb36.png" alt=""></p>
+<p>现在我们就得来处理下 AOF 了，因为我们虽然移开了 Redis，但是 TPS 并没有上升。所以，我们还得看看 AOF 的影响。</p>
+<p>关掉 AOF 之后，TPS 如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/2cfb90bba394909000c5e2f1f145219c.png" alt=""></p>
+<p>总体资源如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/6a63cbf66be6dee4ed6910068a3ba563.png" alt=""></p>
+<p>看到了没，效果还是有的吧？我们可是得到了 1000 以上的稳定的 TPS 曲线。</p>
+<p>在这个容量场景中，我们完成了四个阶段的分析之后，优化效果还不错。不过，每个性能测试都应该有<strong>结论</strong>。所以，我们还需要做一个动作，就是接着增加压力，看一下系统的最大容量能达到多少。</p>
+<p>于是，我们进入第五个阶段的分析。</p>
+<h2 id="第五阶段分析">第五阶段分析</h2>
+<p>请你注意**，容量** <strong>场景最重要的变化只有一个，就是增加线程</strong>。而跟着线程一起变化的就是参数化的数据量。在这样的增加线程的场景中，我们还要关注的就是资源的均衡使用。因此，在第四阶段的优化之后，我们先来看一下这个场景的结果是个什么样子。</p>
+<h3 id="场景运行数据">场景运行数据</h3>
+<p>场景压力数据如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/c144abc9548aadce0e1bdc56b130799b.png" alt=""></p>
+<p>从效果上来看，不错哦，TPS 已经达到 1700 了。</p>
+<h3 id="全局监控分析-1">全局监控分析</h3>
+<p>全局监控的数据如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/8fe3e64e43991b7cc7f4e49415d3b0fe.png" alt=""></p>
+<p>从上面两张图中可以看到，在我们这样的压力之下，TPS 最大能达到 1700 左右，系统整体资源使用率也不算少了。</p>
+<p><strong>经过了基准场景和容量场景之后，我们现在</strong> <strong>就可以下</strong> <strong>结论了</strong> <strong>：</strong> <strong>系统资源在这个最大容量的场景中已经达到了比较高的使用率。</strong></p>
+<p>你有没有听过性能行业中一直流传的一句话：性能优化是无止境的。所以，<strong>我们一定要选择好性能项目结束的关键点。</strong></p>
+<p>就拿我们这个课程的案例来说，这个系统在技术上已经没有优化的空间了，或者说在技术上优化的成本比较高（比如说要做一些定制的开发和改造）。如果你在这种情况下还想要扩大容量，那么你能做的就是增加节点和硬件资源，把所有的硬件资源全都用完。</p>
+<p>但是！请所有做性能项目的人注意！<strong>我们做性能项目，不是说把系统优化到最好</strong> <strong>后</strong> <strong>，就可以在生产环境中按这样的容量来设计整体的生产资源 **** 了</strong>！要知道，生产环境中出现问题的代价是非常高的，一般我们都会增加一定的冗余，但是冗余多少就不一而足了。</p>
+<p>在很多企业中，生产环境里使用的 CPU 都没有超过 20%。为什么会有这么多的冗余呢？在我的经验中，大部分的项目都是根据业务的发展在不断迭代，然后形成了这样的局面。你可以想像一下，这样的生产环境里有多少资源浪费。</p>
+<p>说到这里，我们不得不说一下怎么评估架构级的容量。因为对于一个固定客户端数的系统来说，很容易判断整体的容量。但是，对非固定客户端数的系统而言，要想抵挡得住突发的业务容量。那就要经过严格的设计了，像缓存、队列、限流、熔断、预热等等这些手段都要上了。</p>
+<p>对于整体的架构容量设计，在所有的企业中都不是一蹴而就的，都要经过多次的、多年的版本迭代，跟着业务的发展不断演进得到。这就不是一个专栏可以尽述的了。</p>
+<h2 id="总结">总结</h2>
+<p>从基准场景做完之后，我们来到了容量场景，这是一个非常大的变化。在这个场景中，我们解决了几个问题并最终给出了结论：</p>
+<p>第一个阶段：分析了压力工具参数化的问题，解决了 TPS 不断降低、响应时间不断上升的问题。</p>
+<p>第二个阶段：分析了数据库索引，解决了 TPS 低的问题。</p>
+<p>第三个阶段：分析了资源争用，解决了多容器跑到一个节点上的问题。</p>
+<p>第四个阶段：分析了网络争用和 Redis 的 AOF，解决了 TPS 不稳定的问题。</p>
+<p>第五个阶段：递增压力，给出最终系统整体容量的结论。</p>
+<p>在做完这些动作之后，我们终于可以给出比较明确的结论了：TPS 能达到 1700！</p>
+<p>请你记住，对于一个性能项目来说，没有结论就是在耍流氓。所以，我一直强调，<strong>在性能项目中</strong> <strong>，我们</strong> <strong>一定要给出最大容量的结论。</strong></p>
+<h2 id="课后作业">课后作业</h2>
+<p>这就是今天的全部内容，最后给你留两个思考题吧：</p>
+<ol>
+<li>为什么性能项目一定要有结论？</li>
+<li>当多个性能问题同时出现时，我们怎么判断它们产生的相互影响？</li>
+<li>如何判断一个系统已经优化到了最优的状态？</li>
+</ol>
+<p>记得在留言区和我讨论、交流你的想法，每一次思考都会让你更进一步。</p>
+<p>如果这节课让你有所收获，也欢迎你分享给你的朋友，共同学习进步。我们下一讲再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E9%AB%98%E6%A5%BC%E7%9A%84%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">高楼的性能工程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/devops%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/25__%E8%AE%A9%E6%95%B0%E6%8D%AE%E8%AF%B4%E8%AF%9D%E5%A6%82%E4%BD%95%E5%BB%BA%E8%AE%BE%E4%BC%81%E4%B8%9A%E7%BA%A7%E6%95%B0%E6%8D%AE%E5%BA%A6%E9%87%8F%E5%B9%B3%E5%8F%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25__让数据说话：如何建设企业级数据度量平台？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/25__%E5%AE%B9%E7%81%BE%E4%B8%8E%E5%A4%87%E4%BB%BD%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E9%80%83%E7%94%9F%E9%80%9A%E9%81%93%E4%BF%9D%E8%AF%81%E4%B8%9A%E5%8A%A1%E8%BF%9E%E7%BB%AD%E6%80%A7/">
+            <span class="next-text nav-default">25__容灾与备份：如何设计逃生通道保证业务连续性？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25__RocketMQ与Kafka中如何实现事务？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是李玥。
+在之前《04 | 如何利用事务消息实现分布式事务？》这节课中，我通过一个小例子来和大家讲解了如何来使用事务消息。在这节课的评论区，很多同学都提出来，非常想了解一下事务消息到底是怎么实现的。不仅要会使用，还要掌握实现原理，这种学习态度，一直是我们非常提倡的，这节课，我们就一起来学习一下，在 RocketMQ 和 Kafka 中，事务消息分别是如何来实现的？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/25__rocketmq%E4%B8%8Ekafka%E4%B8%AD%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%BA%8B%E5%8A%A1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/25__rocketmq%E4%B8%8Ekafka%E4%B8%AD%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%BA%8B%E5%8A%A1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25__RocketMQ与Kafka中如何实现事务？">
+  <meta property="og:description" content="你好，我是李玥。
+在之前《04 | 如何利用事务消息实现分布式事务？》这节课中，我通过一个小例子来和大家讲解了如何来使用事务消息。在这节课的评论区，很多同学都提出来，非常想了解一下事务消息到底是怎么实现的。不仅要会使用，还要掌握实现原理，这种学习态度，一直是我们非常提倡的，这节课，我们就一起来学习一下，在 RocketMQ 和 Kafka 中，事务消息分别是如何来实现的？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="消息队列高手课">
+
+  <meta itemprop="name" content="25__RocketMQ与Kafka中如何实现事务？">
+  <meta itemprop="description" content="你好，我是李玥。
+在之前《04 | 如何利用事务消息实现分布式事务？》这节课中，我通过一个小例子来和大家讲解了如何来使用事务消息。在这节课的评论区，很多同学都提出来，非常想了解一下事务消息到底是怎么实现的。不仅要会使用，还要掌握实现原理，这种学习态度，一直是我们非常提倡的，这节课，我们就一起来学习一下，在 RocketMQ 和 Kafka 中，事务消息分别是如何来实现的？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5144">
+  <meta itemprop="keywords" content="消息队列高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25__RocketMQ与Kafka中如何实现事务？">
+  <meta name="twitter:description" content="你好，我是李玥。
+在之前《04 | 如何利用事务消息实现分布式事务？》这节课中，我通过一个小例子来和大家讲解了如何来使用事务消息。在这节课的评论区，很多同学都提出来，非常想了解一下事务消息到底是怎么实现的。不仅要会使用，还要掌握实现原理，这种学习态度，一直是我们非常提倡的，这节课，我们就一起来学习一下，在 RocketMQ 和 Kafka 中，事务消息分别是如何来实现的？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25__RocketMQ与Kafka中如何实现事务？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5144 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#rocketmq-的事务是如何实现的">RocketMQ 的事务是如何实现的？</a></li>
+        <li><a href="#kafka-的事务和-exactly-once-可以解决什么问题">Kafka 的事务和 Exactly Once 可以解决什么问题？</a></li>
+        <li><a href="#kafka-的事务是如何实现的">Kafka 的事务是如何实现的？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是李玥。</p>
+<p>在之前《<a href="./111269.md">04 | 如何利用事务消息实现分布式事务？</a>》这节课中，我通过一个小例子来和大家讲解了如何来使用事务消息。在这节课的评论区，很多同学都提出来，非常想了解一下事务消息到底是怎么实现的。不仅要会使用，还要掌握实现原理，这种学习态度，一直是我们非常提倡的，这节课，我们就一起来学习一下，在 RocketMQ 和 Kafka 中，事务消息分别是如何来实现的？</p>
+<h2 id="rocketmq-的事务是如何实现的">RocketMQ 的事务是如何实现的？</h2>
+<p>首先我们来看 RocketMQ 的事务。我在之前的课程中，已经给大家讲解过 RocketMQ 事务的大致流程，这里我们再一起通过代码，重温一下这个流程。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class CreateOrderService {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   @Inject
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private OrderDao orderDao; // 注入订单表的 DAO
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Inject
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private ExecutorService executorService; // 注入一个 ExecutorService
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   private TransactionMQProducer producer;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   // 初始化 transactionListener 和 producer
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Init
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void init() throws MQClientException {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    TransactionListener transactionListener = createTransactionListener();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    producer = new TransactionMQProducer(&#34;myGroup&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    producer.setExecutorService(executorService);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    producer.setTransactionListener(transactionListener);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    producer.start();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   // 创建订单服务的请求入口
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @PUT
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @RequestMapping(...)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public boolean createOrder(@RequestBody CreateOrderRequest request) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 根据创建订单请求创建一条消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Message msg = createMessage(request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 发送事务消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    SendResult sendResult = producer.sendMessageInTransaction(msg, request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 返回：事务是否成功
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return sendResult.getSendStatus() == SendStatus.SEND_OK;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   private TransactionListener createTransactionListener() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return new TransactionListener() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        CreateOrderRequest request = (CreateOrderRequest ) arg;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          // 执行本地事务创建订单
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          orderDao.createOrderInDB(request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          // 如果没抛异常说明执行成功，提交事务消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          return LocalTransactionState.COMMIT_MESSAGE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } catch (Throwable t) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          // 失败则直接回滚事务消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          return LocalTransactionState.ROLLBACK_MESSAGE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 反查本地事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      public LocalTransactionState checkLocalTransaction(MessageExt msg) {、
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 从消息中获得订单 ID
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        String orderId = msg.getUserProperty(&#34;orderId&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         // 去数据库中查询订单号是否存在，如果存在则提交事务；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 如果不存在，可能是本地事务失败了，也可能是本地事务还在执行，所以返回 UNKNOW
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        //（PS：这里 RocketMQ 有个拼写错误：UNKNOW）
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return orderDao.isOrderIdExistsInDB(orderId)?
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                LocalTransactionState.COMMIT_MESSAGE: LocalTransactionState.UNKNOW;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     //....
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这个流程中，我们提供一个创建订单的服务，功能就是在数据库中插入一条订单记录，并发送一条创建订单的消息，要求写数据库和发消息这两个操作在一个事务内执行，要么都成功，要么都失败。在这段代码中，我们首先在 init() 方法中初始化了 transactionListener 和发生 RocketMQ 事务消息的变量 producer。真正提供创建订单服务的方法是 createOrder()，在这个方法里面，我们根据请求的参数创建一条消息，然后调用 RocketMQ producer 发送事务消息，并返回事务执行结果。</p>
+<p>之后的 createTransactionListener() 方法是在 init() 方法中调用的，这里面直接构造一个匿名类，来实现 RocketMQ 的 TransactionListener 接口，这个接口需要实现两个方法：</p>
+<ul>
+<li>executeLocalTransaction：执行本地事务，在这里我们直接把订单数据插入到数据库中，并返回本地事务的执行结果。</li>
+<li>checkLocalTransaction：反查本地事务，在这里我们的处理是，在数据库中查询订单号是否存在，如果存在则提交事务，如果不存在，可能是本地事务失败了，也可能是本地事务还在执行，所以返回 UNKNOW。</li>
+</ul>
+<p>这样，就使用 RocketMQ 的事务消息功能实现了一个创建订单的分布式事务。接下来我们一起通过 RocketMQ 的源代码来看一下，它的事务消息是如何实现的。</p>
+<p>首先看一下在 producer 中，是如何来发送事务消息的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span><span class="lnt">135
+</span><span class="lnt">136
+</span><span class="lnt">137
+</span><span class="lnt">138
+</span><span class="lnt">139
+</span><span class="lnt">140
+</span><span class="lnt">141
+</span><span class="lnt">142
+</span><span class="lnt">143
+</span><span class="lnt">144
+</span><span class="lnt">145
+</span><span class="lnt">146
+</span><span class="lnt">147
+</span><span class="lnt">148
+</span><span class="lnt">149
+</span><span class="lnt">150
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public TransactionSendResult sendMessageInTransaction(final Message msg,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                                      final LocalTransactionExecuter localTransactionExecuter, final Object arg)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    throws MQClientException {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    TransactionListener transactionListener = getCheckListener();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (null == localTransactionExecuter &amp;&amp; null == transactionListener) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        throw new MQClientException(&#34;tranExecutor is null&#34;, null);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Validators.checkMessage(msg, this.defaultMQProducer);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     SendResult sendResult = null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 这里给消息添加了属性，标明这是一个事务消息，也就是半消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    MessageAccessor.putProperty(msg, MessageConst.PROPERTY_TRANSACTION_PREPARED, &#34;true&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    MessageAccessor.putProperty(msg, MessageConst.PROPERTY_PRODUCER_GROUP, this.defaultMQProducer.getProducerGroup());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 调用发送普通消息的方法，发送这条半消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        sendResult = this.send(msg);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        throw new MQClientException(&#34;send message Exception&#34;, e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     LocalTransactionState localTransactionState = LocalTransactionState.UNKNOW;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Throwable localException = null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    switch (sendResult.getSendStatus()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        case SEND_OK: {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (sendResult.getTransactionId() != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    msg.putUserProperty(&#34;__transactionId__&#34;, sendResult.getTransactionId());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                String transactionId = msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (null != transactionId &amp;&amp; !&#34;&#34;.equals(transactionId)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    msg.setTransactionId(transactionId);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 // 执行本地事务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (null != localTransactionExecuter) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    localTransactionState = localTransactionExecuter.executeLocalTransactionBranch(msg, arg);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else if (transactionListener != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    log.debug(&#34;Used new transaction API&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    localTransactionState = transactionListener.executeLocalTransaction(msg, arg);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (null == localTransactionState) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    localTransactionState = LocalTransactionState.UNKNOW;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 if (localTransactionState != LocalTransactionState.COMMIT_MESSAGE) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    log.info(&#34;executeLocalTransactionBranch return {}&#34;, localTransactionState);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    log.info(msg.toString());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } catch (Throwable e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                log.info(&#34;executeLocalTransactionBranch exception&#34;, e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                log.info(msg.toString());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                localException = e;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        case FLUSH_DISK_TIMEOUT:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        case FLUSH_SLAVE_TIMEOUT:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        case SLAVE_NOT_AVAILABLE:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            localTransactionState = LocalTransactionState.ROLLBACK_MESSAGE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        default:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 根据事务消息和本地事务的执行结果 localTransactionState，决定提交或回滚事务消息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 这里给 Broker 发送提交或回滚事务的 RPC 请求。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        this.endTransaction(sendResult, localTransactionState, localException);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        log.warn(&#34;local transaction execute &#34; + localTransactionState + &#34;, but end broker transaction failed&#34;, e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     TransactionSendResult transactionSendResult = new TransactionSendResult();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setSendStatus(sendResult.getSendStatus());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setMessageQueue(sendResult.getMessageQueue());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setMsgId(sendResult.getMsgId());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setQueueOffset(sendResult.getQueueOffset());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setTransactionId(sendResult.getTransactionId());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    transactionSendResult.setLocalTransactionState(localTransactionState);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return transactionSendResult;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码的实现逻辑是这样的：首先给待发送消息添加了一个属性 PROPERTY_TRANSACTION_PREPARED，标明这是一个事务消息，也就是半消息，然后会像发送普通消息一样去把这条消息发送到 Broker 上。如果发送成功了，就开始调用我们之前提供的接口 TransactionListener 的实现类中，执行本地事务的方法 executeLocalTransaction() 来执行本地事务，在我们的例子中就是在数据库中插入一条订单记录。</p>
+<p>最后，根据半消息发送的结果和本地事务执行的结果，来决定提交或者回滚事务。在实现方法 endTransaction() 中，producer 就是给 Broker 发送了一个单向的 RPC 请求，告知 Broker 完成事务的提交或者回滚。由于有事务反查的机制来兜底，这个 RPC 请求即使失败或者丢失，也都不会影响事务最终的结果。最后构建事务消息的发送结果，并返回。</p>
+<p>以上，就是 RocketMQ 在 Producer 这一端事务消息的实现，然后我们再看一下 Broker 这一端，它是怎么来处理事务消息和进行事务反查的。</p>
+<p>Broker 在处理 Producer 发送消息的请求时，会根据消息中的属性判断一下，这条消息是普通消息还是半消息：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if (traFlag != null &amp;&amp; Boolean.parseBoolean(traFlag)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// ...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码在 org.apache.rocketmq.broker.processor.SendMessageProcessor#sendMessage 方法中，然后我们跟进去看看真正处理半消息的业务逻辑，这段处理逻辑在类 org.apache.rocketmq.broker.transaction.queue.TransactionalMessageBridge 中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public PutMessageResult putHalfMessage(MessageExtBrokerInner messageInner) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return store.putMessage(parseHalfMessageInner(messageInner));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> private MessageExtBrokerInner parseHalfMessageInner(MessageExtBrokerInner msgInner) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 记录消息的主题和队列，到新的属性中
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC, msgInner.getTopic());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        String.valueOf(msgInner.getQueueId()));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    msgInner.setSysFlag(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 替换消息的主题和队列为：RMQ_SYS_TRANS_HALF_TOPIC，0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    msgInner.setQueueId(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return msgInner;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以看到，在这段代码中，RocketMQ 并没有把半消息保存到消息中客户端指定的那个队列中，而是记录了原始的主题队列后，把这个半消息保存在了一个特殊的内部主题 RMQ_SYS_TRANS_HALF_TOPIC 中，使用的队列号固定为 0。这个主题和队列对消费者是不可见的，所以里面的消息永远不会被消费。这样，就保证了在事务提交成功之前，这个半消息对消费者来说是消费不到的。</p>
+<p>然后我们再看一下，RocketMQ 是如何进行事务反查的：在 Broker 的 TransactionalMessageCheckService 服务中启动了一个定时器，定时从半消息队列中读出所有待反查的半消息，针对每个需要反查的半消息，Broker 会给对应的 Producer 发一个要求执行事务状态反查的 RPC 请求，这部分的逻辑在方法 org.apache.rocketmq.broker.transaction.AbstractTransactionalMessageCheckListener#sendCheckMessage 中，根据 RPC 返回响应中的反查结果，来决定这个半消息是需要提交还是回滚，或者后续继续来反查。</p>
+<p>最后，提交或者回滚事务实现的逻辑是差不多的，首先把半消息标记为已处理，如果是提交事务，那就把半消息从半消息队列中复制到这个消息真正的主题和队列中去，如果要回滚事务，这一步什么都不需要做，最后结束这个事务。这部分逻辑的实现在 org.apache.rocketmq.broker.processor.EndTransactionProcessor 这个类中。</p>
+<h2 id="kafka-的事务和-exactly-once-可以解决什么问题">Kafka 的事务和 Exactly Once 可以解决什么问题？</h2>
+<p>接下来我们再说一下 Kafka 的事务。之前我们讲事务的时候说过，Kafka 的事务解决的问题和 RocketMQ 是不太一样的。RocketMQ 中的事务，它解决的问题是，确保执行本地事务和发消息这两个操作，要么都成功，要么都失败。并且，RocketMQ 增加了一个事务反查的机制，来尽量提高事务执行的成功率和数据一致性。</p>
+<p>而 Kafka 中的事务，它解决的问题是，确保在一个事务中发送的多条消息，要么都成功，要么都失败。注意，这里面的多条消息不一定要在同一个主题和分区中，可以是发往多个主题和分区的消息。当然，你可以在 Kafka 的事务执行过程中，加入本地事务，来实现和 RocketMQ 中事务类似的效果，但是 Kafka 是没有事务反查机制的。</p>
+<p>Kafka 的这种事务机制，单独来使用的场景不多。更多的情况下被用来配合 Kafka 的幂等机制来实现 Kafka 的 Exactly Once 语义。我在之前的课程中也强调过，这里面的 Exactly Once，和我们通常理解的消息队列的服务水平中的 Exactly Once 是不一样的。</p>
+<p>我们通常理解消息队列的服务水平中的 Exactly Once，它指的是，消息从生产者发送到 Broker，然后消费者再从 Broker 拉取消息，然后进行消费。这个过程中，确保每一条消息恰好传输一次，不重不丢。我们之前说过，包括 Kafka 在内的几个常见的开源消息队列，都只能做到 At Least Once，也就是至少一次，保证消息不丢，但有可能会重复。做不到 Exactly Once。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/f1acd3373e5eb7878fe1a9a9e85bd11c.png" alt=""></p>
+<p>那 Kafka 中的 Exactly Once 又是解决的什么问题呢？它解决的是，在流计算中，用 Kafka 作为数据源，并且将计算结果保存到 Kafka 这种场景下，数据从 Kafka 的某个主题中消费，在计算集群中计算，再把计算结果保存在 Kafka 的其他主题中。这样的过程中，保证每条消息都被恰好计算一次，确保计算结果正确。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/92f67462acf49f94930bde945a557d8a.png" alt=""></p>
+<p>举个例子，比如，我们把所有订单消息保存在一个 Kafka 的主题 Order 中，在 Flink 集群中运行一个计算任务，统计每分钟的订单收入，然后把结果保存在另一个 Kafka 的主题 Income 里面。要保证计算结果准确，就要确保，无论是 Kafka 集群还是 Flink 集群中任何节点发生故障，每条消息都只能被计算一次，不能重复计算，否则计算结果就错了。这里面有一个很重要的限制条件，就是数据必须来自 Kafka 并且计算结果都必须保存到 Kafka 中，才可以享受到 Kafka 的 Excactly Once 机制。</p>
+<p>可以看到，Kafka 的 Exactly Once 机制，是为了解决在“读数据 - 计算 - 保存结果”这样的计算过程中数据不重不丢，而不是我们通常理解的使用消息队列进行消息生产消费过程中的 Exactly Once。</p>
+<h2 id="kafka-的事务是如何实现的">Kafka 的事务是如何实现的？</h2>
+<p>那 Kafka 的事务又是怎么实现的呢？它的实现原理和 RocketMQ 的事务是差不多的，都是基于两阶段提交来实现的，但是实现的过程更加复杂。</p>
+<p>首先说一下，参与 Kafka 事务的几个角色，或者说是模块。为了解决分布式事务问题，Kafka 引入了事务协调者这个角色，负责在服务端协调整个事务。这个协调者并不是一个独立的进程，而是 Broker 进程的一部分，协调者和分区一样通过选举来保证自身的可用性。</p>
+<p>和 RocketMQ 类似，Kafka 集群中也有一个特殊的用于记录事务日志的主题，这个事务日志主题的实现和普通的主题是一样的，里面记录的数据就是类似于“开启事务”“提交事务”这样的事务日志。日志主题同样也包含了很多的分区。在 Kafka 集群中，可以存在多个协调者，每个协调者负责管理和使用事务日志中的几个分区。这样设计，其实就是为了能并行执行多个事务，提升性能。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/ea0eb980f7684aaa55a28e37114af0bf.png" alt=""><br>
+（图片来源：<a href="./transactions-apache-kafka.md">Kafka 官方</a>）</p>
+<p>下面说一下 Kafka 事务的实现流程。</p>
+<p>首先，当我们开启事务的时候，生产者会给协调者发一个请求来开启事务，协调者在事务日志中记录下事务 ID。</p>
+<p>然后，生产者在发送消息之前，还要给协调者发送请求，告知发送的消息属于哪个主题和分区，这个信息也会被协调者记录在事务日志中。接下来，生产者就可以像发送普通消息一样来发送事务消息，这里和 RocketMQ 不同的是，RocketMQ 选择把未提交的事务消息保存在特殊的队列中，而 Kafka 在处理未提交的事务消息时，和普通消息是一样的，直接发给 Broker，保存在这些消息对应的分区中，Kafka 会在客户端的消费者中，暂时过滤未提交的事务消息。</p>
+<p>消息发送完成后，生产者给协调者发送提交或回滚事务的请求，由协调者来开始两阶段提交，完成事务。第一阶段，协调者把事务的状态设置为“预提交”，并写入事务日志。到这里，实际上事务已经成功了，无论接下来发生什么情况，事务最终都会被提交。</p>
+<p>之后便开始第二阶段，协调者在事务相关的所有分区中，都会写一条“事务结束”的特殊消息，当 Kafka 的消费者，也就是客户端，读到这个事务结束的特殊消息之后，它就可以把之前暂时过滤的那些未提交的事务消息，放行给业务代码进行消费了。最后，协调者记录最后一条事务日志，标识这个事务已经结束了。</p>
+<p>我把整个事务的实现流程，绘制成一个简单的时序图放在这里，便于你理解。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/83f35ed52430f1a683e62fcf1a8219ec.png" alt=""></p>
+<p>总结一下 Kafka 这个两阶段的流程，准备阶段，生产者发消息给协调者开启事务，然后消息发送到每个分区上。提交阶段，生产者发消息给协调者提交事务，协调者给每个分区发一条“事务结束”的消息，完成分布式事务提交。</p>
+<h2 id="小结">小结</h2>
+<p>这节课我分别讲解了 Kafka 和 RocketMQ 是如何来实现事务的。你可以看到，它们在实现事务过程中的一些共同的地方，它们都是基于两阶段提交来实现的事务，都利用了特殊的主题中的队列和分区来记录事务日志。</p>
+<p>不同之处在于对处于事务中的消息的处理方式，RocketMQ 是把这些消息暂存在一个特殊的队列中，待事务提交后再移动到业务队列中；而 Kafka 直接把消息放到对应的业务分区中，配合客户端过滤来暂时屏蔽进行中的事务消息。</p>
+<p>同时你需要了解，RocketMQ 和 Kafka 的事务，它们的适用场景是不一样的，RocketMQ 的事务适用于解决本地事务和发消息的数据一致性问题，而 Kafka 的事务则是用于实现它的 Exactly Once 机制，应用于实时计算的场景中。</p>
+<h2 id="思考题">思考题</h2>
+<p>课后，请你根据我们课程中讲到的 Kafka 事务的实现流程，去 Kafka 的源代码中把这个事务的实现流程分析出来，将我们上面这个时序图进一步细化，绘制一个粒度到类和方法调用的时序图。然后请你想一下，如果事务进行过程中，协调者宕机了，那事务又是如何恢复的呢？欢迎你在评论区留言，写下你的想法。</p>
+<p>感谢阅读，如果你觉得这篇文章对你有一些启发，也欢迎把它分享给你的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/4daea3d1a08e48460d8df87c2a766cef.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/">消息队列高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/25__replicamanager%E4%B8%8B%E5%89%AF%E6%9C%AC%E7%AE%A1%E7%90%86%E5%99%A8%E6%98%AF%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86%E5%89%AF%E6%9C%AC%E7%9A%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25__ReplicaManager（下）：副本管理器是如何管理副本的？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/25__spark_3.0%E4%BA%8Cdpp%E7%89%B9%E6%80%A7%E8%AF%A5%E6%80%8E%E4%B9%88%E7%94%A8/">
+            <span class="next-text nav-default">25__Spark_3.0（二）：DPP特性该怎么用？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

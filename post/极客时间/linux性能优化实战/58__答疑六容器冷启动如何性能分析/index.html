@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>58__答疑（六）：容器冷启动如何性能分析？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是倪朋飞。
+专栏更新至今，咱们专栏最后一部分——综合案例模块也要告一段落了。很高兴看到你没有掉队，仍然在积极学习思考、实践操作，并热情地分享你在实际环境中，遇到过的各种性能问题的分析思路以及优化方法。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/58__%E7%AD%94%E7%96%91%E5%85%AD%E5%AE%B9%E5%99%A8%E5%86%B7%E5%90%AF%E5%8A%A8%E5%A6%82%E4%BD%95%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/58__%E7%AD%94%E7%96%91%E5%85%AD%E5%AE%B9%E5%99%A8%E5%86%B7%E5%90%AF%E5%8A%A8%E5%A6%82%E4%BD%95%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="58__答疑（六）：容器冷启动如何性能分析？">
+  <meta property="og:description" content="你好，我是倪朋飞。
+专栏更新至今，咱们专栏最后一部分——综合案例模块也要告一段落了。很高兴看到你没有掉队，仍然在积极学习思考、实践操作，并热情地分享你在实际环境中，遇到过的各种性能问题的分析思路以及优化方法。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Linux性能优化实战">
+
+  <meta itemprop="name" content="58__答疑（六）：容器冷启动如何性能分析？">
+  <meta itemprop="description" content="你好，我是倪朋飞。
+专栏更新至今，咱们专栏最后一部分——综合案例模块也要告一段落了。很高兴看到你没有掉队，仍然在积极学习思考、实践操作，并热情地分享你在实际环境中，遇到过的各种性能问题的分析思路以及优化方法。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2518">
+  <meta itemprop="keywords" content="Linux性能优化实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="58__答疑（六）：容器冷启动如何性能分析？">
+  <meta name="twitter:description" content="你好，我是倪朋飞。
+专栏更新至今，咱们专栏最后一部分——综合案例模块也要告一段落了。很高兴看到你没有掉队，仍然在积极学习思考、实践操作，并热情地分享你在实际环境中，遇到过的各种性能问题的分析思路以及优化方法。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">58__答疑（六）：容器冷启动如何性能分析？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2518 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题-1容器冷启动性能分析">问题 1：容器冷启动性能分析</a></li>
+        <li><a href="#问题-2cpu-火焰图和内存火焰图有什么不同">问题 2：CPU 火焰图和内存火焰图有什么不同？</a></li>
+        <li><a href="#问题-3perf-probe-失败怎么办">问题 3：perf probe 失败怎么办？</a></li>
+        <li><a href="#问题-4red-法监控微服务应用">问题 4：RED 法监控微服务应用</a></li>
+        <li><a href="#问题-5深入内核的方法">问题 5：深入内核的方法</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是倪朋飞。</p>
+<p>专栏更新至今，咱们专栏最后一部分——综合案例模块也要告一段落了。很高兴看到你没有掉队，仍然在积极学习思考、实践操作，并热情地分享你在实际环境中，遇到过的各种性能问题的分析思路以及优化方法。</p>
+<p>今天是性能优化答疑的第六期。照例，我从综合案例模块的留言中，摘出了一些典型问题，作为今天的答疑内容，集中回复。为了便于你学习理解，它们并不是严格按照文章顺序排列的。每个问题，我都附上了留言区提问的截屏。如果你需要回顾内容原文，可以扫描每个问题右下方的二维码查看。</p>
+<h2 id="问题-1容器冷启动性能分析">问题 1：容器冷启动性能分析</h2>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/b2d3e29bd168a1589f051f10359a8f7b.png" alt=""></p>
+<p>在<a href="./84953.md">为什么应用容器化后，启动慢了很多</a>中，我们一起分析了容器化所导致的应用程序启动缓慢的问题。简单回顾一下当时的案例，Docker 通过 Cgroups 给容器设置了内存限制，但是容器并未意识到，所以还是分配了过多内存，导致被系统 OOM 杀死。</p>
+<p>这个案例的根源实际上比较简单，Tony 同学就此提了一个更深入的问题。</p>
+<p>我们知道，容器为应用程序的管理带来了巨大的便捷，诸如 Serverless（只关注应用的运行，而无需关注服务器）、FaaS（Function as a Service）等新型的软件架构，也都基于容器技术来构建。不过，虽然容器启动已经很快了，但在启动新容器，也就是冷启动的时候，启动时间相对于应用程序的性能要求来说，还是过长了。</p>
+<p>那么，应该怎么来分析和优化冷启动的性能呢？</p>
+<p>这个问题最核心的一点，其实就是要弄清楚，启动时间到底都花在哪儿了。一般来说，一个 Serverless 服务的启动，包括：</p>
+<ul>
+<li>事件触发（比如收到新的 HTTP 调用请求）；</li>
+<li>资源调度；</li>
+<li>镜像拉取；</li>
+<li>网络配置；</li>
+<li>启动应用等几个过程。</li>
+</ul>
+<p>这几个过程所消耗的时间，都可以通过链路跟踪的方式来监控，进而就可以定位出耗时最多的一个或者多个流程。</p>
+<p>紧接着，针对耗时最多的流程，我们可以通过应用程序监控或者动态追踪的方法，定位出耗时最多的字模块，这样也就找出了要优化的瓶颈点。</p>
+<p>比如，镜像拉取流程，可以通过缓存热点镜像来减少镜像拉取时间；网络配置流程，可以通过网络资源预分配进行加速；而资源调度和容器启动，也可以通过复用预先创建好的容器来进行优化。</p>
+<h2 id="问题-2cpu-火焰图和内存火焰图有什么不同">问题 2：CPU 火焰图和内存火焰图有什么不同？</h2>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/e4a8fa310401028c90c2d6b60d4a727a.png" alt=""></p>
+<p>在<a href="./86330.md">内核线程 CPU 利用率过高的案例</a>中，我们一起通过 perf 和火焰图工具，生成了内核热点函数调用栈的动态矢量图，并定位出性能问题发生时，执行最为频繁的内核函数。</p>
+<p>由于案例分析中，我们主要关注的是 CPU 的繁忙情况，所以这时候生成的火焰图，被称为 on-CPU 火焰图。事实上，除此之外，还有 off-CPU、内存等不同的火焰图，分别表示 CPU 的阻塞和内存的分配释放情况。</p>
+<p>所以，李逍遥同学提了出一个很好的问题：同样都是火焰图，CPU 火焰图和内存火焰图，在生成数据时到底有什么不同？</p>
+<p>这个问题，恰好问到了最核心的点上。CPU 火焰图和内存火焰图，最大的差别其实就是数据来源的不同，也就是函数堆栈不同，而火焰图的格式还是完全一样的。</p>
+<ul>
+<li>对 CPU 火焰图来说，采集的数据主要是消耗 CPU 的函数；</li>
+<li>而对内存火焰图来说，采集的数据主要是内存分配、释放、换页等内存管理函数。</li>
+</ul>
+<p>举个例子，我们在使用 perf record 时，默认的采集事件 cpu-cycles，就是采集 on-CPU 数据，而生成的火焰图就是 CPU 火焰图。通过 perf record -e page-fault 将采集事件换成 page-fault 后，就可以采集内存缺页的数据，生成的火焰图自然就成了内存火焰图。</p>
+<h2 id="问题-3perf-probe-失败怎么办">问题 3：perf probe 失败怎么办？</h2>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/7eae2d2e8a46f56e8dd24b5439ba6144.png" alt=""></p>
+<p>在<a href="./86710.md">动态追踪怎么用</a>中，我们一起通过几个案例，学习了 perf、bcc 等动态追踪工具的使用方法。这些动态追踪方法，可以在不修改代码、不重启服务的情况下，让你动态了解应用程序或内核的执行过程。这对于排查情况复杂、难复现的问题尤其有效。</p>
+<p>在使用动态追踪工具时，由于十六进制格式的函数地址并不容易理解，就需要我们借助调试信息，将它们转换为更直观的函数名。对于内核来说，我已经多次提到过，需要安装 debuginfo。不过，针对应用程序又该怎么办呢？</p>
+<p>这里其实有两种方法。</p>
+<p>第一种方法，假如应用程序提供了调试信息软件包，那你就可以直接安装来使用。比如，对于我们案例中的 bash 来说，就可以通过下面的命令，来安装它的调试信息：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Ubuntu
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apt-get install -y bash-dbgsym
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> # Centos
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">debuginfo-install bash
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二种方法，使用源码重新编译应用程序，并开启编译器的调试信息开关，比如可以为 gcc 增加 -g 选项。</p>
+<h2 id="问题-4red-法监控微服务应用">问题 4：RED 法监控微服务应用</h2>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/2d7901b211c72d9d5a6464ba55c8f022.png" alt=""></p>
+<p>在<a href="./87980.md">系统监控的综合思路</a>中，我为你介绍了监控系统资源性能时常用的 USE 法。USE 法把系统资源的性能指标，简化成了三类：使用率、饱和度以及错误数。三者之中任一类别的指标过高时，都代表相应的系统资源可能有性能瓶颈。</p>
+<p>不过，对应用程序的监控来说，这些指标显然就不合适了。因为应用程序的核心指标，是请求数、错误数和响应时间。那该怎么办呢？这其实，正是 Adam 同学在留言中提到的 RED 方法。</p>
+<p>RED 方法，是 Weave Cloud 在监控微服务性能时，结合 Prometheus 监控，所提出的一种监控思路——即对微服务来说，监控它们的请求数（Rate）、错误数（Errors）以及响应时间（Duration）。所以，RED 方法适用于微服务应用的监控，而 USE 方法适用于系统资源的监控。</p>
+<h2 id="问题-5深入内核的方法">问题 5：深入内核的方法</h2>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/6aef378b9e536cb626574ed1ff3ea119.png" alt=""><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/f98346c974240c10e6273ea5428ff0e7.png" alt=""></p>
+<p>在定位性能问题时，我们通过 perf、ebpf、systemtap 等各种方法排查时，很可能会发现，问题的热点在内核中的某个函数中。而青石和 xfan 的问题，就是如何去了解、深入 Linux 内核的原理，特别是想弄清楚，性能工具展示的内核函数到底是什么含义。</p>
+<p>其实，要了解内核函数的含义，最好的方法，就是去查询所用内核版本的源代码。这里，我推荐 <a href="https://elixir.bootlin.com">https://elixir.bootlin.com</a> 这个网站。使用方法也很简单，从左边选择内核版本，再通过内核函数名称去搜索就可以了。</p>
+<p>之所以推荐这个网站，是因为它不仅可以让你快速搜索函数定位，还为所有的函数、变量、宏定义等，都提供了快速跳转的功能。这样，当你看到不明白的函数或变量时，点击就可以跳转到相应的定义处。</p>
+<p>此外，对于 eBPF 来说，除了可以通过内核源码来了解，我更推荐你从 <a href="./bcc.md">BPF Compiler Collection (BCC)</a> 这个项目开始。BCC 提供了很多短小的示例，可以帮你快速了解 eBPF 的工作原理，并熟悉 eBPF 程序的开发思路。了解这些基本的用法后，再去深入 eBPF 的内部，就会轻松很多。</p>
+<p>今天我主要回答这些问题，同时也欢迎你继续在留言区写下疑问和感想，我会持续不断地在留言区跟你交流。希望借助每一次的答疑和交流，可以和你一起，把专栏中的各种知识转化为你的能力。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/f3ab291e71ad0a9d7fe2c894ccb9706a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/">Linux性能优化实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/58__cgroup%E6%8A%80%E6%9C%AF%E5%86%85%E9%83%A8%E5%88%9B%E4%B8%9A%E5%85%AC%E5%8F%B8%E5%BA%94%E8%AF%A5%E7%8B%AC%E7%AB%8B%E6%A0%B8%E7%AE%97%E6%88%90%E6%9C%AC/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">58__CGroup技术：内部创业公司应该独立核算成本</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E4%B9%8B%E7%BE%8E/58__%E6%A8%A1%E6%9D%BF%E6%A8%A1%E5%BC%8F%E4%B8%8A%E5%89%96%E6%9E%90%E6%A8%A1%E6%9D%BF%E6%A8%A1%E5%BC%8F%E5%9C%A8jdkservletjunit%E7%AD%89%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8/">
+            <span class="next-text nav-default">58__模板模式（上）：剖析模板模式在JDK、Servlet、JUnit等中的应用</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

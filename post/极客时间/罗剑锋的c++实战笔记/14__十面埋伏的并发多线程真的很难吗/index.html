@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>14__十面埋伏的并发：多线程真的很难吗？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 Chrono。
+今天，我们来聊聊“并发”（Concurrency）、“多线程”（multithreading）。
+在 20 年前，大多数人（当然也包括我）对这两个词还是十分陌生的。那个时候，CPU 的性能不高，要做的事情也比较少，没什么并发的需求，简单的单进程、单线程就能够解决大多数问题。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%97%E5%89%91%E9%94%8B%E7%9A%84c&#43;&#43;%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/14__%E5%8D%81%E9%9D%A2%E5%9F%8B%E4%BC%8F%E7%9A%84%E5%B9%B6%E5%8F%91%E5%A4%9A%E7%BA%BF%E7%A8%8B%E7%9C%9F%E7%9A%84%E5%BE%88%E9%9A%BE%E5%90%97/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%97%E5%89%91%E9%94%8B%E7%9A%84c&#43;&#43;%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/14__%E5%8D%81%E9%9D%A2%E5%9F%8B%E4%BC%8F%E7%9A%84%E5%B9%B6%E5%8F%91%E5%A4%9A%E7%BA%BF%E7%A8%8B%E7%9C%9F%E7%9A%84%E5%BE%88%E9%9A%BE%E5%90%97/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="14__十面埋伏的并发：多线程真的很难吗？">
+  <meta property="og:description" content="你好，我是 Chrono。
+今天，我们来聊聊“并发”（Concurrency）、“多线程”（multithreading）。
+在 20 年前，大多数人（当然也包括我）对这两个词还是十分陌生的。那个时候，CPU 的性能不高，要做的事情也比较少，没什么并发的需求，简单的单进程、单线程就能够解决大多数问题。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="罗剑锋的C&#43;&#43;实战笔记">
+
+  <meta itemprop="name" content="14__十面埋伏的并发：多线程真的很难吗？">
+  <meta itemprop="description" content="你好，我是 Chrono。
+今天，我们来聊聊“并发”（Concurrency）、“多线程”（multithreading）。
+在 20 年前，大多数人（当然也包括我）对这两个词还是十分陌生的。那个时候，CPU 的性能不高，要做的事情也比较少，没什么并发的需求，简单的单进程、单线程就能够解决大多数问题。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5514">
+  <meta itemprop="keywords" content="罗剑锋的C&#43;&#43;实战笔记">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="14__十面埋伏的并发：多线程真的很难吗？">
+  <meta name="twitter:description" content="你好，我是 Chrono。
+今天，我们来聊聊“并发”（Concurrency）、“多线程”（multithreading）。
+在 20 年前，大多数人（当然也包括我）对这两个词还是十分陌生的。那个时候，CPU 的性能不高，要做的事情也比较少，没什么并发的需求，简单的单进程、单线程就能够解决大多数问题。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">14__十面埋伏的并发：多线程真的很难吗？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5514 字 </span>
+          <span class="more-meta"> 预计阅读 12 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#认识线程和多线程">认识线程和多线程</a></li>
+        <li><a href="#多线程开发实践">多线程开发实践</a>
+          <ul>
+            <li><a href="#仅调用一次">仅调用一次</a></li>
+            <li><a href="#线程局部存储">线程局部存储</a></li>
+            <li><a href="#原子变量">原子变量</a></li>
+            <li><a href="#线程">线程</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#课下作业">课下作业</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 Chrono。</p>
+<p>今天，我们来聊聊“并发”（Concurrency）、“多线程”（multithreading）。</p>
+<p>在 20 年前，大多数人（当然也包括我）对这两个词还是十分陌生的。那个时候，CPU 的性能不高，要做的事情也比较少，没什么并发的需求，简单的单进程、单线程就能够解决大多数问题。</p>
+<p>但到了现在，计算机硬件飞速发展，不仅主频上 G，还有了多核心，运算能力大幅度提升，只使用单线程很难“喂饱”CPU。而且，随着互联网、大数据、音频视频处理等新需求的不断涌现，运算量也越来越大。这些软硬件上的变化迫使“并发”“多线程”成为了每个技术人都不得不面对的课题。</p>
+<p>通俗地说，“并发”是指在一个时间段里有多个操作在同时进行，与“多线程”并不是一回事。</p>
+<p>并发有很多种实现方式，而多线程只是其中最常用的一种手段。不过，因为多线程已经有了很多年的实际应用，也有很多研究成果、应用模式和成熟的软硬件支持，所以，对这两者的区分一般也不太严格，下面我主要来谈多线程。</p>
+<h2 id="认识线程和多线程">认识线程和多线程</h2>
+<p>要掌握多线程，就要先了解线程（thread）。</p>
+<p>线程的概念可以分成好几个层次，从 CPU、操作系统等不同的角度看，它的定义也不同。今天，我们单从语言的角度来看线程。</p>
+<p><strong>在 C++ 语言里，线程就是一个能够独立运行的函数</strong>。比如你写一个 lambda 表达式，就可以让它在线程里跑起来：</p>
+<p>auto f = <a href=""></a>                // 定义一个 lambda 表达式<br>
+{<br>
+cout &laquo; &ldquo;tid=&rdquo; &laquo;<br>
+this_thread::get_id() &laquo; endl;<br>
+};</p>
+<p>thread t(f);                // 启动一个线程，运行函数 f</p>
+<p>任何程序一开始就有一个主线程，它从 main() 开始运行。主线程可以调用接口函数，创建出子线程。子线程会立即脱离主线程的控制流程，单独运行，但共享主线程的数据。程序创建出多个子线程，执行多个不同的函数，也就成了多线程。</p>
+<p>多线程的好处你肯定能列出好几条，比如任务并行、避免 I/O 阻塞、充分利用 CPU、提高用户界面响应速度，等等。</p>
+<p>不过，多线程也对程序员的思维、能力提出了极大的挑战。不夸张地说，它带来的麻烦可能要比好处更多。</p>
+<p>这个问题相信你也很清楚，随手就能数出几个来，比如同步、死锁、数据竞争、系统调度开销等……每个写过实际多线程应用的人，可能都有“一肚子的苦水”。</p>
+<p>其实，多线程编程这件事“说难也不难，说不难也难”。这句话听上去好像有点自相矛盾，但却有一定的道理。为什么这么说呢？</p>
+<p>说它不难，是因为线程本身的概念是很简单的，只要规划好要做的工作，不与外部有过多的竞争读写，很容易就能避开“坑”，充分利用多线程，“跑满”CPU。</p>
+<p>说它难，则是因为现实的业务往往非常复杂，很难做到完美的解耦。一旦线程之间有共享数据的需求，麻烦就接踵而至，因为要考虑各种情况、用各种手段去同步数据。随着线程数量的增加，复杂程度会以几何量级攀升，一不小心就可能会导致灾难性的后果。</p>
+<p>多线程涵盖的知识点太多，许多大师、高手都不敢自称精通，想用一节课把多线程开发说清楚是完全不可能的。</p>
+<p>所以，今天我们只聚焦 C++ 的标准库，了解下标准库为多线程编程提供了哪些工具，在语言层面怎么改善多线程应用。有了这个基础，你再去看那些专著时，就可以省很多力气，开发时也能少走些弯路。</p>
+<p>首先，你要知道一个最基本但也最容易被忽视的常识：<strong>“读而不写”就不会有数据竞争</strong>。</p>
+<p>所以，在 C++ 多线程编程里读取 const 变量总是安全的，对类调用 const 成员函数、对容器调用只读算法也总是线程安全的。</p>
+<p>知道了这一点，你就应该多实践第 7 讲里的做法，多用 const 关键字，尽可能让操作都是只读的，为多线程打造一个坚实的基础。</p>
+<p>然后，我要说一个多线程开发的原则，也是一句“自相矛盾”的话：</p>
+<blockquote>
+<p>最好的并发就是没有并发，最好的多线程就是没有线程。</p>
+</blockquote>
+<p>这又是什么意思呢？</p>
+<p>简单来说，就是在大的、宏观的层面上“看得到”并发和线程，而在小的、微观的层面上“看不到”线程，减少死锁、同步等恶性问题的出现几率。</p>
+<h2 id="多线程开发实践">多线程开发实践</h2>
+<p>下面，我就来讲讲具体该怎么实践这个原则。在 C++ 里，有四个基本的工具：仅调用一次、线程局部存储、原子变量和线程对象。</p>
+<h3 id="仅调用一次">仅调用一次</h3>
+<p>程序免不了要初始化数据，这在多线程里却是一个不大不小的麻烦。因为线程并发，如果没有某种同步手段来控制，会导致初始化函数多次运行。</p>
+<p>为此，C++ 提供了“仅调用一次”的功能，可以很轻松地解决这个问题。</p>
+<p>这个功能用起来很简单，你要先声明一个 <strong>once_flag</strong> 类型的变量，最好是静态、全局的（线程可见），作为初始化的标志：</p>
+<p>static std::once_flag flag;        // 全局的初始化标志</p>
+<p>然后调用专门的 <strong>call_once()</strong> 函数，以函数式编程的方式，传递这个标志和初始化函数。这样 C++ 就会保证，即使多个线程重入 call_once()，也只能有一个线程会成功运行初始化。</p>
+<p>下面是一个简单的示例，使用了 lambda 表达式来模拟实际的线程函数。你可以把GitHub 仓库里的代码下到本地，实际编译运行看看效果：</p>
+<p>auto f = <a href=""></a>                // 在线程里运行的 lambda 表达式<br>
+{  <br>
+std::call_once(flag,      // 仅一次调用，注意要传 flag<br>
+<a href=""></a>{                // 匿名 lambda，初始化函数，只会执行一次<br>
+cout &laquo; &ldquo;only once&rdquo; &laquo; endl;<br>
+}                  // 匿名 lambda 结束<br>
+);                     // 在线程里运行的 lambda 表达式结束<br>
+};</p>
+<p>thread t1(f);            // 启动两个线程，运行函数 f<br>
+thread t2(f);</p>
+<p>call_once() 完全消除了初始化时的并发冲突，在它的调用位置根本看不到并发和线程。所以，按照刚才说的基本原则，它是一个很好的多线程工具。</p>
+<p>它也可以很轻松地解决多线程领域里令人头疼的“双重检查锁定”问题，你可以自己试一试，用它替代锁定来初始化。</p>
+<h3 id="线程局部存储">线程局部存储</h3>
+<p>读写全局（或者局部静态）变量是另一个比较常见的数据竞争场景，因为共享数据，多线程操作时就有可能导致状态不一致。</p>
+<p>但如果仔细分析的话，你会发现，有的时候，全局变量并不一定是必须共享的，可能仅仅是为了方便线程传入传出数据，或者是本地 cache，而不是为了共享所有权。</p>
+<p>换句话说，这应该是线程独占所有权，不应该在多线程之间共同拥有，术语叫“<strong>线程局部存储</strong>”（thread local storage）。</p>
+<p>这个功能在 C++ 里由关键字 <strong>thread_local</strong> 实现，它是一个和 static、extern 同级的变量存储说明，有 thread_local 标记的变量在每个线程里都会有一个独立的副本，是“线程独占”的，所以就不会有竞争读写的问题。</p>
+<p>下面是示范 thread_local 的代码，先定义了一个线程独占变量，然后用 lambda 表达式捕获引用，再放进多个线程里运行：</p>
+<p>thread_local int n = 0;        // 线程局部存储变量</p>
+<p>auto f = <a href="./int_x.md">&amp;</a>           // 在线程里运行的 lambda 表达式，捕获引用<br>
+{  <br>
+n += x;                   // 使用线程局部变量，互不影响<br>
+cout &laquo; n;                // 输出，验证结果<br>
+};</p>
+<p>thread t1(f, 10);           // 启动两个线程，运行函数 f<br>
+thread t2(f, 20);</p>
+<p>在程序执行后，我们可以看到，两个线程分别输出了 10 和 20，互不干扰。</p>
+<p>你可以试着把变量的声明改成 static，再运行一下。这时，因为两个线程共享变量，所以 n 就被连加了两次，最后的结果就是 30。</p>
+<p>static int n = 0;    // 静态全局变量<br>
+&hellip;                   // 代码与刚才的相同</p>
+<p>和 call_once() 一样，thread_local 也很容易使用。但它的应用场合不是那么显而易见的，这要求你对线程的共享数据有清楚的认识，区分出独占的那部分，消除多线程对变量的并发访问。</p>
+<h3 id="原子变量">原子变量</h3>
+<p>那么，对于那些非独占、必须共享的数据，该怎么办呢？</p>
+<p>要想保证多线程读写共享数据的一致性，关键是<strong>要解决同步问题</strong>，不能让两个线程同时写，也就是“互斥”。</p>
+<p>这在多线程编程里早就有解决方案了，就是互斥量（Mutex）。但它的成本太高，所以，对于小数据，应该采用“<strong>原子化</strong>”这个更好的方案。</p>
+<p>所谓原子（atomic），在多线程领域里的意思就是不可分的。操作要么完成，要么未完成，不能被任何外部操作打断，总是有一个确定的、完整的状态。所以也就不会存在竞争读写的问题，不需要使用互斥量来同步，成本也就更低。</p>
+<p>但不是所有的操作都可以原子化的，否则多线程编程就太轻松了。目前，C++ 只能让一些最基本的类型原子化，比如 atomic_int、atomic_long，等等：</p>
+<p>using atomic_bool = std::atomic<bool>;    // 原子化的 bool<br>
+using atomic_int  = std::atomic<int>;      // 原子化的 int<br>
+using atomic_long = std::atomic<long>;    // 原子化的 long</p>
+<p>这些原子变量都是模板类 atomic 的特化形式，包装了原始的类型，具有相同的接口，用起来和 bool、int 几乎一模一样，但却是原子化的，多线程读写不会出错。</p>
+<p>注意，我说了“几乎”这个词。它还是有些不同的，一个重要的区别是，<strong>原子变量禁用了拷贝构造函数，所以在初始化的时候不能用“=”的赋值形式，只能用圆括号或者花括号</strong>：</p>
+<p>atomic_int  x {0};          // 初始化，不能用=<br>
+atomic_long y {1000L};      // 初始化，只能用圆括号或者花括号</p>
+<p>assert(++x == 1);           // 自增运算</p>
+<p>y += 200;                   // 加法运算<br>
+assert(y &lt; 2000);           // 比较运算</p>
+<p>除了模拟整数运算，原子变量还有一些特殊的原子操作，比如 store、load、fetch_add、fetch_sub、exchange、compare_exchange_weak/compare_exchange_strong，最后一组就是著名的 CAS（Compare And Swap）操作。</p>
+<p>而另一个同样著名的 TAS（Test And Set）操作，则需要用到一个特殊的原子类型 atomic_flag。</p>
+<p>它不是简单的 bool 特化（atomic），没有 store、load 的操作，只用来实现 TAS，保证绝对无锁。</p>
+<p>你能用这些原子变量做些什么呢？</p>
+<p>最基本的用法是把原子变量当作线程安全的全局计数器或者标志位，这也算是“初心”吧。但它还有一个更重要的应用领域，就是实现高效的无锁数据结构（lock-free）。</p>
+<p>但我<strong>强烈不建议</strong>你自己尝试去写无锁数据结构，因为无锁编程的难度比使用互斥量更高，可能会掉到各种难以察觉的“坑”（例如 ABA）里，最好还是用现成的库。</p>
+<p>遗憾的是，标准库在这方面帮不了你，虽然网上可以找到不少开源的无锁数据结构，但经过实际检验的不多，我个人觉得你可以考虑 <strong>boost.lock_free</strong>。</p>
+<h3 id="线程">线程</h3>
+<p>到现在我说了 call_once、thread_local 和 atomic 这三个 C++ 里的工具，它们都不与线程直接相关，但却能够用于多线程编程，尽量消除显式地使用线程。</p>
+<p>但是，必须要用线程的时候，我们也不能逃避。</p>
+<p>C++ 标准库里有专门的线程类 thread，使用它就可以简单地创建线程，在名字空间 std::this_thread 里，还有 yield()、get_id()、sleep_for()、sleep_until() 等几个方便的管理函数。因为它们的用法比较简单，资料也随处可见，我就不再重复了。</p>
+<p>下面的代码同时示范了 thread 和 atomic 的用法：</p>
+<p>static atomic_flag flag {false};    // 原子化的标志量<br>
+static atomic_int  n;               // 原子化的 int</p>
+<p>auto f = <a href="">&amp;</a>              // 在线程里运行的 lambda 表达式，捕获引用<br>
+{<br>
+auto value = flag.test_and_set();  // TAS 检查原子标志量</p>
+<pre><code>if (value) {  
+    cout &lt;&lt; &quot;flag has been set.&quot; &lt;&lt; endl;  
+} else {  
+    cout &lt;&lt; &quot;set flag by &quot; &lt;&lt;  
+        this_thread::get_id() &lt;&lt; endl;  // 输出线程 id  
+}  
+
+n += 100;                    // 原子变量加法运算  
+
+this_thread::sleep_for(      // 线程睡眠  
+    n.load() * 10ms);        // 使用时间字面量  
+cout &lt;&lt; n &lt;&lt; endl;  
+</code></pre>
+<p>};                        // 在线程里运行的 lambda 表达式结束</p>
+<p>thread t1(f);                // 启动两个线程，运行函数 f<br>
+thread t2(f);</p>
+<p>t1.join();                   // 等待线程结束   <br>
+t2.join();</p>
+<p>但还是基于那个原则，我建议你不要直接使用 thread 这个“原始”的线程概念，最好把它隐藏到底层，因为“看不到的线程才是好线程”。</p>
+<p>具体的做法是调用函数 async()，它的含义是“<strong>异步运行</strong>”一个任务，隐含的动作是启动一个线程去执行，但不绝对保证立即启动（也可以在第一个参数传递 std::launch::async，要求立即启动线程）。</p>
+<p>大多数 thread 能做的事情也可以用 async() 来实现，但不会看到明显的线程：</p>
+<p>auto task = <a href="./auto_x.md"></a>                  // 在线程里运行的 lambda 表达式<br>
+{<br>
+this_thread::sleep_for( x * 1ms);  // 线程睡眠<br>
+cout &laquo; &ldquo;sleep for &quot; &laquo; x &laquo; endl;<br>
+return x;<br>
+};</p>
+<p>auto f = std::async(task, 10);         // 启动一个异步任务<br>
+f.wait();                              // 等待任务完成</p>
+<p>assert(f.valid());                    // 确实已经完成了任务<br>
+cout &laquo; f.get() &laquo; endl;              // 获取任务的执行结果</p>
+<p>其实，这还是函数式编程的思路，在更高的抽象级别上去看待问题，异步并发多个任务，让底层去自动管理线程，要比我们自己手动控制更好（比如内部使用线程池或者其他机制）。</p>
+<p>async() 会返回一个 future 变量，可以认为是代表了执行结果的“期货”，如果任务有返回值，就可以用成员函数 get() 获取。</p>
+<p>不过要特别注意，get() 只能调一次，再次获取结果会发生错误，抛出异常 std::future_error。（至于为什么这么设计我也不太清楚，没找到官方的解释）</p>
+<p>另外，这里还有一个很隐蔽的“坑”，如果你不显式获取 async() 的返回值（即 future 对象），它就会<strong>同步阻塞</strong>直至任务完成（由于临时对象的析构函数），于是“async”就变成了“sync”。</p>
+<p>所以，即使我们不关心返回值，也总要用 auto 来配合 async()，避免同步阻塞，就像下面的示例代码那样：</p>
+<p>std::async(task, &hellip;);            // 没有显式获取 future，被同步阻塞<br>
+auto f = std::async(task, &hellip;);   // 只有上一个任务完成后才能被执行</p>
+<p>标准库里还有 mutex、lock_guard、condition_variable、promise 等很多工具，不过它们大多数都是广为人知的概念在 C++ 里的具体实现，用法上没太多新意，所以我就不再多介绍了。</p>
+<h2 id="小结">小结</h2>
+<p>说了这么长时间，你可能会有些奇怪，这节课的标题里有线程，但我并没有讲太多线程相关的东西，更多的是在讲“不用线程”的思维方式。</p>
+<p>所谓“当局者迷”，如果你一头扎进多线程的世界，全力去研究线程、互斥量、锁等细节，就很容易“钻进死胡同”“一条道走到黑”。</p>
+<p>很多时候，我们应该跳出具体的编码，换个角度来看问题，也许就能够“柳暗花明又一村”，得到新的、优雅的解决办法。</p>
+<p>好了，今天就到这里，做个小结：</p>
+<ol>
+<li>多线程是并发最常用的实现方式，好处是任务并行、避免阻塞，坏处是开发难度高，有数据竞争、死锁等很多“坑”；</li>
+<li>call_once() 实现了仅调用一次的功能，避免多线程初始化时的冲突；</li>
+<li>thread_local 实现了线程局部存储，让每个线程都独立访问数据，互不干扰；</li>
+<li>atomic 实现了原子化变量，可以用作线程安全的计数器，也可以实现无锁数据结构；</li>
+<li>async() 启动一个异步任务，相当于开了一个线程，但内部通常会有优化，比直接使用线程更好。</li>
+</ol>
+<p>我再告诉你一个好消息：C++20 正式加入了协程（关键字 co_wait/co_yield/co_return）。它是用户态的线程，没有系统级线程那么多的麻烦事，使用它就可以写出开销更低、性能更高的并发程序。让我们一起期待吧！</p>
+<h2 id="课下作业">课下作业</h2>
+<p>最后是课下作业时间，给你留两个思考题：</p>
+<ol>
+<li>你在多线程编程的时候遇到过哪些“坑”，有什么经验教训？</li>
+<li>你觉得 async() 比直接用 thread 启动线程好在哪里？</li>
+</ol>
+<p>欢迎在留言区写下你的思考和答案，如果觉得今天的内容对你有所帮助，也欢迎分享给你的朋友。我们下节课见。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%97%E5%89%91%E9%94%8B%E7%9A%84C++%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/996c54f57f21a80e0d84a467b6c8e14b.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%97%E5%89%91%E9%94%8B%E7%9A%84c&#43;&#43;%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/">罗剑锋的C&#43;&#43;实战笔记</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/14__%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90pod%E5%AF%B9%E8%B1%A1%E4%B8%80%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">14__深入解析Pod对象（一）：基本概念</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E4%B9%8B%E7%BE%8E/14__%E5%AE%9E%E6%88%98%E4%BA%8C%E4%B8%8B%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%E8%AE%BE%E8%AE%A1%E5%92%8C%E7%BC%96%E7%A8%8B%E5%BC%80%E5%8F%91%E6%8E%A5%E5%8F%A3%E9%89%B4%E6%9D%83%E5%8A%9F%E8%83%BD/">
+            <span class="next-text nav-default">14__实战二（下）：如何利用面向对象设计和编程开发接口鉴权功能？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

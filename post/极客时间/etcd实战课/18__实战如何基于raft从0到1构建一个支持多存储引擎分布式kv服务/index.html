@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>18__实战：如何基于Raft从0到1构建一个支持多存储引擎分布式KV服务？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是唐聪。
+通过前面课程的学习，我相信你已经对 etcd 基本架构、核心特性有了一定理解。如果让你基于 Raft 协议，实现一个简易的类 etcd、支持多存储引擎的分布式 KV 服务，并能满足读多写少、读少写多的不同业务场景诉求，你知道该怎么动手吗？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/18__%E5%AE%9E%E6%88%98%E5%A6%82%E4%BD%95%E5%9F%BA%E4%BA%8Eraft%E4%BB%8E0%E5%88%B01%E6%9E%84%E5%BB%BA%E4%B8%80%E4%B8%AA%E6%94%AF%E6%8C%81%E5%A4%9A%E5%AD%98%E5%82%A8%E5%BC%95%E6%93%8E%E5%88%86%E5%B8%83%E5%BC%8Fkv%E6%9C%8D%E5%8A%A1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/18__%E5%AE%9E%E6%88%98%E5%A6%82%E4%BD%95%E5%9F%BA%E4%BA%8Eraft%E4%BB%8E0%E5%88%B01%E6%9E%84%E5%BB%BA%E4%B8%80%E4%B8%AA%E6%94%AF%E6%8C%81%E5%A4%9A%E5%AD%98%E5%82%A8%E5%BC%95%E6%93%8E%E5%88%86%E5%B8%83%E5%BC%8Fkv%E6%9C%8D%E5%8A%A1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="18__实战：如何基于Raft从0到1构建一个支持多存储引擎分布式KV服务？">
+  <meta property="og:description" content="你好，我是唐聪。
+通过前面课程的学习，我相信你已经对 etcd 基本架构、核心特性有了一定理解。如果让你基于 Raft 协议，实现一个简易的类 etcd、支持多存储引擎的分布式 KV 服务，并能满足读多写少、读少写多的不同业务场景诉求，你知道该怎么动手吗？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Etcd实战课">
+
+  <meta itemprop="name" content="18__实战：如何基于Raft从0到1构建一个支持多存储引擎分布式KV服务？">
+  <meta itemprop="description" content="你好，我是唐聪。
+通过前面课程的学习，我相信你已经对 etcd 基本架构、核心特性有了一定理解。如果让你基于 Raft 协议，实现一个简易的类 etcd、支持多存储引擎的分布式 KV 服务，并能满足读多写少、读少写多的不同业务场景诉求，你知道该怎么动手吗？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6592">
+  <meta itemprop="keywords" content="Etcd实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="18__实战：如何基于Raft从0到1构建一个支持多存储引擎分布式KV服务？">
+  <meta name="twitter:description" content="你好，我是唐聪。
+通过前面课程的学习，我相信你已经对 etcd 基本架构、核心特性有了一定理解。如果让你基于 Raft 协议，实现一个简易的类 etcd、支持多存储引擎的分布式 KV 服务，并能满足读多写少、读少写多的不同业务场景诉求，你知道该怎么动手吗？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">18__实战：如何基于Raft从0到1构建一个支持多存储引擎分布式KV服务？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6592 字 </span>
+          <span class="more-meta"> 预计阅读 14 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#整体架构设计">整体架构设计</a>
+          <ul>
+            <li><a href="#api-设计">API 设计</a></li>
+            <li><a href="#复制状态机">复制状态机</a></li>
+            <li><a href="#多存储引擎">多存储引擎</a></li>
+          </ul>
+        </li>
+        <li><a href="#实现分析">实现分析</a>
+          <ul>
+            <li><a href="#raft-算法库">Raft 算法库</a></li>
+            <li><a href="#支持多存储引擎">支持多存储引擎</a></li>
+            <li><a href="#读写流程">读写流程</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是唐聪。</p>
+<p>通过前面课程的学习，我相信你已经对 etcd 基本架构、核心特性有了一定理解。如果让你基于 Raft 协议，实现一个简易的类 etcd、支持多存储引擎的分布式 KV 服务，并能满足读多写少、读少写多的不同业务场景诉求，你知道该怎么动手吗？</p>
+<p>纸上得来终觉浅，绝知此事要躬行。</p>
+<p>今天我就和你聊聊如何实现一个类 etcd、支持多存储引擎的 KV 服务，我们将基于 etcd 自带的raftexample项目快速构建它。</p>
+<p>为了方便后面描述，我把它命名为 metcd（表示微型的 etcd），它是 raftexample 的加强版。希望通过 metcd 这个小小的实战项目，能够帮助你进一步理解 etcd 乃至分布式存储服务的核心架构、原理、典型问题解决方案。</p>
+<p>同时在这个过程中，我将详细为你介绍 etcd 的 Raft 算法工程实现库、不同类型存储引擎的优缺点，拓宽你的知识视野，为你独立分析 etcd 源码，夯实基础。</p>
+<h2 id="整体架构设计">整体架构设计</h2>
+<p>在和你深入聊代码细节之前，首先我和你从整体上介绍下系统架构。</p>
+<p>下面是我给你画的 metcd 整体架构设计，它由 API 层、Raft 层的共识模块、逻辑层及存储层组成的状态机组成。</p>
+<p>接下来，我分别和你简要分析下 API 设计及复制状态机。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/9349a5623e4347fe4c381aff0ee7aecf.png" alt=""></p>
+<h3 id="api-设计">API 设计</h3>
+<p>API 是软件系统对外的语言，它是应用编程接口的缩写，由一组接口定义和协议组成。</p>
+<p>在设计 API 的时候，我们往往会考虑以下几个因素：</p>
+<ol>
+<li>性能。如 etcd v2 使用的是简单的 HTTP/1.x，性能上无法满足大规模 Kubernetes 集群等场景的诉求，因此 etcd v3 使用的是基于 HTTP/2 的 gRPC 协议。</li>
+<li>易用性、可调试性。如有的内部高并发服务为了满足性能等诉求，使用的是 UDP 协议。相比 HTTP 协议，UDP 协议显然在易用性、可调试性上存在一定的差距。</li>
+<li>开发效率、跨平台、可移植性。相比基于裸 UDP、TCP 协议设计的接口，如果你使用 Protobuf 等 IDL 语言，它支持跨平台、代码自动自动生成，开发效率更高。</li>
+<li>安全性。如相比 HTTP 协议，使用 HTTPS 协议可对通信数据加密更安全，可适用于不安全的网络环境（比如公网传输）。</li>
+<li>接口幂等性。幂等性简单来说，就是同样一个接口请求一次与多次的效果一样。若你的接口对外保证幂等性，则可降低使用者的复杂度。</li>
+</ol>
+<p>因为我们场景的是 POC(Proof of concept)、Demo 开发，因此在 metcd 项目中，我们优先考虑点是易用性、可调试性，选择 HTTP/1.x 协议，接口上为了满足 key-value 操作，支持 Get 和 Put 接口即可。</p>
+<p>假设 metcd 项目使用 3379 端口，Put 和 Get 接口，如下所示。</p>
+<ol>
+<li>Put 接口，设置 key-value</li>
+</ol>
+<p>curl -L http://127.0.0.1:3379/hello -XPUT -d world</p>
+<ol>
+<li>Get 接口，查询 key-value</li>
+</ol>
+<p>curl -L http://127.0.0.1:3379/hello<br>
+world</p>
+<h3 id="复制状态机">复制状态机</h3>
+<p>了解完 API 设计，那最核心的复制状态机是如何工作的呢？</p>
+<p>我们知道 etcd 是基于下图复制状态机实现的分布式 KV 服务，复制状态机由共识模块、日志模块、状态机组成。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/a4c1f48ab7deaedc4b7be0fb8345d7fd.png" alt=""></p>
+<p>我们的实战项目 metcd，也正是使用与之一样的模型，并且使用 etcd 项目中实现的 Raft 算法库作为共识模块，此算法库已被广泛应用在 etcd、cockroachdb、dgraph 等开源项目中。</p>
+<p>以下是复制状态机的写请求流程：</p>
+<ol>
+<li>client 发起一个写请求（put hello = world）；</li>
+<li>server 向 Raft 共识模块提交请求，共识模块生成一个写提案日志条目。若 server 是 Leader，则把日志条目广播给其他节点，并持久化日志条目到 WAL 中；</li>
+<li>当一半以上节点持久化日志条目后，Leader 的共识模块将此日志条目标记为已提交（committed），并通知其他节点提交；</li>
+<li>server 从共识模块获取已经提交的日志条目，异步应用到状态机存储中（boltdb/leveldb/memory），然后返回给 client。</li>
+</ol>
+<h3 id="多存储引擎">多存储引擎</h3>
+<p>了解完复制状态机模型后，我和你再深入介绍下状态机。状态机中最核心模块当然是存储引擎，那要如何同时支持多种存储引擎呢？</p>
+<p>metcd 项目将基于 etcd 本身自带的 raftexample 项目进行快速开发，而 raftexample 本身只支持内存存储。</p>
+<p>因此我们通过将 KV 存储接口进行抽象化设计，实现支持多存储引擎。KVStore interface 的定义如下所示。</p>
+<p>type KVStore interface {<br>
+// LookUp get key value<br>
+Lookup(key string) (string, bool)</p>
+<p>// Propose propose kv request into raft state machine<br>
+Propose(k, v string)</p>
+<p>// ReadCommits consume entry from raft state machine into KvStore map until error<br>
+ReadCommits(commitC &lt;-chan *string, errorC &lt;-chan error)</p>
+<p>// Snapshot return KvStore snapshot<br>
+Snapshot() ([]byte, error)</p>
+<p>// RecoverFromSnapshot recover data from snapshot<br>
+RecoverFromSnapshot(snapshot []byte) error</p>
+<p>// Close close backend databases<br>
+Close() err<br>
+}</p>
+<p>基于 KV 接口抽象化的设计，我们只需要针对具体的存储引擎，实现对应的操作即可。</p>
+<p>我们期望支持三种存储引擎，分别是内存 map、boltdb、leveldb，并做一系列简化设计。一组 metcd 实例，通过 metcd 启动时的配置来决定使用哪种存储引擎。不同业务场景不同实例，比如读多写少的存储引擎可使用 boltdb，写多读少的可使用 leveldb。</p>
+<p>接下来我和你重点介绍下存储引擎的选型及原理。</p>
+<h4 id="boltdb">boltdb</h4>
+<p>boltdb 是一个基于 B+ tree 实现的存储引擎库，在10中我已和你详细介绍过原理。</p>
+<p>boltdb 为什么适合读多写少？</p>
+<p>对于读请求而言，一般情况下它可直接从内存中基于 B+ tree 遍历，快速获取数据返回给 client，不涉及经过磁盘 I/O。</p>
+<p>对于写请求，它基于 B+ tree 查找写入位置，更新 key-value。事务提交时，写请求包括 B+ tree 重平衡、分裂、持久化 ditry page、持久化 freelist、持久化 meta page 流程。同时，ditry page 可能分布在文件的各个位置，它发起的是随机写磁盘 I/O。</p>
+<p>因此在 boltdb 中，完成一个写请求的开销相比读请求是大很多的。正如我在16和17中给你介绍的一样，一个 3 节点的 8 核 16G 空集群，线性读性能可以达到 19 万 QPS，而写 QPS 仅为 5 万。</p>
+<h4 id="leveldb">leveldb</h4>
+<p>那要如何设计适合写多读少的存储引擎呢？</p>
+<p>最简单的思路当然是写内存最快。可是内存有限的，无法支撑大容量的数据存储，不持久化数据会丢失。</p>
+<p>那能否直接将数据顺序追加到文件末尾（AOF）呢？因为磁盘的特点是顺序写性能比较快。</p>
+<p>当然可以。Bitcask存储模型就是采用 AOF 模式，把写请求顺序追加到文件。Facebook 的图片存储Haystack根据其论文介绍，也是使用类似的方案来解决大规模写入痛点。</p>
+<p>那在 AOF 写入模型中如何实现查询数据呢？</p>
+<p>很显然通过遍历文件一个个匹配 key 是可以的，但是它的性能是极差的。为了实现高性能的查询，最理想的解决方案从直接从内存中查询，但是内存是有限的，那么我们能否通过内存索引来记录一个 key-value 数据在文件中的偏移量，实现从磁盘快速读取呢？</p>
+<p>是的，这正是Bitcask存储模型的查询的实现，它通过内存哈希表维护各个 key-value 数据的索引，实现了快速查找 key-value 数据。不过，内存中虽然只保存 key 索引信息，但是当 key 较多的时候，其对内存要求依然比较高。</p>
+<p>快速了解完存储引擎提升写性能的核心思路（随机写转化为顺序写）之后，那 leveldb 它的原理是怎样的呢？与 Bitcask 存储模型有什么不一样？</p>
+<p>leveldb 是基于 LSM tree(log-structured merge-tree) 实现的 key-value 存储，它的架构如下图所示（引用自微软博客）。</p>
+<p>它提升写性能的核心思路同样是将随机写转化为顺序写磁盘 WAL 文件和内存，结合了我们上面讨论的写内存和磁盘两种方法。数据持久化到 WAL 文件是为了确保机器 crash 后数据不丢失。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/850bab48c45d7dc085d0c3ee46416837.png" alt=""></p>
+<p>那么它要如何解决内存不足和查询的痛点问题呢？</p>
+<p>核心解决方案是分层的设计和基于一系列对象的转换和压缩。接下来我给你分析一下上面架构图写流程和后台 compaction 任务：</p>
+<ol>
+<li>首先写请求顺序写入 Log 文件 (WAL)；</li>
+<li>更新内存的 Memtable。leveldb Memtable 后端数据结构实现是 skiplist，skiplist 相比平衡二叉树，实现简单却同样拥有高性能的读写；</li>
+<li>当 Memtable 达到一定的阈值时，转换成不可变的 Memtable，也就是只读不可写；</li>
+<li>leveldb 后台 Compact 任务会将不可变的 Memtable 生成 SSTable 文件，它有序地存储一系列 key-value 数据。注意 SST 文件按写入时间进行了分层，Level 层次越小数据越新。Manifest 文件记录了各个 SSTable 文件处于哪个层级、它的最小与最大 key 范围；</li>
+<li>当某个 level 下的 SSTable 文件数目超过一定阈值后，Compact 任务会从这个 level 的 SSTable 中选择一个文件（level&gt;0），将其和高一层级的 level+1 的 SSTable 文件合并；</li>
+<li>注意 level 0 是由 Immutable 直接生成的，因此 level 0 SSTable 文件中的 key-value 存在相互重叠。而 level &gt; 0 时，在和更高一层 SSTable 合并过程中，参与的 SSTable 文件是多个，leveldb 会确保各个 SSTable 中的 key-value 不重叠。</li>
+</ol>
+<p>了解完写流程，读流程也就简单了，核心步骤如下：</p>
+<ol>
+<li>从 Memtable 跳跃表中查询 key；</li>
+<li>未找到则从 Immutable 中查找；</li>
+<li>Immutable 仍未命中，则按照 leveldb 的分层属性，因 level 0 SSTable 文件是直接从 Immutable 生成的，level 0 存在特殊性，因此你需要从 level 0 遍历 SSTable 查找 key；</li>
+<li>level 0 中若未命中，则从 level 1 乃至更高的层次查找。level 大于 0 时，各个 SSTable 中的 key 是不存在相互重叠的。根据 manifest 记录的 key-value 范围信息，可快递定位到具体的 SSTable。同时 leveldb 基于bloom filter实现了快速筛选 SSTable，因此查询效率较高。</li>
+</ol>
+<p>更详细原理你可以参考一下leveldb源码。</p>
+<h2 id="实现分析">实现分析</h2>
+<p>从 API 设计、复制状态机、多存储引擎支持等几个方面你介绍了 metcd 架构设计后，接下来我就和你重点介绍下共识模块、状态机支持多存储引擎模块的核心实现要点。</p>
+<h3 id="raft-算法库">Raft 算法库</h3>
+<p>共识模块使用的是 etcd Raft 算法库，它是一个经过大量业务生产环境检验、具备良好可扩展性的共识算法库。</p>
+<p>它提供了哪些接口给你使用？如何提交一个提案，并且获取 Raft 共识模块输出结果呢？</p>
+<h4 id="raft-api">Raft API</h4>
+<p>Raft 作为一个库，它对外最核心的对象是一个名为Node的数据结构。Node 表示 Raft 集群中的一个节点，它的输入与输出接口如下图所示，下面我重点和你介绍它的几个接口功能：</p>
+<ol>
+<li>Campaign，状态转换成 Candidate，发起新一轮 Leader 选举；</li>
+<li>Propose，提交提案接口；</li>
+<li>Ready，Raft 状态机输出接口，它的返回是一个输出 Ready 数据结构类型的管道，应用需要监听此管道，获取 Ready 数据，处理其中的各个消息（如持久化未提交的日志条目到 WAL 中，发送消息给其他节点等）；</li>
+<li>Advance，通知 Raft 状态机，应用已处理上一个输出的 Ready 数据，等待发送下一个 Ready 数据；</li>
+<li>TransferLeaderShip，尝试将 Leader 转移到某个节点；</li>
+<li>Step，向 Raft 状态机提交收到的消息，比如当 Leader 广播完 MsgApp 消息给 Follower 节点后，Leader 收到 Follower 节点回复的 MsgAppResp 消息时，就通过 Step 接口将此消息提交给 Raft 状态机驱动其工作；</li>
+<li>ReadIndex，用于实现线性读。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/ed4ac317ad00248148a26ff16f8c1fc1.png" alt=""></p>
+<p>上面提到的 Raft 状态机的输出Ready 结构含有哪些信息呢？下图是其详细字段，含义如下：</p>
+<ol>
+<li>SoftState，软状态。包括集群 Leader 和节点状态，不需要持久化到 WAL；</li>
+<li>pb.HardState，硬状态。与软状态相反，包括了节点当前 Term、Vote 等信息，需要持久化到 WAL 中；</li>
+<li>ReadStates，用于线性一致性读；</li>
+<li>Entries，在向其他节点发送消息之前需持久化到 WAL 中；</li>
+<li>Messages，持久化 Entries 后，发送给其他节点的消息；</li>
+<li>Committed Entries，已提交的日志条目，需要应用到存储状态机中；</li>
+<li>Snapshot，快照需保存到持久化存储中；</li>
+<li>MustSync，HardState 和 Entries 是否要持久化到 WAL 中；</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/1832f3728a3a162a76ca7f90bd82c565.png" alt=""></p>
+<p>了解完 API 后，我们接下来继续看看代码如何使用 Raft 的 Node API。</p>
+<p>正如我在04中和你介绍的，etcd Raft 库的设计抽象了网络、Raft 日志存储等模块，它本身并不会进行网络、存储相关的操作，上层应用需结合自己业务场景选择内置的模块或自定义实现网络、存储、日志等模块。</p>
+<p>因此我们在使用 Raft 库时，需要先自定义好相关网络、存储等模块，再结合上面介绍的 Raft Node API，就可以完成一个 Node 的核心操作了。其数据结构定义如下：</p>
+<p>// A key-value stream backed by raft<br>
+type raftNode struct {<br>
+proposeC    &lt;-chan string            // proposed messages (k,v)<br>
+confChangeC &lt;-chan raftpb.ConfChange // proposed cluster config changes<br>
+commitC     chan&lt;- *string           // entries committed to log (k,v)<br>
+errorC      chan&lt;- error             // errors from raft session<br>
+id          int      // client ID for raft session<br>
+&hellip;&hellip;<br>
+node        raft.Node<br>
+raftStorage *raft.MemoryStorage<br>
+wal         *wal.WAL<br>
+transport *rafthttp.Transport<br>
+}</p>
+<p>这个数据结构名字叫 raftNode，它表示 Raft 集群中的一个节点。它是由我们业务应用层设计的一个组合结构。从结构体定义中你可以看到它包含了 Raft 核心数据结构 Node(raft.Node)、Raft 日志条目内存存储模块 (raft.MemoryStorage）、WAL 持久化模块 (wal.WAL) 以及网络模块 (rafthttp.Transport)。</p>
+<p>同时，它提供了三个核心的管道与业务逻辑模块、存储状态机交互：</p>
+<ol>
+<li>proposeC，它用来接收 client 发送的写请求提案消息；</li>
+<li>confChangeC，它用来接收集群配置变化消息；</li>
+<li>commitC，它用来输出 Raft 共识模块已提交的日志条目消息。</li>
+</ol>
+<p>在 metcd 项目中因为我们是直接基于 raftexample 定制开发，因此日志持久化存储、网络都使用的是 etcd 自带的 WAL 和 rafthttp 模块。</p>
+<p>WAL模块中提供了核心的保存未持久化的日志条目和快照功能接口，你可以参考03节写请求中我和你介绍的原理。</p>
+<p>rafthttp模块基于 HTTP 协议提供了各个节点间的消息发送能力，metcd 使用如下：</p>
+<p>rc.transport = &amp;rafthttp.Transport{<br>
+Logger:      zap.NewExample(),<br>
+ID:          types.ID(rc.id),<br>
+ClusterID:   0x1000,<br>
+Raft:        rc,<br>
+ServerStats: stats.NewServerStats(&quot;&quot;, &ldquo;&rdquo;),<br>
+LeaderStats: stats.NewLeaderStats(strconv.Itoa(rc.id)),<br>
+ErrorC:      make(chan error),<br>
+}</p>
+<p>搞清楚 Raft 模块的输入、输出 API，设计好 raftNode 结构，复用 etcd 的 WAL、网络等模块后，接下来我们就只需要实现如下两个循环逻辑，处理业务层发送给 proposeC 和 confChangeC 消息、将 Raft 的 Node 输出 Ready 结构进行相对应的处理即可。精简后的代码如下所示：</p>
+<p>func (rc *raftNode) serveChannels() {<br>
+// send proposals over raft<br>
+go func() {<br>
+confChangeCount := uint64(0)<br>
+for rc.proposeC != nil &amp;&amp; rc.confChangeC != nil {<br>
+select {<br>
+case prop, ok := &lt;-rc.proposeC:<br>
+if !ok {<br>
+rc.proposeC = nil<br>
+} else {<br>
+// blocks until accepted by raft state machine<br>
+rc.node.Propose(context.TODO(), []byte(prop))<br>
+}</p>
+<pre><code>     case cc, ok := &lt;-rc.confChangeC:  
+        if !ok {  
+           rc.confChangeC = nil  
+        } else {  
+           confChangeCount++  
+           cc.ID = confChangeCount  
+           rc.node.ProposeConfChange(context.TODO(), cc)  
+        }  
+     }  
+  }  
+</code></pre>
+<p>}()</p>
+<p>// event loop on raft state machine updates<br>
+for {<br>
+select {<br>
+case &lt;-ticker.C:<br>
+rc.node.Tick()</p>
+<pre><code>  // store raft entries to wal, then publish over commit channel  
+  case rd := &lt;-rc.node.Ready():  
+     rc.wal.Save(rd.HardState, rd.Entries)  
+     if !raft.IsEmptySnap(rd.Snapshot) {  
+        rc.saveSnap(rd.Snapshot)  
+        rc.raftStorage.ApplySnapshot(rd.Snapshot)  
+        rc.publishSnapshot(rd.Snapshot)  
+     }  
+     rc.raftStorage.Append(rd.Entries)  
+     rc.transport.Send(rd.Messages)  
+     if ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries)); !ok {  
+        rc.stop()  
+        return  
+     }  
+     rc.maybeTriggerSnapshot()  
+     rc.node.Advance()  
+  }  
+</code></pre>
+<p>}<br>
+}</p>
+<p>代码简要分析如下：</p>
+<ol>
+<li>从 proposeC 中取出提案消息，通过 raft.Node.Propose API 提交提案；</li>
+<li>从 confChangeC 取出配置变更消息，通过 raft.Node.ProposeConfChange API 提交配置变化消息；</li>
+<li>从 raft.Node 中获取 Raft 算法状态机输出到 Ready 结构中，将 rd.Entries 和 rd.HardState 通过 WAL 模块持久化，将 rd.Messages 通过 rafthttp 模块，发送给其他节点。将 rd.CommittedEntries 应用到业务存储状态机。</li>
+</ol>
+<p>以上就是 Raft 实现的核心流程，接下来我来和你聊聊业务存储状态机。</p>
+<h3 id="支持多存储引擎">支持多存储引擎</h3>
+<p>在整体架构设计时，我和你介绍了为了使 metcd 项目能支撑多存储引擎，我们将 KVStore 进行了抽象化设计，因此我们只需要实现各个存储引擎相对应的 API 即可。</p>
+<p>这里我以 Put 接口为案例，分别给你介绍下各个存储引擎的实现。</p>
+<h4 id="boltdb-1">boltdb</h4>
+<p>首先是 boltdb 存储引擎，它的实现如下，你也可以去10里回顾一下它的 API 和原理。</p>
+<p>func (s *boltdbKVStore) Put(key, value string) error {<br>
+s.mu.Lock()<br>
+defer s.mu.Unlock()<br>
+// Start a writable transaction.<br>
+tx, err := s.db.Begin(true)<br>
+if err != nil {<br>
+return err<br>
+}<br>
+defer tx.Rollback()</p>
+<p>// Use the transaction&hellip;<br>
+bucket, err := tx.CreateBucketIfNotExists([]byte(&ldquo;keys&rdquo;))<br>
+if err != nil {<br>
+log.Printf(&ldquo;failed to put key %s, value %s, err is %v&rdquo;, key, value, err)<br>
+return err<br>
+}<br>
+err = bucket.Put([]byte(key), []byte(value))<br>
+if err != nil {<br>
+log.Printf(&ldquo;failed to put key %s, value %s, err is %v&rdquo;, key, value, err)<br>
+return err<br>
+}</p>
+<p>// Commit the transaction and check for error.<br>
+if err := tx.Commit(); err != nil {<br>
+log.Printf(&ldquo;failed to commit transaction, key %s, err is %v&rdquo;, key, err)<br>
+return err<br>
+}<br>
+log.Printf(&ldquo;backend:%s,put key:%s,value:%s succ&rdquo;, s.config.backend, key, value)<br>
+return nil</p>
+<h4 id="leveldb-1">leveldb</h4>
+<p>其次是 leveldb，我们使用的是goleveldb，它基于 Google 开源的 c++ leveldb版本实现。它提供的常用 API 如下所示。</p>
+<ol>
+<li>通过 OpenFile API 创建或打开一个 leveldb 数据库。</li>
+</ol>
+<p>db, err := leveldb.OpenFile(&ldquo;path/to/db&rdquo;, nil)<br>
+&hellip;<br>
+defer db.Close()</p>
+<ol>
+<li>通过 DB.Get/Put/Delete API 操作数据。</li>
+</ol>
+<p>data, err := db.Get([]byte(&ldquo;key&rdquo;), nil)<br>
+&hellip;<br>
+err = db.Put([]byte(&ldquo;key&rdquo;), []byte(&ldquo;value&rdquo;), nil)<br>
+&hellip;<br>
+err = db.Delete([]byte(&ldquo;key&rdquo;), nil)<br>
+&hellip;</p>
+<p>了解其接口后，通过 goleveldb 的库，client 调用就非常简单了，下面是 metcd 项目中，leveldb 存储引擎 Put 接口的实现。</p>
+<p>func (s *leveldbKVStore) Put(key, value string) error {<br>
+err := s.db.Put([]byte(key), []byte(value), nil)<br>
+if err != nil {<br>
+log.Printf(&ldquo;failed to put key %s, value %s, err is %v&rdquo;, key, value, err)<br>
+return err<br>
+}<br>
+log.Printf(&ldquo;backend:%s,put key:%s,value:%s succ&rdquo;, s.config.backend, key, value)<br>
+return nil<br>
+}</p>
+<h3 id="读写流程">读写流程</h3>
+<p>介绍完在 metcd 项目中如何使用 Raft 共识模块、支持多存储引擎后，我们再从整体上介绍下在 metcd 中写入和读取一个 key-value 的流程。</p>
+<h4 id="写流程">写流程</h4>
+<p>当你通过如下 curl 命令发起一个写操作时，写流程如下面架构图序号所示:</p>
+<p>curl -L http://127.0.0.1:3379/hello -XPUT -d world</p>
+<ol>
+<li>client 通过 curl 发送 HTTP PUT 请求到 server；</li>
+<li>server 收到后，将消息写入到 KVStore 的 ProposeC 管道；</li>
+<li>raftNode 循环逻辑将消息通过 Raft 模块的 Propose 接口提交；</li>
+<li>Raft 模块输出 Ready 结构，server 将日志条目持久化后，并发送给其他节点；</li>
+<li>集群多数节点持久化此日志条目后，这个日志条目被提交给存储状态机 KVStore 执行；</li>
+<li>KVStore 根据启动的 backend 存储引擎名称，调用对应的 Put 接口即可。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/7b8accd07d049d70ae51bb124973d2ef.png" alt=""></p>
+<h4 id="读流程">读流程</h4>
+<p>当你通过如下 curl 命令发起一个读操作时，读流程如下面架构图序号所示：</p>
+<p>curl -L http://127.0.0.1:3379/hello<br>
+world</p>
+<ol>
+<li>client 通过 curl 发送 HTTP Get 请求到 server；</li>
+<li>server 收到后，根据 KVStore 的存储引擎，从后端查询出对应的 key-value 数据。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/ead928d9dc34e5ba0207845fc83d618b.png" alt=""></p>
+<h2 id="小结">小结</h2>
+<p>最后，我来总结下我们今天的内容。我这节课分别从整体架构设计和实现分析，给你介绍了如何基于 Raft 从 0 到 1 构建一个支持多存储引擎的分布式 key-value 数据库。</p>
+<p>在整体架构设计上，我给你介绍了 API 设计核心因素，它们分别是性能、易用性、开发效率、安全性、幂等性。其次我和你介绍了复制状态机的原理，它由共识模块、日志模块、存储状态机模块组成。最后我和你深入分析了多存储引擎设计，重点介绍了 leveldb 原理，它将随机写转换为顺序写日志和内存，通过一系列分层、创新的设计实现了优异的写性能，适合读少写多。</p>
+<p>在实现分析上，我和你重点介绍了 Raft 算法库的核心对象 Node API。对于一个库而言，我们重点关注的是其输入、输出接口，业务逻辑层可通过 Propose 接口提交提案，通过 Ready 结构获取 Raft 算法状态机的输出内容。其次我和你介绍了 Raft 算法库如何与 WAL 模块、Raft 日志存储模块、网络模块协作完成一个写请求。</p>
+<p>最后为了支持多存储引擎，我们分别基于 boltdb、leveldb 实现了 KVStore 相关接口操作，并通过读写流程图，从整体上为你介绍了一个读写请求在 metcd 中是如何工作的。</p>
+<p>麻雀虽小，五脏俱全。希望能通过这个迷你项目解答你对如何构建一个简易分布式 KV 服务的疑问，以及让你对 etcd 的工作原理有更深的理解。</p>
+<h2 id="思考题">思考题</h2>
+<p>你知道raftexample启动的时候是如何工作的吗？它的存储引擎内存 map 是如何保证数据不丢失的呢？</p>
+<p>感谢你的阅读，如果你认为这节课的内容有收获，也欢迎把它分享给你的朋友，我们下一讲见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/">etcd实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/18__%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3statefulset%E4%B8%80%E6%8B%93%E6%89%91%E7%8A%B6%E6%80%81/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">18__深入理解StatefulSet（一）：拓扑状态</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%80%8F%E8%A7%86http%E5%8D%8F%E8%AE%AE/18__%E5%9B%9B%E9%80%9A%E5%85%AB%E8%BE%BEhttp%E7%9A%84%E9%87%8D%E5%AE%9A%E5%90%91%E5%92%8C%E8%B7%B3%E8%BD%AC/">
+            <span class="next-text nav-default">18__四通八达：HTTP的重定向和跳转</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

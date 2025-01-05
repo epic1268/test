@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>34__iOS_黑魔法_Runtime_Method_Swizzling_背后的原理 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是戴铭。
+提到 Object-C 中的 Runtime，你可能一下就想到了 iOS 的黑魔法 Method Swizzling。毕竟，这个黑魔法可以帮助我们在运行时进行方法交换，或者在原方法执行之前插入自定义方法，以保证在业务面向对象编程方式不被改变的情况下，进行切面功能的开发。但是，运行时进行方法交换同时也会带来一定的风险。所以，今天我就来和你详细聊聊 Runtime Method Swizzling 的原理。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/ios%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/34__ios_%E9%BB%91%E9%AD%94%E6%B3%95_runtime_method_swizzling_%E8%83%8C%E5%90%8E%E7%9A%84%E5%8E%9F%E7%90%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/ios%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/34__ios_%E9%BB%91%E9%AD%94%E6%B3%95_runtime_method_swizzling_%E8%83%8C%E5%90%8E%E7%9A%84%E5%8E%9F%E7%90%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="34__iOS_黑魔法_Runtime_Method_Swizzling_背后的原理">
+  <meta property="og:description" content="你好，我是戴铭。
+提到 Object-C 中的 Runtime，你可能一下就想到了 iOS 的黑魔法 Method Swizzling。毕竟，这个黑魔法可以帮助我们在运行时进行方法交换，或者在原方法执行之前插入自定义方法，以保证在业务面向对象编程方式不被改变的情况下，进行切面功能的开发。但是，运行时进行方法交换同时也会带来一定的风险。所以，今天我就来和你详细聊聊 Runtime Method Swizzling 的原理。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="IOS开发高手课">
+
+  <meta itemprop="name" content="34__iOS_黑魔法_Runtime_Method_Swizzling_背后的原理">
+  <meta itemprop="description" content="你好，我是戴铭。
+提到 Object-C 中的 Runtime，你可能一下就想到了 iOS 的黑魔法 Method Swizzling。毕竟，这个黑魔法可以帮助我们在运行时进行方法交换，或者在原方法执行之前插入自定义方法，以保证在业务面向对象编程方式不被改变的情况下，进行切面功能的开发。但是，运行时进行方法交换同时也会带来一定的风险。所以，今天我就来和你详细聊聊 Runtime Method Swizzling 的原理。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3084">
+  <meta itemprop="keywords" content="IOS开发高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="34__iOS_黑魔法_Runtime_Method_Swizzling_背后的原理">
+  <meta name="twitter:description" content="你好，我是戴铭。
+提到 Object-C 中的 Runtime，你可能一下就想到了 iOS 的黑魔法 Method Swizzling。毕竟，这个黑魔法可以帮助我们在运行时进行方法交换，或者在原方法执行之前插入自定义方法，以保证在业务面向对象编程方式不被改变的情况下，进行切面功能的开发。但是，运行时进行方法交换同时也会带来一定的风险。所以，今天我就来和你详细聊聊 Runtime Method Swizzling 的原理。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">34__iOS_黑魔法_Runtime_Method_Swizzling_背后的原理</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3084 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#直接使用-runtime-方法交换开发的风险有哪些">直接使用 Runtime 方法交换开发的风险有哪些？</a></li>
+        <li><a href="#更安全的方法交换库-aspects">更安全的方法交换库 Aspects</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#课后作业">课后作业</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是戴铭。</p>
+<p>提到 Object-C 中的 Runtime，你可能一下就想到了 iOS 的黑魔法 Method Swizzling。毕竟，这个黑魔法可以帮助我们在运行时进行方法交换，或者在原方法执行之前插入自定义方法，以保证在业务面向对象编程方式不被改变的情况下，进行切面功能的开发。但是，运行时进行方法交换同时也会带来一定的风险。所以，今天我就来和你详细聊聊 Runtime Method Swizzling 的原理。</p>
+<p>Runtime Method Swizzling 编程方式，也可以叫作 AOP（Aspect-Oriented Programming，面向切面编程）。</p>
+<p>AOP 是一种编程范式，也可以说是一种编程思想，使用 AOP 可以解决 OOP（Object Oriented Programming，面向对象编程）由于切面需求导致单一职责被破坏的问题。通过 AOP 可以不侵入 OOP 开发，非常方便地插入切面需求功能。</p>
+<p>比如，我在专栏<a href="./87925.md">第 9 篇文章</a>中介绍无侵入埋点方案时，就提到了通过 AOP 在不侵入原有功能代码的情况下插入收集埋点的功能。</p>
+<p>除此之外，还有一些主业务无关的逻辑功能，也可以通过 AOP 来完成，这样主业务逻辑就能够满足 OOP 单一职责的要求。而如果没有使用 AOP，鉴于 OOP 的局限性，这些与主业务无关的代码就会到处都是，增大了工作量不说，还会加大维护成本。</p>
+<p>但是我们也知道，iOS 在运行时进行 AOP 开发会有风险，不能简单地使用 Runtime 进行方法交换来实现 AOP 开发。因此，我今天就来跟你说下直接使用 Runtime 方法交换开发的风险有哪些，而安全的方法交换原理又是怎样的？</p>
+<h2 id="直接使用-runtime-方法交换开发的风险有哪些">直接使用 Runtime 方法交换开发的风险有哪些？</h2>
+<p>Objective-C 是门动态语言，可以在运行时做任何它能做的事情。这其中的功劳离不开 Runtime 这个库。正因为如此，Runtime 成为了 iOS 开发中 Objective-C 和 C 的分水岭。</p>
+<p>Runtime 不光能够进行方法交换，还能够在运行时处理 Objective-C 特性相关（比如类、成员函数、继承）的增删改操作。</p>
+<p>苹果公司已经开源了 Runtime，在 GitHub 上有<a href="./objc4.md">可编译的 Runtime 开源版本</a>。你可以通过于德志 (@halfrost) 博客的三篇 Runtime 文章，即<a href="./objc%5Fruntime%5Fisa%5Fclass.md">isa 和 Class</a>、<a href="./objc%5Fruntime%5Fobjc%5Fmsgsend.md">消息发送与转发</a>，以及<a href="./how%5Fto%5Fuse%5Fruntime.md">如何正确使用 Runtime</a>，来一边学习一边调试。</p>
+<p>直接使用 Runtime 进行方法交换非常简单，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#import &#34;SMHook.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#import &lt;objc/runtime.h&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> @implementation SMHook
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> + (void)hookClass:(Class)classObject fromSelector:(SEL)fromSelector toSelector:(SEL)toSelector {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Class class = classObject;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 得到被交换类的实例方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Method fromMethod = class_getInstanceMethod(class, fromSelector);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 得到交换类的实例方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Method toMethod = class_getInstanceMethod(class, toSelector);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // class_addMethod() 函数返回成功表示被交换的方法没实现，然后会通过 class_addMethod() 函数先实现；返回失败则表示被交换方法已存在，可以直接进行 IMP 指针交换 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if(class_addMethod(class, fromSelector, method_getImplementation(toMethod), method_getTypeEncoding(toMethod))) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 进行方法的交换
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        class_replaceMethod(class, toSelector, method_getImplementation(fromMethod), method_getTypeEncoding(fromMethod));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 交换 IMP 指针
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        method_exchangeImplementations(fromMethod, toMethod);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@end
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如代码所示：通过 class_getInstanceMethod() 函数可以得到被交换类的实例方法和交换类的实例方法。使用 class_addMethod() 函数来添加方法，返回成功表示被交换的方法没被实现，然后通过 class_addMethod() 函数实现；返回失败则表示被交换方法已存在，可以通过 method_exchangeImplementations() 函数直接进行 IMP 指针交换以实现方法交换。</p>
+<p>但是，像上面这段代码一样，直接使用 Runtime 的方法进行方法交换会有很多风险，<a href="./RSSwizzle.md">RSSwizzle</a>库里指出了<strong>四个典型的直接使用 Runtime 方法进行方法交换的风险</strong>。我稍作整理，以方便你查看，并便于你理解后续的内容。</p>
+<p>第一个风险是，需要在 +load 方法中进行方法交换。因为如果在其他时候进行方法交换，难以保证另外一个线程中不会同时调用被交换的方法，从而导致程序不能按预期执行。</p>
+<p>第二个风险是，被交换的方法必须是当前类的方法，不能是父类的方法，直接把父类的实现拷贝过来不会起作用。父类的方法必须在调用的时候使用，而不是方法交换时使用。</p>
+<p>第三个风险是，交换的方法如果依赖了 cmd，那么交换后，如果 cmd 发生了变化，就会出现各种奇怪问题，而且这些问题还很难排查。特别是交换了系统方法，你无法保证系统方法内部是否依赖了 cmd。</p>
+<p>第四个风险是，方法交换命名冲突。如果出现冲突，可能会导致方法交换失败。</p>
+<p>更多关于运行时方法交换的风险，你可以查看 Stackoverflow 上的问题讨论“<a href="./what-are-the-dangers-of-method-swizzling-in-objective-c.md">What are the Dangers of Method Swizzling in Objective C?</a>”。</p>
+<p>可以看到，直接使用 Runtime 进行方法交换的风险非常大，那么安全的方法交换是怎样的呢？接下来，我就来跟你介绍一个更安全的运行时方法交换库 <a href="./Aspects.md">Aspects</a>。</p>
+<h2 id="更安全的方法交换库-aspects">更安全的方法交换库 Aspects</h2>
+<p>Aspects 是一个通过 Runtime 消息转发机制来实现方法交换的库。它将所有的方法调用都指到 _objc_msgForward 函数调用上，按照自己的方式实现了消息转发，自己处理参数列表，处理返回值，最后通过 NSInvocation 调用来实现方法交换。同时，Aspects 还考虑了一些方法交换可能会引发的风险，并进行了处理。</p>
+<p>通过学习 Aspects 的源码，你能够从中学习到如何处理这些风险。比如，热修复框架 <a href="./JSPatch.md">JSPatch</a>就是学习了 Aspects 的实现方式。因此，接下来我会展开 Aspects 的源码，带你一起看看它是如何解决这些问题的。这样，你再遇到类似问题时，或借鉴其中的解决思路，或经过实践、思考后形成自己的更优雅的解决方法。</p>
+<p>虽然 Aspects 对于一些风险进行了规避，但是在使用不当的情况下依然会有风险，比如 hook 已经被 hook 过的方法，那么之前的 hook 会失效，而且新的 hook 也会出错。所以，即使是 Aspects，在工程中也不能滥用。</p>
+<p>现在，我们先一起看一段<strong>如何使用 Aspects 的示例代码</strong>：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[UIViewController aspect_hookSelector:@selector(viewWillAppear:) withOptions:AspectPositionAfter usingBlock:^(id&lt;AspectInfo&gt; aspectInfo, BOOL animated) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    NSLog(@&#34;View Controller %@ will appear animated: %tu&#34;, aspectInfo.instance, animated);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} error:NULL];
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这段代码是 Aspects 通过运行时方法交换，按照 AOP 方式添加埋点的实现。代码简单，可读性高，接口使用 Block 也非常易用。按照这种方式，直接使用 Aspects 即可。</p>
+<p>接下来，我就跟你说下 <strong>Aspect 实现方法交换的原理</strong>。</p>
+<p>Aspects 的整体流程是，先判断是否可进行方法交换。这一步会进行安全问题的判断处理。如果没有风险的话，再针对要交换的是类对象还是实例对象分别进行处理。</p>
+<ul>
+<li>对于类对象的方法交换，会先修改类的 forwardInvocation，将类的实现转成自己的。然后，重新生成一个方法用来交换。最后，交换方法的 IMP，方法调用时就会直接对交换方法进行消息转发。</li>
+<li>对于实例对象的方法交换，会先创建一个新的类，并将当前实例对象的 isa 指针指向新创建的类，然后再修改类的方法。</li>
+</ul>
+<p>整个流程的入口是 aspect_add() 方法，这个方法里包含了 Aspects 的两个核心方法，第一个是进行安全判断的 aspect_isSelectorAllowedAndTrack 方法，第二个是执行类对象和实例对象方法交换的 aspect_prepareClassAndHookSelector 方法。</p>
+<p>aspect_isSelectorAllowedAndTrack 方法，会对一些方法比如 retain、release、autorelease、forwardInvocation 进行过滤，并对 dealloc 方法交换做了限制，要求只能使用 AspectPositionBefore 选项。同时，它还会过滤没有响应的方法，直接返回 NO。</p>
+<p>安全判断执行完，就开始执行方法交换的 aspect_prepareClassAndHookSelector 方法，其实现代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">void</span> <span class="n">aspect_prepareClassAndHookSelector</span><span class="p">(</span><span class="n">NSObject</span> <span class="o">*</span><span class="bp">self</span><span class="p">,</span> <span class="n">SEL</span> <span class="n">selector</span><span class="p">,</span> <span class="n">NSError</span> <span class="o">**</span><span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">NSCParameterAssert</span><span class="p">(</span><span class="n">selector</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">Class</span> <span class="n">klass</span> <span class="o">=</span> <span class="n">aspect_hookClass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">error</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">Method</span> <span class="n">targetMethod</span> <span class="o">=</span> <span class="n">class_getInstanceMethod</span><span class="p">(</span><span class="n">klass</span><span class="p">,</span> <span class="n">selector</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">IMP</span> <span class="n">targetMethodIMP</span> <span class="o">=</span> <span class="n">method_getImplementation</span><span class="p">(</span><span class="n">targetMethod</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">aspect_isMsgForwardIMP</span><span class="p">(</span><span class="n">targetMethodIMP</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="o">//</span> <span class="err">创建方法别名</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">typeEncoding</span> <span class="o">=</span> <span class="n">method_getTypeEncoding</span><span class="p">(</span><span class="n">targetMethod</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">SEL</span> <span class="n">aliasSelector</span> <span class="o">=</span> <span class="n">aspect_aliasForSelector</span><span class="p">(</span><span class="n">selector</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">[</span><span class="n">klass</span> <span class="n">instancesRespondToSelector</span><span class="p">:</span><span class="n">aliasSelector</span><span class="p">])</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">__unused</span> <span class="n">BOOL</span> <span class="n">addedAlias</span> <span class="o">=</span> <span class="n">class_addMethod</span><span class="p">(</span><span class="n">klass</span><span class="p">,</span> <span class="n">aliasSelector</span><span class="p">,</span> <span class="n">method_getImplementation</span><span class="p">(</span><span class="n">targetMethod</span><span class="p">),</span> <span class="n">typeEncoding</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">NSCAssert</span><span class="p">(</span><span class="n">addedAlias</span><span class="p">,</span> <span class="err">@</span><span class="s2">&#34;Original implementation for %@ is already copied to %@ on %@&#34;</span><span class="p">,</span> <span class="n">NSStringFromSelector</span><span class="p">(</span><span class="n">selector</span><span class="p">),</span> <span class="n">NSStringFromSelector</span><span class="p">(</span><span class="n">aliasSelector</span><span class="p">),</span> <span class="n">klass</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         <span class="o">//</span> <span class="err">使用</span> <span class="n">forwardInvocation</span> <span class="err">进行方法交换</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">class_replaceMethod</span><span class="p">(</span><span class="n">klass</span><span class="p">,</span> <span class="n">selector</span><span class="p">,</span> <span class="n">aspect_getMsgForwardIMP</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">selector</span><span class="p">),</span> <span class="n">typeEncoding</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">AspectLog</span><span class="p">(</span><span class="err">@</span><span class="s2">&#34;Aspects: Installed hook for -[%@ %@].&#34;</span><span class="p">,</span> <span class="n">klass</span><span class="p">,</span> <span class="n">NSStringFromSelector</span><span class="p">(</span><span class="n">selector</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，通过 aspect_hookClass() 函数可以判断出 class 的 selector 是实例方法还是类方法，如果是实例方法，会通过 class_addMethod 方法生成一个交换方法，这样在 forwordInvocation 时就能够直接执行交换方法。aspect_hookClass 还会对类对象、元类、KVO 子类化的实例对象、class 和 isa 指向不同的情况进行处理，使用 aspect_swizzleClassInPlace 混写 baseClass。</p>
+<h2 id="小结">小结</h2>
+<p>在今天这篇文章中，我和你梳理了直接使用 Runtime 进行方法交换会有哪些问题，进而为了解决这些问题，我又和你分享了一个更安全的方法交换库 Aspects。</p>
+<p>在文章最后，我想和你说的是，对于运行时进行方法交换，有的开发者在碰到了几次问题之后，就敬而远之了，但其实很多问题在你了解了原因后就不那么可怕了。就比如说，了解更多运行时原理和优秀方法交换库的实现细节，能够增强你使用运行时方法交换的信心，从而这个技术能够更好地为你提供服务，去帮助你更加高效地去解决某一类问题。</p>
+<h2 id="课后作业">课后作业</h2>
+<p>你是怎么使用方法交换的？用的什么库？和 Aspects 比，这些库好在哪儿？</p>
+<p>感谢你的收听，欢迎你在评论区给我留言分享你的观点，也欢迎把它分享给更多的朋友一起阅读。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/iOS%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/00f2c9fdb9510db65ff1c5aab85991c1.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/ios%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/">iOS开发高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%87%8D%E5%AD%A6%E5%89%8D%E7%AB%AF/34__html%E5%B0%8F%E5%AE%9E%E9%AA%8C%E7%94%A8%E4%BB%A3%E7%A0%81%E5%88%86%E6%9E%90html%E6%A0%87%E5%87%86/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">34__HTML小实验：用代码分析HTML标准</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/34__kubernetes%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B%E4%B8%8Ecni%E7%BD%91%E7%BB%9C%E6%8F%92%E4%BB%B6/">
+            <span class="next-text nav-default">34__Kubernetes网络模型与CNI网络插件</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

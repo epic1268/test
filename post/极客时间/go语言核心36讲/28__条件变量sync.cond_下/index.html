@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>28__条件变量sync.Cond_（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是郝林，今天我继续分享条件变量 sync.Cond 的内容。我们紧接着上一篇的内容进行知识扩展。
+问题 1：条件变量的Wait方法做了什么？ 在了解了条件变量的使用方式之后，你可能会有这么几个疑问。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/28__%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8Fsync.cond_%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/28__%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8Fsync.cond_%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="28__条件变量sync.Cond_（下）">
+  <meta property="og:description" content="你好，我是郝林，今天我继续分享条件变量 sync.Cond 的内容。我们紧接着上一篇的内容进行知识扩展。
+问题 1：条件变量的Wait方法做了什么？ 在了解了条件变量的使用方式之后，你可能会有这么几个疑问。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go语言核心36讲">
+
+  <meta itemprop="name" content="28__条件变量sync.Cond_（下）">
+  <meta itemprop="description" content="你好，我是郝林，今天我继续分享条件变量 sync.Cond 的内容。我们紧接着上一篇的内容进行知识扩展。
+问题 1：条件变量的Wait方法做了什么？ 在了解了条件变量的使用方式之后，你可能会有这么几个疑问。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2863">
+  <meta itemprop="keywords" content="Go语言核心36讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="28__条件变量sync.Cond_（下）">
+  <meta name="twitter:description" content="你好，我是郝林，今天我继续分享条件变量 sync.Cond 的内容。我们紧接着上一篇的内容进行知识扩展。
+问题 1：条件变量的Wait方法做了什么？ 在了解了条件变量的使用方式之后，你可能会有这么几个疑问。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">28__条件变量sync.Cond_（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2863 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题-1条件变量的wait方法做了什么">问题 1：条件变量的<code>Wait</code>方法做了什么？</a></li>
+        <li><a href="#问题-2条件变量的signal方法和broadcast方法有哪些异同">问题 2：条件变量的<code>Signal</code>方法和<code>Broadcast</code>方法有哪些异同？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是郝林，今天我继续分享条件变量 sync.Cond 的内容。我们紧接着上一篇的内容进行知识扩展。</p>
+<h2 id="问题-1条件变量的wait方法做了什么">问题 1：条件变量的<code>Wait</code>方法做了什么？</h2>
+<p>在了解了条件变量的使用方式之后，你可能会有这么几个疑问。</p>
+<ol>
+<li>为什么先要锁定条件变量基于的互斥锁，才能调用它的<code>Wait</code>方法？</li>
+<li>为什么要用<code>for</code>语句来包裹调用其<code>Wait</code>方法的表达式，用<code>if</code>语句不行吗？</li>
+</ol>
+<p>这些问题我在面试的时候也经常问。你需要对这个<code>Wait</code>方法的内部机制有所了解才能回答上来。</p>
+<p>条件变量的<code>Wait</code>方法主要做了四件事。</p>
+<ol>
+<li>把调用它的 goroutine（也就是当前的 goroutine）加入到当前条件变量的通知队列中。</li>
+<li>解锁当前的条件变量基于的那个互斥锁。</li>
+<li>让当前的 goroutine 处于等待状态，等到通知到来时再决定是否唤醒它。此时，这个 goroutine 就会阻塞在调用这个<code>Wait</code>方法的那行代码上。</li>
+<li>如果通知到来并且决定唤醒这个 goroutine，那么就在唤醒它之后重新锁定当前条件变量基于的互斥锁。自此之后，当前的 goroutine 就会继续执行后面的代码了。</li>
+</ol>
+<p>你现在知道我刚刚说的第一个疑问的答案了吗？</p>
+<p>因为条件变量的<code>Wait</code>方法在阻塞当前的 goroutine 之前，会解锁它基于的互斥锁，所以在调用该<code>Wait</code>方法之前，我们必须先锁定那个互斥锁，否则在调用这个<code>Wait</code>方法时，就会引发一个不可恢复的 panic。</p>
+<p>为什么条件变量的<code>Wait</code>方法要这么做呢？你可以想象一下，如果<code>Wait</code>方法在互斥锁已经锁定的情况下，阻塞了当前的 goroutine，那么又由谁来解锁呢？别的 goroutine 吗？</p>
+<p>先不说这违背了互斥锁的重要使用原则，即：成对的锁定和解锁，就算别的 goroutine 可以来解锁，那万一解锁重复了怎么办？由此引发的 panic 可是无法恢复的。</p>
+<p>如果当前的 goroutine 无法解锁，别的 goroutine 也都不来解锁，那么又由谁来进入临界区，并改变共享资源的状态呢？只要共享资源的状态不变，即使当前的 goroutine 因收到通知而被唤醒，也依然会再次执行这个<code>Wait</code>方法，并再次被阻塞。</p>
+<p>所以说，如果条件变量的<code>Wait</code>方法不先解锁互斥锁的话，那么就只会造成两种后果：不是当前的程序因 panic 而崩溃，就是相关的 goroutine 全面阻塞。</p>
+<p>再解释第二个疑问。很显然，<code>if</code>语句只会对共享资源的状态检查一次，而<code>for</code>语句却可以做多次检查，直到这个状态改变为止。那为什么要做多次检查呢？</p>
+<p><strong>这主要是为了保险起见。如果一个 goroutine 因收到通知而被唤醒，但却发现共享资源的状态，依然不符合它的要求，那么就应该再次调用条件变量的<code>Wait</code>方法，并继续等待下次通知的到来。</strong></p>
+<p>这种情况是很有可能发生的，具体如下面所示。</p>
+<ol>
+<li>有多个 goroutine 在等待共享资源的同一种状态。比如，它们都在等<code>mailbox</code>变量的值不为<code>0</code>的时候再把它的值变为<code>0</code>，这就相当于有多个人在等着我向信箱里放置情报。虽然等待的 goroutine 有多个，但每次成功的 goroutine 却只可能有一个。别忘了，条件变量的<code>Wait</code>方法会在当前的 goroutine 醒来后先重新锁定那个互斥锁。在成功的 goroutine 最终解锁互斥锁之后，其他的 goroutine 会先后进入临界区，但它们会发现共享资源的状态依然不是它们想要的。这个时候，<code>for</code>循环就很有必要了。</li>
+<li>共享资源可能有的状态不是两个，而是更多。比如，<code>mailbox</code>变量的可能值不只有<code>0</code>和<code>1</code>，还有<code>2</code>、<code>3</code>、<code>4</code>。这种情况下，由于状态在每次改变后的结果只可能有一个，所以，在设计合理的前提下，单一的结果一定不可能满足所有 goroutine 的条件。那些未被满足的 goroutine 显然还需要继续等待和检查。</li>
+<li>有一种可能，共享资源的状态只有两个，并且每种状态都只有一个 goroutine 在关注，就像我们在主问题当中实现的那个例子那样。不过，即使是这样，使用<code>for</code>语句仍然是有必要的。原因是，在一些多 CPU 核心的计算机系统中，即使没有收到条件变量的通知，调用其<code>Wait</code>方法的 goroutine 也是有可能被唤醒的。这是由计算机硬件层面决定的，即使是操作系统（比如 Linux）本身提供的条件变量也会如此。</li>
+</ol>
+<p>综上所述，在包裹条件变量的<code>Wait</code>方法的时候，我们总是应该使用<code>for</code>语句。</p>
+<p>好了，到这里，关于条件变量的<code>Wait</code>方法，我想你知道的应该已经足够多了。</p>
+<h2 id="问题-2条件变量的signal方法和broadcast方法有哪些异同">问题 2：条件变量的<code>Signal</code>方法和<code>Broadcast</code>方法有哪些异同？</h2>
+<p>条件变量的<code>Signal</code>方法和<code>Broadcast</code>方法都是被用来发送通知的，不同的是，前者的通知只会唤醒一个因此而等待的 goroutine，而后者的通知却会唤醒所有为此等待的 goroutine。</p>
+<p>条件变量的<code>Wait</code>方法总会把当前的 goroutine 添加到通知队列的队尾，而它的<code>Signal</code>方法总会从通知队列的队首开始，查找可被唤醒的 goroutine。所以，因<code>Signal</code>方法的通知，而被唤醒的 goroutine 一般都是最早等待的那一个。</p>
+<p>这两个方法的行为决定了它们的适用场景。如果你确定只有一个 goroutine 在等待通知，或者只需唤醒任意一个 goroutine 就可以满足要求，那么使用条件变量的<code>Signal</code>方法就好了。</p>
+<p>否则，使用<code>Broadcast</code>方法总没错，只要你设置好各个 goroutine 所期望的共享资源状态就可以了。</p>
+<p>此外，再次强调一下，与<code>Wait</code>方法不同，条件变量的<code>Signal</code>方法和<code>Broadcast</code>方法并不需要在互斥锁的保护下执行。恰恰相反，我们最好在解锁条件变量基于的那个互斥锁之后，再去调用它的这两个方法。这更有利于程序的运行效率。</p>
+<p>最后，请注意，条件变量的通知具有即时性。也就是说，如果发送通知的时候没有 goroutine 为此等待，那么该通知就会被直接丢弃。在这之后才开始等待的 goroutine 只可能被后面的通知唤醒。</p>
+<p>你可以打开 demo62.go 文件，并仔细观察它与 demo61.go 的不同。尤其是<code>lock</code>变量的类型，以及发送通知的方式。</p>
+<h2 id="总结">总结</h2>
+<p>我们今天主要讲了条件变量，它是基于互斥锁的一种同步工具。在 Go 语言中，我们需要用<code>sync.NewCond</code>函数来初始化一个<code>sync.Cond</code>类型的条件变量。</p>
+<p><code>sync.NewCond</code>函数需要一个<code>sync.Locker</code>类型的参数值。</p>
+<p><code>*sync.Mutex</code>类型的值以及<code>*sync.RWMutex</code>类型的值都可以满足这个要求。都可以满足这个要求。另外，后者的<code>RLocker</code>方法可以返回这个值中的读锁，也同样可以作为<code>sync.NewCond</code>函数的参数值，如此就可以生成与读写锁中的读锁对应的条件变量了。</p>
+<p>条件变量的<code>Wait</code>方法需要在它基于的互斥锁保护下执行，否则就会引发不可恢复的 panic。此外，我们最好使用<code>for</code>语句来检查共享资源的状态，并包裹对条件变量的<code>Wait</code>方法的调用。</p>
+<p>不要用<code>if</code>语句，因为它不能重复地执行“检查状态 - 等待通知 - 被唤醒”的这个流程。重复执行这个流程的原因是，一个“因为等待通知，而被阻塞”的 goroutine，可能会在共享资源的状态不满足其要求的情况下被唤醒。</p>
+<p>条件变量的<code>Signal</code>方法只会唤醒一个因等待通知而被阻塞的 goroutine，而它的<code>Broadcast</code>方法却可以唤醒所有为此而等待的 goroutine。后者比前者的适应场景要多得多。</p>
+<p>这两个方法并不需要受到互斥锁的保护，我们也最好不要在解锁互斥锁之前调用它们。还有，条件变量的通知具有即时性。当通知被发送的时候，如果没有任何 goroutine 需要被唤醒，那么该通知就会立即失效。</p>
+<h2 id="思考题">思考题</h2>
+<p><code>sync.Cond</code>类型中的公开字段<code>L</code>是做什么用的？我们可以在使用条件变量的过程中改变这个字段的值吗？</p>
+<p><a href="./Golang%5FPuzzlers.md">戳此查看 Go 语言专栏文章配套详细代码。</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/6d035e7ef07f11a615a16b7e601fabe9.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/">Go语言核心36讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/28__%E6%89%8B%E6%8A%8A%E6%89%8B%E5%B8%A6%E4%BD%A0%E8%AE%BE%E8%AE%A1%E4%B8%80%E4%B8%AA%E5%AE%8C%E6%95%B4%E7%9A%84%E8%BF%9E%E9%94%81%E8%B6%85%E5%B8%82%E4%BF%A1%E6%81%AF%E7%B3%BB%E7%BB%9F%E6%95%B0%E6%8D%AE%E5%BA%93%E4%B8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">28__手把手带你设计一个完整的连锁超市信息系统数据库（下）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/28__%E6%8E%A8%E8%8D%90%E9%98%85%E8%AF%BB%E5%88%86%E5%B8%83%E5%BC%8F%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84%E7%BB%8F%E5%85%B8%E8%B5%84%E6%96%99/">
+            <span class="next-text nav-default">28__推荐阅读：分布式系统架构经典资料</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

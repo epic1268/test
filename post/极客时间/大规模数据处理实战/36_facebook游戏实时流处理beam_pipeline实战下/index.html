@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>36_Facebook游戏实时流处理Beam_Pipeline实战（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是蔡元楠。
+在上一讲中，我们一起对怎样实现一个简易的游戏积分排行榜展开了讨论，也一起研究了如何使用批处理计算的方式在 Beam 中构建出一个数据流水线来得出排行榜结果。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/36_facebook%E6%B8%B8%E6%88%8F%E5%AE%9E%E6%97%B6%E6%B5%81%E5%A4%84%E7%90%86beam_pipeline%E5%AE%9E%E6%88%98%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/36_facebook%E6%B8%B8%E6%88%8F%E5%AE%9E%E6%97%B6%E6%B5%81%E5%A4%84%E7%90%86beam_pipeline%E5%AE%9E%E6%88%98%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="36_Facebook游戏实时流处理Beam_Pipeline实战（下）">
+  <meta property="og:description" content="你好，我是蔡元楠。
+在上一讲中，我们一起对怎样实现一个简易的游戏积分排行榜展开了讨论，也一起研究了如何使用批处理计算的方式在 Beam 中构建出一个数据流水线来得出排行榜结果。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="大规模数据处理实战">
+
+  <meta itemprop="name" content="36_Facebook游戏实时流处理Beam_Pipeline实战（下）">
+  <meta itemprop="description" content="你好，我是蔡元楠。
+在上一讲中，我们一起对怎样实现一个简易的游戏积分排行榜展开了讨论，也一起研究了如何使用批处理计算的方式在 Beam 中构建出一个数据流水线来得出排行榜结果。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2895">
+  <meta itemprop="keywords" content="大规模数据处理实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="36_Facebook游戏实时流处理Beam_Pipeline实战（下）">
+  <meta name="twitter:description" content="你好，我是蔡元楠。
+在上一讲中，我们一起对怎样实现一个简易的游戏积分排行榜展开了讨论，也一起研究了如何使用批处理计算的方式在 Beam 中构建出一个数据流水线来得出排行榜结果。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">36_Facebook游戏实时流处理Beam_Pipeline实战（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2895 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是蔡元楠。</p>
+<p>在上一讲中，我们一起对怎样实现一个简易的游戏积分排行榜展开了讨论，也一起研究了如何使用批处理计算的方式在 Beam 中构建出一个数据流水线来得出排行榜结果。</p>
+<p>我们知道，虽然批处理计算可以得到一个完整的结果，但是它也存在着自身的不足，比如会有一定的延时，需要额外的 crontab 来管理定时任务，增加了维护成本等等。</p>
+<p>所以在上一讲的末尾，我们提出了使用实时流处理来改进这些不足，而其中就需要用到窗口、触发器和累加模式这几个概念。</p>
+<p>相信学习了<a href="./105707.md">第 32 讲</a>的内容后，你对于窗口在 Beam 中是如何运作的，已经比较了解了。对于有效时间为一周的积分排行榜来说，我们可以赋予一个“窗口时长为一周的固定窗口”给数据流水线。也就是说，我们最终的结果会按照每一周的时长来得出。</p>
+<p>那接下来的问题就剩下我们怎么定义触发器和累加模式了。</p>
+<p>首先，我想先讲讲触发器在 Beam 中是怎么运作的。在<a href="./100478.md">第 23 讲</a>中，我们已经了解了触发器在 Beam 中的作用。它是用于告诉数据流水线，什么时候需要计算一遍落在窗口中的所有数据的。这在实时流处理中尤为重要。</p>
+<p>在实时流处理当中，我们总是需要在数据结果的<strong>完整性</strong>和<strong>延迟性</strong>上做出一些取舍。</p>
+<p>如果我们设置的触发器比较频繁，例如说每隔几分钟甚至是几秒钟，或者是在时间上很早发生的话，那就表示我们更倾向于数据流水线的延时比较小，但是不一定能够获得完整的数据。</p>
+<p>如果我们设置的触发器是比较长时间的，像每隔一个小时才会触发一次窗口中的计算的话，那就表示我们更希望获得完整的数据集来得到最终结果。</p>
+<p>为什么这么说呢？</p>
+<p>因为在现实世界中，我们是没有办法保证数据流水线可以在某一刻能够得到在这一刻之前所产生的所有数据的。</p>
+<p>就拿获得这个游戏积分排行榜的数据为例子来说明一下。</p>
+<p>在现实生活中，可能很多用户是用手机来通关游戏，并且上传通关时间和积分的。有的地方可能因为信号差，上传数据会有很大的延迟。甚至可能有这样的情况：有一些用户是在坐飞机的时候玩的游戏（在飞行模式之下完成各种通关），等到飞机降落，手机重新有了信号之后，数据才被上传到服务器，这时候可能已经有了好几个小时的延时了。</p>
+<p>如果提早触发窗口中的数据计算，可能会有很多“迟到”的数据未被纳入最终结果中，而这些“迟到”的数据有可能又会影响到游戏积分排行榜。</p>
+<p>所以，在很多复杂的场景下，我们希望尽可能地将所有数据归入正确的时间窗口中，而且还要能够得到正确的结果。因此，除了要对触发器进行设置之外，我们还需要设置到底应不应该在一些“迟到”的数据来到的时候，重新计算一下整个结果。</p>
+<p>在 Beam 中，我们可以为 PCollection 设置的触发器有 4 种模式：</p>
+<p>1.<strong>基于事件时间的触发器</strong>（Event-Time Trigger）</p>
+<p>如果设置了基于事件时间的触发器，那所有的计算都是基于 PCollection 中所有元素的事件时间的。</p>
+<p>如果我们不显式地设置触发器的话，Beam 的默认触发器就是基于事件时间的，如果要显式地设置基于事件时间的触发器，可以使用 AfterWatermark 类进行设置。</p>
+<p>2.<strong>基于处理时间触发器</strong>（Process-Time Trigger）</p>
+<p>如果设置了基于处理时间的触发器，那一个 PCollection 中的所有元素都会在数据流水线中的某一个时刻被处理。如果要显式地设置基于处理时间的触发器，可以使 AfterProcessingTime 类进行设置。</p>
+<p>3.<strong>数据驱动的触发器</strong>（Data-Driven Trigger）</p>
+<p>数据驱动的触发器一般是在每个元素到达每个窗口时，通过检查这个元素是否满足某个属性来触发的。</p>
+<p>就好像我在<a href="./100478.md">第 23 讲</a>所举的例子一样，检查元素是否在窗口中到达一定的数量，然后触发计算就是数据驱动的触发器的一种，在 Beam 中，可以使用 AfterPane.elementCountAtLeast() 函数来配置。</p>
+<p>4.<strong>复合触发器</strong>（Composite Trigger）</p>
+<p>复合触发器其实就是由上面所说三种基本触发器组合而成的。在<a href="./100478.md">第 23 讲</a>中，我举过一个触发器的例子，例子中至少要等到有两个交易数据到达后才能触发计算。</p>
+<p>有同学在留言中问我，如果现实中只有一个数据到达窗口，那岂不是永远都触发不了计算了？其实，这个时候就可以定义一个复合触发器，可以定义成累积有超过两个元素落入窗口中或者是每隔一分钟触发一次计算的复合触发器。</p>
+<p>而像我之前提到的，如果我们需要处理“迟到”的数据，那在 Beam 中又是怎么操作呢？我们可以使用 withAllowedLateness 这个在 Window 类里定义好的函数，方法签名如下：</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public Window&lt;T&gt; withAllowedLateness(Duration allowedLateness);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个函数接收的参数就是我们希望允许多久的“迟到”数据可以被纳入计算中。</p>
+<p>最后需要说明的是累加模式。</p>
+<p>在 Beam 中，我们可以设置两种累加模式，分别是<strong>丢弃模式</strong>和<strong>累积模式</strong>。它们可以分别通过 Window 类里的函数 discardingFiredPanes() 和 accumulatingFiredPanes() 来设置。</p>
+<p>好了，那现在回到我们的积分排行榜问题当中。</p>
+<p>虽然我们对输入数据集设定的窗口是一个窗口时长为 1 周的固定窗口，但是我们也需要尽可能地在近乎实时的状态下更新排行榜。所以，我们可以设置数据流水线在每 5 分钟更新一次。</p>
+<p>那我们接受“迟到”多久的数据呢？</p>
+<p>我在网上查询了一下，现在飞机航班直飞耗时最长的是新加坡飞往纽约的航班，大概需要 19 个小时。如果玩游戏的用户恰好也在这趟航班上，那么可能数据的延时可能就会超过 19 个小时了。那我们就设定允许“迟到”20 个小时的数据也纳入我们的窗口计算当中。</p>
+<p>一般情况下，我们可以从 Pub/Sub 数据流中读取实时流数据。为了简化数据流水线的逻辑，不在数据流水线中保存中间状态，我们现在假设在实际操作的时候，服务器已经判断好某一用户的分数是否是最高分，如果是最高分的话，再通过 Pub/Sub 将数据传入流水线。</p>
+<p>这时，我们的累加模式可以定义为丢弃模式，也就是只保留最新的结果。</p>
+<p>为此，我们可以写出一个 Transform 来设置所有上述描述的概念，分别是：</p>
+<ol>
+<li>设置窗口时长为 1 周的固定窗口。</li>
+<li>每隔 5 分钟就会计算一次窗口内数据的结果。</li>
+<li>允许“迟到”了 20 个小时的数据被重新纳入窗口中计算。</li>
+<li>采用丢弃模式来保存最新的用户积分。</li>
+</ol>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static class ConfigUserScores extends PTransform&lt;PCollection&lt;UserScoreInfo&gt;, PCollection&lt;UserScoreInfo&gt;&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Duration FIXED_WINDOW_SIZE = Duration.standardDays(7);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Duration FIVE_MINUTES = Duration.standardMinutes(5);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final Duration TWENTY_HOURS = Duration.standardHours(20);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public PCollection&lt;UserScoreInfo&gt; expand(PCollection&lt;UserScoreInfo&gt; infos) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      return infos.apply(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          Window.&lt;UserScoreInfo&gt;into(FixedWindows.of(FIXED_WINDOW_SIZE))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">              .triggering(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                  AfterWatermark.pastEndOfWindow()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                      .withEarlyFirings(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                          AfterProcessingTime.pastFirstElementInPane().plusDelayOf(FIVE_MINUTES))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                      .withLateFirings(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                          AfterProcessingTime.pastFirstElementInPane().plusDelayOf(FIVE_MINUTES)))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">              .withAllowedLateness(TWENTY_HOURS)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">              .discardingFiredPanes());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>有了这个 Transform 去设定好我们在实时流处理中如何处理数据之后，我们其实只需要修改之前批处理数据流水线中很小的一部分，就可以达到我们想要的结果了。</p>
+<p>Java</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">pipeline.apply(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            KafkaIO.&lt;String&gt;read()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                .withBootstrapServers(&#34;broker_1:9092,broker_2:9092&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                .withTopic(&#34;user_scores&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                .withKeyDeserializer(StringDeserializer.class)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                .withValueDeserializer(StringDeserializer.class)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                .withLogAppendTime())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(&#34;ConvertUserScoreInfo&#34;, ParDo.of(new ConvertUserScoreInfoFn()))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(&#34;ConfigUserScores&#34;, new ConfigUserScores())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        .apply(&#34;RetrieveTop100Players&#34;, new ExtractUserAndScore())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如代码所示，真正做出修改的地方就是将读取输入数据集的 BigTableIO 改成使用 KafkaIO 来读取。将批处理的两个 Filter Transform 替换成我们自定义的 ConfigUserScores Transform。</p>
+<p>到此为止，我们就可以“一劳永逸”，运行一个实时流处理的数据流水线来得到游戏积分排行榜结果了。</p>
+<h2 id="小结">小结</h2>
+<p>今天我们一起设计了一个实时流处理的数据流水线，来完成之前自定义的一个简单游戏积分排行榜。</p>
+<p>这里面有不少经验是值得我们在处理现实的应用场景中借鉴的。比如，我们应该考虑数据结果的完整性有多重要、我们能接受多大的延迟、我们是否接受晚来的数据集等等。</p>
+<p>这些问题其实又回到了<a href="./100478.md">第 23 讲</a>中提到过的——我们在解决现实问题时，应该回答好的“WWWH”这四个问题。</p>
+<h2 id="思考题">思考题</h2>
+<p>今天我们一起探讨了如何利用实时流处理的方式来解决游戏积分排行榜的问题，里面涉及了配置窗口，触发器和累加模式。这些配置可能还不是最优的，你觉得我们还有什么地方可以进行优化的呢？</p>
+<p>欢迎你把自己的学习体会写在留言区，与我和其他同学一起讨论。如果你觉得有所收获，也欢迎把文章分享给你的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/a0f5b0b51dbfc98740637837dc0ae117.png" alt="unpreview"></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/">大规模数据处理实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%99%BD%E8%AF%9D%E6%B3%95%E5%BE%8B42%E8%AE%B2/36_%E8%80%81%E5%91%A8%E6%88%91%E6%83%B3%E7%9F%A5%E9%81%93_%E5%BE%8B%E5%B8%88%E5%B0%B1%E5%9C%A8%E4%BD%A0%E8%BA%AB%E8%BE%B9%E4%B8%89/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">36_“老周，我想知道”_律师就在你身边（三）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/36_%E4%BB%8Eurl%E5%88%B0%E7%BD%91%E5%8D%A1%E5%A6%82%E4%BD%95%E5%85%A8%E5%B1%80%E8%A7%82%E5%AF%9F%E7%BD%91%E7%BB%9C%E6%95%B0%E6%8D%AE%E6%B5%81%E5%8A%A8/">
+            <span class="next-text nav-default">36_从URL到网卡：如何全局观察网络数据流动？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

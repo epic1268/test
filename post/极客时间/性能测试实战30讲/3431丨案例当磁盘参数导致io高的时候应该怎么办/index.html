@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>3431丨案例当磁盘参数导致IO高的时候应该怎么办 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="31丨案例：当磁盘参数导致I/O高的时候，应该怎么办？
+在大部分的性能项目中，当系统调优到一定程度的时候，性能的瓶颈往往会体现在两类计数器上：一个是 CPU，另一个就是磁盘 I/O 了。所以我们也经常会在一些性能优化的文章中看到两个分类，分别是 CPU 密集型和磁盘 I/O 密集型。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95%E5%AE%9E%E6%88%9830%E8%AE%B2/3431%E4%B8%A8%E6%A1%88%E4%BE%8B%E5%BD%93%E7%A3%81%E7%9B%98%E5%8F%82%E6%95%B0%E5%AF%BC%E8%87%B4io%E9%AB%98%E7%9A%84%E6%97%B6%E5%80%99%E5%BA%94%E8%AF%A5%E6%80%8E%E4%B9%88%E5%8A%9E/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95%E5%AE%9E%E6%88%9830%E8%AE%B2/3431%E4%B8%A8%E6%A1%88%E4%BE%8B%E5%BD%93%E7%A3%81%E7%9B%98%E5%8F%82%E6%95%B0%E5%AF%BC%E8%87%B4io%E9%AB%98%E7%9A%84%E6%97%B6%E5%80%99%E5%BA%94%E8%AF%A5%E6%80%8E%E4%B9%88%E5%8A%9E/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="3431丨案例当磁盘参数导致IO高的时候应该怎么办">
+  <meta property="og:description" content="31丨案例：当磁盘参数导致I/O高的时候，应该怎么办？
+在大部分的性能项目中，当系统调优到一定程度的时候，性能的瓶颈往往会体现在两类计数器上：一个是 CPU，另一个就是磁盘 I/O 了。所以我们也经常会在一些性能优化的文章中看到两个分类，分别是 CPU 密集型和磁盘 I/O 密集型。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="性能测试实战30讲">
+
+  <meta itemprop="name" content="3431丨案例当磁盘参数导致IO高的时候应该怎么办">
+  <meta itemprop="description" content="31丨案例：当磁盘参数导致I/O高的时候，应该怎么办？
+在大部分的性能项目中，当系统调优到一定程度的时候，性能的瓶颈往往会体现在两类计数器上：一个是 CPU，另一个就是磁盘 I/O 了。所以我们也经常会在一些性能优化的文章中看到两个分类，分别是 CPU 密集型和磁盘 I/O 密集型。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4003">
+  <meta itemprop="keywords" content="性能测试实战30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="3431丨案例当磁盘参数导致IO高的时候应该怎么办">
+  <meta name="twitter:description" content="31丨案例：当磁盘参数导致I/O高的时候，应该怎么办？
+在大部分的性能项目中，当系统调优到一定程度的时候，性能的瓶颈往往会体现在两类计数器上：一个是 CPU，另一个就是磁盘 I/O 了。所以我们也经常会在一些性能优化的文章中看到两个分类，分别是 CPU 密集型和磁盘 I/O 密集型。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">3431丨案例当磁盘参数导致IO高的时候应该怎么办</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4003 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>31丨案例：当磁盘参数导致I/O高的时候，应该怎么办？</p>
+<p>在大部分的性能项目中，当系统调优到一定程度的时候，性能的瓶颈往往会体现在两类计数器上：一个是 CPU，另一个就是磁盘 I/O 了。所以我们也经常会在一些性能优化的文章中看到两个分类，分别是 CPU 密集型和磁盘 I/O 密集型。</p>
+<p>有人说为什么不说内存呢？内存是那么重要。不是说内存不会成为瓶颈，只不过内存的瓶颈基本上都可以转嫁给 CPU 和磁盘 I/O。当内存不够的时候，大不了就是清理得快一点。内存能表现出来的，就是满不满，而谁去清理呢？那就是 CPU 了。清理得快就得 CPU 转得快。</p>
+<p>我们经常会听到有人说什么性能优化到最后就是“空间转时间、时间转空间的优化”。如此带有禅意的一句话，其实意思就是，CPU 不够用，就扩大内存；内存不够，就让 CPU 计算得更快一些。</p>
+<p>举个例子，当我们需要在内存中使用很多变量时，如果内存不够，就会导致 CPU 不断清理内存中没被引用的变量来释放内存，这就导致了释放内存的动作会消耗更多的 CPU。而这时，我们就可以用增加内存的方式，让 CPU 不那么繁忙。</p>
+<p>但这个“空间、时间转化”的论点并不会在所有的场景下成立。比如说一个应用并不需要多大内存，就是纯计算型的，那你加内存也没啥用。另外这里提到的“空间”也不是硬盘，因为如果 CPU 不够用，拿再多磁盘补也无济于事。</p>
+<p>所以这句话只能是做为高深谒语让初入性能的小白们仰望，实际上适用的场景非常少。</p>
+<p>而磁盘 I/O 和内存有很大的区别。只要系统需要保存运行过程中留下的数据，那就必然会用到磁盘 I/O。分析磁盘 I/O 的时候，相对于其他的分析环节还是要复杂一些，因为磁盘 I/O 栈是比较长的。有了 Direct I/O 技术之后，磁盘 I/O 栈短了一段，速度快了，但是同样也没有给性能测试分析人员带来什么福音，因为从分析的角度来说，我们看计数器并没有减少什么。</p>
+<p>在性能分析过程中，操作系统是绕不过去的一个环节。在当前的技术栈中，我们仍然要把操作系统当成一个非常重要的环节。</p>
+<p>现在对于 I/O 的分析和判断，大部分还停留在磁盘百分比、队列、磁盘延时之类上。可是这样的计数器的值多了，少了，你要干什么呢？怎么解决它呢？是磁盘参数有问题，还是应用有问题？还是磁盘硬件能力就那样了？</p>
+<p>这是性能分析人员应该给出的答案, 可是有很多性能测试工程师还真的给不出来这样的答案，甚至有些人连哪个线程导致的 I/O 高都判断不出来。至少现在的状态说明了，性能测试行业还远远不够成熟，我们还有很多的机会。</p>
+<p>现在我们所说的 I/O，基本上把 File I/O 和 Disk I/O 都说进去了，所以在分析上，层级更是非常模糊。如下图所示的一个 I/O 栈：</p>
+<p>(此图来自于：https://www.thomas-krenn.com/de/wikiDE/images/b/ba/Linux-storage-stack-diagram_v4.0.png)</p>
+<p>在这个图中，我们可以明确看到磁盘 I/O 栈有多长。从应用层开始，产生系统调用，再通过 visual FS Layer → FS Layer → Block Layer 这样一层一层地调用下去，最后才写到了硬件存储里。</p>
+<p>当然还有一层，我们需要关注的就是从系统的全局状态到具体的线程，这个我在操作系统那一篇的 I/O 部分已经描述过。</p>
+<p>下面我们来看一个 I/O 高的分析案例。</p>
+<p>案例现象</p>
+<p>在这个项目的压力测试过程当中，发现了经典的现象：</p>
+<p>TPS 上不去；</p>
+<p>硬件资源用不上。</p>
+<p>应该说，性能分析要是分类比较宽泛，基本上是两种。</p>
+<p>第一种是资源用不上，TPS 上不去，响应时间随压力而增加，如下图所示：</p>
+<p>第二种是资源用得上，TPS 上不去，响应时间随压力而增加。如下图所示：</p>
+<p>这样的划分方式看似有调侃味道，却是很多人疑惑的起点。为什么这么说呢？</p>
+<p>我们在开始做性能分析的时候，经常会面对这种情况，那就是资源用不上去。也就是路不够宽，硬件资源才用不上的。我们要解决的，就是把路扩宽一些。</p>
+<p>但是，当我们面对一些客户或领导的时候，如果去汇报某资源使用率达到 100% 这样高的值的时候，有可能得到的一个反馈是，能不能把资源使用率降下来，因为资源使用率高会让人有种不安全感，而 TPS 反而不是关注的重点。这就让我们很疑惑：TPS 上去了，资源必然用得多呀，难道让资源使用率稳定保持在 50%，而 TPS 蹭蹭往上涨吗？这不现实呀。</p>
+<p>我的建议是，不用怕资源使用率高，做为专业性能分析人员，更应该怕的是资源使用率不高！</p>
+<p>在这个例子中，一开始同事跟我描述的时候，说资源怎么也用不上去，TPS 也上不去。这样的描述很常见。</p>
+<p>还是看看压力结果，如下所示：</p>
+<p>（场景开始时报了少量的错，不过这不是我们这个案例要分析的部分，请看官忽略。）</p>
+<p>像这种描述，基本上没办法让人分析，因为信息太少了。特别是有些人直接给一个固定线程数的压力结果，用来描述资源上不去的情况，这就更得不到有用的信息了，所以问性能问题的人一定要注意收集足够的信息，不然只能让人从头查一遍。</p>
+<p>分析过程</p>
+<p>因为没有什么具体的信息，所以我只能让同事把压力再压起来。</p>
+<p>我登录到服务器上之后，顺手执行了一个 top 命令：</p>
+<p>这里给个小提醒，执行 top 的时候一定要习惯性地点一下数字 1，这样可以把所有的 CPU 都列出来，因为我要看到每个 CPU 的各个计数器的使用率。别看这个动作不起眼，就算是这一个小小的操作，也是工作经验的积累。</p>
+<p>果不其然，看到了一个问题，那就是上图中 CPU0 的 wa 达到了 72%。像这样的问题，如果不看每个 CPU 的每个计数器，是发现不了的。</p>
+<p>看到这样的东西，我们要有个基本的判断，对于一般的 Java 应用来说，I/O 线程数基本上不会是 1 个，除非是特别的理由，所以这种情况还是很少的。</p>
+<p>不过既然是 I/O 的问题导致了 wa CPU 使用率高，那么我来看一下 CPU 的热点在哪个层面。这是我在工作中经常执行的一个动作，因为我不想在后面的分析过程中偏离方向，而看 CPU 热点可以让我记得这个方向。</p>
+<p>如下图所示：</p>
+<p>有人说，即然 wa CPU 使用率已经高了，接下去直接看磁盘 I/O 不就行了，看不看 CPU 热点还重要吗？我要说，当然重要！看到前面的磁盘 I/O 栈了吗？那么长，怎么知道是在哪一层呢？</p>
+<p>这是定向细化分析过程中的经验之一。</p>
+<p>在 CPU 热点中我们看到了，是内核模块中的 blk_queue_bio 消耗的 CPU 大。blk_queue_bio 是用来做 I/O 调度合并的，可以对 I/O 请求进入后向、前向合并操作，互斥方式就是加锁。</p>
+<p>根据它我们就可以知道，这是一个有 queue 的调度过程，再接着看它下面的几个函数也可以看出，都是 kernel 级的调用，并没有 user 级的调用，这几个函数基本上也说明了当前系统忙于 journal 写。</p>
+<p>接着执行 iotop，看是哪个进程在做这个动作。这里可以看到 jbd2，和上面 CPU 热点的函数也是对应得上的。</p>
+<p>那么 jbd2 是个啥玩意呢？jbd2 英文名是这样的：Journaling Block Device 2。</p>
+<p>它是跟着 ext4 格式来的，当然它也可以在其他磁盘格式下工作。这个进程的工作原理是这样的：文件系统写入数据，要提交给驱动程序，而 jbd2 就是在文件系统调用驱动之前工作的。文件系统要先调用 jbd2，然后 jbd2 会根据系统的设置（设置有 writeback、ordered、journal），进行数据的备份，然后再让文件系统提交数据。当文件系统将数据写入了块设备之后，jbd2 就会把备份的数据删除。如果文件系统写块设备时出了问题（比如说可悲的断电），那 jbd2 这里还有一个备份，在进行完整性检查时就会把数据补全，所以数据不会丢。</p>
+<p>jbd2 就是这样保证数据的完整性的。</p>
+<p>但是！对嘛，我就喜欢说但是。jbd2 保证的数据完整性也只是一个原子操作的完整性，即一个原子操作如果操作了 2M 的数据，它就只能保证这 2M 的数据不会丢失。如果你一下子操作了 1T 的数据，jbd2 也不能保证完整性。</p>
+<p>jbd2 有一个参数 barrier，它用来开启磁盘屏障。就是设置一个栅栏，要先把 barrier 之前的数据全都写到磁盘设备之后，才会写 barrier 之后的数据，也就是说它是用来保证原子操作中数据的完整性的。当然了，开启 barrier 的一个后果就是性能下降。</p>
+<p>了解了这些内容之后，我们就要判断一下了。这个应用有没有必要用这个功能来保证原子操作的完整性？我考虑了一下之后，觉得这个应用就是写日志而已，也没有其他什么重要的东西是要写日志的，重要的业务数据都写到数据库去了。</p>
+<p>所以，没必要保证数据写入的完整性，就算丢了一些日志数据又怎么样呢？如果真的就那么寸，应用出现大 bug，恰好块设备也出问题，或者断电，那真的只有烧香拜佛了。</p>
+<p>于是我觉得这个功能不用也罢，把原理说明白之后，和架构组、开发组、运维组以及领导层们沟通了一圈，告诉了他们原理，实在是没有打开的必要。</p>
+<p>最后大家一致同意：关掉！</p>
+<p>我们再回过头来看下这个参数：</p>
+<p><code>\[root@主机A\]# cat /proc/mounts /dev/mapper/data\_lvm-data\_lv /data ext4 rw,relatime,barrier=1,data=ordered 0 0 </code></p>
+<p>上面的这个 barrier=1，就是我们要找的目标。想关了它，就是挂载磁盘的时候使用挂载选项 -o barrier=0 或者 nobarrier。我这里是直接设置为 0 的。</p>
+<p>你也可以直接关掉 journal 功能：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">问题解决之后
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">我们再来看下问题解决后的压力工具结果：```
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">从压力结果来看，同样的压力之下，TPS 增加了一倍，响应时间快了一倍。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">top 如下所示：
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">集中的 wa CPU 也消失不见了，现在使用的也挺均衡的了。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">iotop：
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">在 I/O top 的结果中，也看不到 I/O 非常高的 jbd2 了。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">问题得到了完美地解决。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">总结
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">不管是什么样的性能问题，其实从分析思路上仍然逃不开我一直提到的思路——那就是一个分析的完整链路。当你一层一层往下找问题时，只要抓住了重点，思路不断，找到根本原因就可以解决问题。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">在这个 I/O 的问题中，难点在于怎么能知道 jbd2 的原理和参数。应该说，不管是谁，都不能保证自己的知识体系是完整的，那怎么办呢？查资料，各种学习，看源码，看逻辑。实在看不懂，那也没办法，接着修炼基础内功呗。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">所以说性能测试行业中，经常只测不分析，也是因为做性能分析需要的背景知识量有点大，还要不断分析各种新的知识点。不过也就是因为如此，性能测试和性能分析才真的有价值。只测不调只是做了一半工作，价值完全体现不出来。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">思考题
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">最后问你两个问题吧：为什么 TPS 上不去时，资源用不上才是更让人着急的问题？以及为什么要在 CPU 高时查看 CPU 热点函数呢？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">欢迎你在评论区写下你的思考，我会和你一起交流。也欢迎你把这篇文章分享给你的朋友或者同事，一起交流一下。
+</span></span></code></pre></td></tr></table>
+</div>
+</div>
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95%E5%AE%9E%E6%88%9830%E8%AE%B2/">性能测试实战30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/python%E8%87%AA%E5%8A%A8%E5%8C%96%E5%8A%9E%E5%85%AC%E5%AE%9E%E6%88%98%E8%AF%BE/3429%E7%BD%91%E7%BB%9C%E5%92%8C%E9%82%AE%E4%BB%B6%E5%BA%93%E5%AE%9A%E6%97%B6%E6%94%B6%E5%8F%91%E9%82%AE%E4%BB%B6%E5%87%8F%E5%B0%91%E6%89%8B%E5%8A%A8%E6%93%8D%E4%BD%9C/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">3429｜网络和邮件库定时收发邮件减少手动操作</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%9845%E8%AE%B2/3433%E4%B8%A8pagerank%E4%B8%8B%E5%88%86%E6%9E%90%E5%B8%8C%E6%8B%89%E9%87%8C%E9%82%AE%E4%BB%B6%E4%B8%AD%E7%9A%84%E4%BA%BA%E7%89%A9%E5%85%B3%E7%B3%BB/">
+            <span class="next-text nav-default">3433丨PageRank下分析希拉里邮件中的人物关系</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>18__可伸缩架构案例：数据太多，如何无限扩展你的数据库？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是王庆友。在第 16 讲中，我和你介绍了很多可伸缩的架构策略和原则。那么今天，我会通过 1 号店订单水平分库的实际案例，和你具体介绍如何实现系统的可伸缩。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/18__%E5%8F%AF%E4%BC%B8%E7%BC%A9%E6%9E%B6%E6%9E%84%E6%A1%88%E4%BE%8B%E6%95%B0%E6%8D%AE%E5%A4%AA%E5%A4%9A%E5%A6%82%E4%BD%95%E6%97%A0%E9%99%90%E6%89%A9%E5%B1%95%E4%BD%A0%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/18__%E5%8F%AF%E4%BC%B8%E7%BC%A9%E6%9E%B6%E6%9E%84%E6%A1%88%E4%BE%8B%E6%95%B0%E6%8D%AE%E5%A4%AA%E5%A4%9A%E5%A6%82%E4%BD%95%E6%97%A0%E9%99%90%E6%89%A9%E5%B1%95%E4%BD%A0%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="18__可伸缩架构案例：数据太多，如何无限扩展你的数据库？">
+  <meta property="og:description" content="你好，我是王庆友。在第 16 讲中，我和你介绍了很多可伸缩的架构策略和原则。那么今天，我会通过 1 号店订单水平分库的实际案例，和你具体介绍如何实现系统的可伸缩。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="架构实战案例解析">
+
+  <meta itemprop="name" content="18__可伸缩架构案例：数据太多，如何无限扩展你的数据库？">
+  <meta itemprop="description" content="你好，我是王庆友。在第 16 讲中，我和你介绍了很多可伸缩的架构策略和原则。那么今天，我会通过 1 号店订单水平分库的实际案例，和你具体介绍如何实现系统的可伸缩。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5763">
+  <meta itemprop="keywords" content="架构实战案例解析">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="18__可伸缩架构案例：数据太多，如何无限扩展你的数据库？">
+  <meta name="twitter:description" content="你好，我是王庆友。在第 16 讲中，我和你介绍了很多可伸缩的架构策略和原则。那么今天，我会通过 1 号店订单水平分库的实际案例，和你具体介绍如何实现系统的可伸缩。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">18__可伸缩架构案例：数据太多，如何无限扩展你的数据库？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5763 字 </span>
+          <span class="more-meta"> 预计阅读 12 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题和解决思路">问题和解决思路</a></li>
+        <li><a href="#分库策略">分库策略</a>
+          <ul>
+            <li><a href="#分库维度怎么定">分库维度怎么定？</a></li>
+            <li><a href="#数据怎么分">数据怎么分？</a></li>
+            <li><a href="#分几个库">分几个库？</a></li>
+          </ul>
+        </li>
+        <li><a href="#分库带来的问题">分库带来的问题</a>
+          <ul>
+            <li><a href="#分库路由">分库路由</a></li>
+            <li><a href="#分页处理">分页处理</a></li>
+            <li><a href="#分库字段映射">分库字段映射</a></li>
+          </ul>
+        </li>
+        <li><a href="#整体架构">整体架构</a></li>
+        <li><a href="#如何安全落地">如何安全落地？</a></li>
+        <li><a href="#项目总结">项目总结</a></li>
+        <li><a href="#总结">总结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是王庆友。在第 16 讲中，我和你介绍了很多可伸缩的架构策略和原则。那么今天，我会通过 1 号店订单水平分库的实际案例，和你具体介绍如何实现系统的可伸缩。</p>
+<h2 id="问题和解决思路">问题和解决思路</h2>
+<p>2013 年，随着 1 号店业务的发展，每日的订单量接近 100 万。这个时候，订单库已有上亿条记录，订单表有上百个字段，这些数据存储在一个 Oracle 数据库里。当时，我们已经实现了订单的服务化改造，只有订单服务才能访问这个订单数据库，但随着单量的增长以及在线促销的常态化，单一数据库的存储容量和访问性能都已经不能满足业务需求了，订单数据库已成为系统的瓶颈。所以，对这个数据库的拆分势在必行。</p>
+<p>数据库拆分一般有两种做法，一个是垂直分库，还有一个是水平分库。</p>
+<ol>
+<li><strong>垂直分库</strong></li>
+</ol>
+<p>简单来说，垂直分库就是数据库里的表太多，我们把它们分散到多个数据库，一般是根据业务进行划分，把关系密切的表放在同一个数据库里，这个改造相对比较简单。</p>
+<ol>
+<li><strong>水平分库</strong></li>
+</ol>
+<p>某些表太大，单个数据库存储不下，或者数据库的读写性能有压力。通过水平分库，我们把一张表拆成多张表，每张表存放部分记录，分别保存在不同的数据库里，水平分库需要对应用做比较大的改造。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/e1be5a1db6f386e69e980c106f8af051.png" alt=""></p>
+<p>当时，1 号店已经通过服务化，实现了订单库的<strong>垂直拆分</strong>，它的订单库主要包括订单基本信息表、订单商品明细表、订单扩展表。这里的问题不是表的数量太多，而是单表的数据量太大，读写性能差。所以，1 号店通过<strong>水平分库</strong>，把这 3 张表的记录分到多个数据库当中，从而分散了数据库的存储和性能压力。</p>
+<p>水平分库后，应用通过订单服务来访问多个订单数据库，具体的方式如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/b508b9de4eaf272ed255b52ef5046851.png" alt=""></p>
+<p>原来的一个 Oracle 库被现在的多个 MySQL 库给取代了，每个 MySQL 数据库包括了 1 主 1 备 2 从，都支持读写分离，主备之间通过自带的同步机制来实现数据同步。所以，你可以发现，<strong>这个项目实际包含了水平分库和去 Oracle 两大改造目标。</strong></p>
+<h2 id="分库策略">分库策略</h2>
+<p>我们先来讨论一下水平分库的具体策略，包括要选择哪个分库维度，数据记录如何划分，以及要分为几个数据库。</p>
+<h3 id="分库维度怎么定">分库维度怎么定？</h3>
+<p>首先，我们需要考虑根据哪个字段来作为分库的维度。</p>
+<p>这个字段选择的标准是，尽量避免应用代码和 SQL 性能受到影响。具体地说，就是现有的 SQL 在分库后，它的访问尽量落在单个数据库里，否则原来的单库访问就变成了多库扫描，不但 SQL 的性能会受到影响，而且相应的代码也需要进行改造。</p>
+<p>具体到订单数据库的拆分，你可能首先会想到按照<strong>用户 ID</strong> 来进行拆分。这个结论是没错，但我们最好还是要有量化的数据支持，不能拍脑袋。</p>
+<p>这里，最好的做法是，先收集所有 SQL，挑选出 WHERE 语句中最常出现的过滤字段，比如说这里有三个候选对象，分别是用户 ID、订单 ID 和商家 ID，每个字段在 SQL 中都会出现三种情况：</p>
+<ol>
+<li>单 ID 过滤，比如说“用户 ID=？”；</li>
+<li>多 ID 过滤，比如“用户 ID IN(?,?,?)”；</li>
+<li>该 ID 不出现。</li>
+</ol>
+<p>最后，我们分别统计这三个字段的使用情况，假设共有 500 个 SQL 访问订单库，3 个候选字段出现的情况如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/e3398d86c759684c891a83096ab6564e.png" alt=""></p>
+<p>从这张表来看，结论非常明显，我们应该选择用户 ID 来进行分库。</p>
+<p>不过，等一等，这<strong>只是静态分析</strong>。我们知道，每个 SQL 访问的频率是不一样的，所以，我们还要分析每个 SQL 的实际访问量。</p>
+<p>在项目中，我们分析了 Top15 执行次数最多的 SQL（它们占总执行次数 85%，具有足够代表性），按照执行的次数，如果使用用户 ID 进行分库，这些 SQL 85% 会落到单个数据库，13% 落到多个数据库，只有 2% 需要遍历所有的数据库。所以说，<strong>从 SQL 动态执行次数的角度来看</strong>，用户 ID 分库也明显优于使用其他两个 ID 进行分库。</p>
+<p>这样，通过前面的量化分析，我们知道按照用户 ID 分库是最优的选择，同时也大致知道了分库对现有系统会造成多大影响。比如在这个例子中，85% 的 SQL 会落到单个数据库，那么这部分的数据访问相对于不分库来说，执行性能会得到一定的优化，这样也解决了我们之前对分库是否有效果的疑问，坚定了分库的信心。</p>
+<h3 id="数据怎么分">数据怎么分？</h3>
+<p>好，分库维度确定了以后，我们如何把记录分到各个库里呢？</p>
+<p>一般有两种数据分法：</p>
+<ol>
+<li><strong>根据 ID 范围进行分库</strong>，比如把用户 ID 为 1 ~ 999 的记录分到第一个库，1000 ~ 1999 的分到第二个库，以此类推。</li>
+<li><strong>根据 ID 取模进行分库</strong>，比如把用户 ID mod 10，余数为 0 的记录放到第一个库，余数为 1 的放到第二个库，以此类推。</li>
+</ol>
+<p>这两种分法，各自存在优缺点，如下表所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/9f186d220e0f7a01dee27e4b6ecf30ad.png" alt=""></p>
+<p>在实践中，为了运维方便，选择 ID 取模进行分库的做法比较多。同时为了数据迁移方便，一般分库的数量是按照倍数增加的，比如说，一开始是 4 个库，二次分裂为 8 个，再分成 16 个。这样对于某个库的数据，在分裂的时候，一半数据会移到新库，剩余的可以不用动。与此相反，如果我们每次只增加一个库，所有记录都要按照新的模数做调整。</p>
+<p>在这个项目中，我们结合订单数据的实际情况，最后采用的是<strong>取模</strong>的方式来拆分记录。</p>
+<blockquote>
+<p>**补充说明：**按照取模进行分库，每个库记录数一般比较均匀，但也有些数据库，存在超级 ID，这些 ID 的记录远远超过其他 ID。比如在广告场景下，某个大广告主的广告数可能占很大比例。如果按照广告主 ID 取模进行分库，某些库的记录数会特别多，对于这些超级 ID，需要提供单独库来存储记录。</p>
+</blockquote>
+<h3 id="分几个库">分几个库？</h3>
+<p>现在，我们确定了记录要怎么分，但具体要分成几个数据库呢？</p>
+<p>分库数量，首先和<strong>单库能处理的记录数</strong>有关。一般来说，MySQL 单库超过了 5000 万条记录，Oracle 单库超过了 1 亿条记录，DB 的压力就很大（当然这也和字段数量、字段长度和查询模式有关系）。</p>
+<p>在满足前面记录数量限制的前提下，如果分库的数量太少，我们达不到分散存储和减轻 DB 性能压力的目的；如果分库的数量太多，好处是单库访问性能好，但对于跨多个库的访问，应用程序需要同时访问多个库，如果我们并发地访问所有数据库，就意味着要消耗更多的线程资源；如果是串行的访问模式，执行的时间会大大地增加。</p>
+<p>另外，分库数量还直接影响了<strong>硬件的投入</strong>，多一个库，就意味着要多投入硬件设备。所以，具体分多少个库，需要做一个综合评估，一般初次分库，我建议你分成 4~8 个库。在项目中，我们拆分为了 6 个数据库，这样可以满足较长一段时间的订单业务需求。</p>
+<h2 id="分库带来的问题">分库带来的问题</h2>
+<p>不过水平分库解决了单个数据库容量和性能瓶颈的同时，也给我们带来了一系列新的问题，包括数据库路由、分页以及字段映射的问题。</p>
+<h3 id="分库路由">分库路由</h3>
+<p>分库从某种意义上来说，意味着 DB Schema 改变了，必然会影响应用，但这种改变和业务无关，所以我们要尽量保证分库相关的逻辑都在数据访问层进行处理，对上层的订单服务透明，服务代码无需改造。</p>
+<p>当然，要完全做到这一点会很困难。那么具体哪些改动应该由 DAL（数据访问层）负责，哪些由订单服务负责，这里我给你一些可行的建议：</p>
+<ol>
+<li>对于<strong>单库访问</strong>，比如查询条件已经指定了用户 ID，那么该 SQL 只需访问特定库即可。此时应该由 DAL 层自动路由到特定库，当库二次分裂时，我们也只需要修改取模因子就可以了，应用代码不会受到影响。</li>
+<li>对于<strong>简单的多库查询</strong>，DAL 层负责汇总各个分库返回的记录，此时它仍对上层应用透明。</li>
+<li>对于<strong>带聚合运算的多库查询</strong>，比如说带 groupby、orderby、min、max、avg 等关键字，建议可以让 DAL 层汇总单个库返回的结果，然后由上层应用做进一步的处理。这样做有两方面的原因，一方面是因为让 DAL 层支持所有可能的聚合场景，实现逻辑会很复杂；另一方面，从 1 号店的实践来看，这样的聚合场景并不多，在上层应用做针对性处理，会更加灵活。</li>
+</ol>
+<p>DAL 层还可以进一步细分为<strong>底层 JDBC 驱动层</strong>和<strong>偏上面的数据访问层</strong>。如果我们基于 JDBC 层面实现分库路由，系统开发难度大，灵活性低，目前也没有很好的成功案例。</p>
+<p>在实践中，我们一般是基于持久层框架，把它进一步封装成 <strong>DDAL</strong>（Distributed Data Access Layer，分布式数据访问层），实现分库路由。1 号店的 DDAL 就是基于 iBatis 进一步封装而来的。</p>
+<h3 id="分页处理">分页处理</h3>
+<p>水平分库后，分页查询的问题比较突出，因为有些分页查询需要遍历所有库。</p>
+<p>举个例子，假设我们要按时间顺序展示某个商家的订单，每页有 100 条记录，由于是按商家查询，我们需要遍历所有数据库。假设库数量是 8，我们来看下水平分库后的分页逻辑：</p>
+<ol>
+<li>如果是取第 1 页数据，我们需要从每个库里按时间顺序取前 100 条记录，8 个库汇总后共有 800 条，然后我们对这 800 条记录在应用里进行二次排序，最后取前 100 条；</li>
+<li>如果取第 10 页数据，则需要从每个库里取前 1000（100*10）条记录，汇总后共有 8000 条记录，然后我们对这 8000 条记录进行二次排序后，取第 900 到 1000 之间的记录。</li>
+</ol>
+<p>你可以看到，在分库情况下，对于每个数据库，我们要取更多的记录，并且汇总后，还要在应用里做二次排序，越是靠后的分页，系统要耗费更多的内存和执行时间。而在不分库的情况下，无论取哪一页，我们只要从单个 DB 里取 100 条记录即可，也无需在应用内部做二次排序，非常简单。</p>
+<p>**那么，我们如何解决分库情况下的分页问题呢？**这需要具体情况具体分析：</p>
+<ol>
+<li>如果是为前台应用提供分页，我们可以限定用户只能看到前面 n 页（这个限制在业务上也是合理的，一般看后面的分页意义不大，如果一定要看，可以要求用户缩小范围重新查询）；</li>
+<li>如果是后台批处理任务要求分批获取数据，我们可以加大分页的大小，比如设定每次获取 5000 条记录，这样可以有效减少分页的访问次数；</li>
+<li>分库设计时，一般还有配套的大数据平台负责汇总所有分库的记录，所以有些分页查询，我们可以考虑走大数据平台。</li>
+</ol>
+<h3 id="分库字段映射">分库字段映射</h3>
+<p>分库字段只有一个，比如这里，我们用的是用户 ID，如果给定用户 ID，这个查询会落到具体的某个库。但我们知道，在订单服务里，根据<strong>订单 ID</strong> 查询的场景也很多见，不过由于订单 ID 不是分库字段，如果不对它做特殊处理，系统会盲目查询所有分库，从而带来不必要的资源开销。</p>
+<p>所以，这里我们<strong>为订单 ID 和用户 ID 创建映射，保存在 Lookup 表里</strong>，我们就可以根据订单 ID，找到相应的用户 ID，从而实现单库定位。</p>
+<p>Lookup 表的记录数和订单库记录总数相等，但它只有 2 个字段，所以存储和查询性能都不是问题，这个表在单独的数据库里存放。在实际使用时，我们可以通过<strong>分布式缓存</strong>，来优化 Lookup 表的查询性能。此外，对于新增的订单，除了写订单表，我们同时还要写 Lookup 表。</p>
+<h2 id="整体架构">整体架构</h2>
+<p>通过以上分析，最终的 1 号店订单水平分库的总体技术架构如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/17f2cab84d8955d799f449fa43e69bfd.png" alt=""></p>
+<ol>
+<li><strong>上层应用</strong>通过订单服务访问数据库；</li>
+<li><strong>分库代理</strong>实现了分库相关的功能，包括聚合运算、订单 ID 到用户 ID 的映射，做到分库逻辑对订单服务透明；</li>
+<li><strong>Lookup 表</strong>用于订单 ID 和用户 ID 的映射，保证订单服务按订单 ID 访问时，可以直接落到单个库，Cache 是 Lookup 表数据的缓存；</li>
+<li><strong>DDAL</strong> 提供库的路由，可以根据用户 ID 定位到某个库，对于多库访问，DDAL 支持可选的多线程并发访问模式，并支持简单的记录汇总；</li>
+<li><strong>Lookup 表初始化数据</strong>来自于现有的分库数据，当新增订单记录时，由分库代理异步写入。</li>
+</ol>
+<h2 id="如何安全落地">如何安全落地？</h2>
+<p>订单表是系统的核心业务表，它的水平拆分会影响到很多业务，订单服务本身的代码改造也很大，很容易导致依赖订单服务的应用出现问题。我们在上线时，必须谨慎考虑。</p>
+<p>所以，为了保证订单水平分库的总体改造可以安全落地，整个方案的实施过程如下：</p>
+<ol>
+<li>首先，实现 Oracle 和 MySQL 两套库并行，所有数据读写指向 Oracle 库，我们通过数据同步程序，把数据从 Oracle 拆分到多个 MySQL 库，比如说 3 分钟增量同步一次。</li>
+<li>其次，我们选择几个对数据实时性要求不高的访问场景（比如访问历史订单），把订单服务转向访问 MySQL 数据库，以检验整套方案的可行性。</li>
+<li>最后，经过大量测试，如果性能和功能都没有问题，我们再一次性把所有实时读写访问转向 MySQL，废弃 Oracle。</li>
+</ol>
+<p>这里，我们把上线分成了两个阶段：<strong>第一阶段</strong>，把部分非实时的功能切换到 MySQL，这个阶段主要是为了<strong>验证技术</strong>，它包括了分库代理、DDAL、Lookup 表等基础设施的改造；<strong>第二阶段</strong>，主要是<strong>验证业务功能</strong>，我们把所有订单场景全面接入 MySQL。1 号店两个阶段的上线都是一次性成功的，特别是第二阶段的上线，100 多个依赖订单服务的应用，通过简单的重启就完成了系统的升级，中间没有出现一例较大的问题。</p>
+<h2 id="项目总结">项目总结</h2>
+<p>1 号店在完成订单水平分库的同时，也实现了去 Oracle，设备从小型机换成了 X86 服务器，我们通过水平分库和去 Oracle，不但支持了订单量的未来增长，并且总体成本也大幅下降。</p>
+<p>不过由于去 Oracle 和订单分库一起实施，带来了双重的性能影响，我们花了很大精力做性能测试。为了模拟真实的线上场景，我们通过 <strong>TCPCopy</strong>，把线上实际的查询流量引到测试环境，先后经过 13 轮的性能测试，最终 6 个 MySQL 库相对一个 Oracle，在当时的数据量下，SQL 执行时间基本持平。这样，我们<strong>在性能不降低的情况下，通过水平分库优化了架构，实现了订单处理能力的水平扩展。</strong></p>
+<p>1 号店最终是根据用户 ID 后三位取模进行分库，初始分成了 6 个库，理论上可以支持多达 768 个库。同时我们还改造了订单 ID 的生成规则，使其包括用户 ID 后三位，这样新订单 ID 本身就包含了库定位所需信息，无需走 Lookup 映射机制。随着老订单归档到历史库，在前面给出的架构中，Lookup 表相关的部分就可以逐渐废弃了。</p>
+<p>如果要扩充数据库的数量，从 6 个升到 12 个，我们可以分三步走：</p>
+<ol>
+<li>增加 6 个 MySQL 实例，把现有 6 个库的数据同步到新的库，比如说，0 号库同步到 6 号库，1 号库同步到 7 号库等等；</li>
+<li>在配置文件里把分库的取模从 6 变成 12；</li>
+<li>通过数据库脚本，每个库删掉一半数据，比如对于 0 号库，删掉用户 ID%12=6 的记录，对于 6 号库，删掉用户 ID%12=0 的记录。</li>
+</ol>
+<p>你可以看到，通过这样的分库方式，整个数据库扩展是非常容易的，不涉及复杂的数据跨库迁移工作。</p>
+<p>订单的水平分库是一项系统性工作，需要大胆设计，谨慎实施。<strong>你需要把握住这几个要点：</strong></p>
+<ol>
+<li>首先，你需要在分库策略的指导下，结合实际情况，在每个方面做出最合适的选择；</li>
+<li>其次，对于特殊场景，如分页查询，你需要具体问题具体解决；</li>
+<li>最后，你要总体规划，控制好落地步骤，包括对系统改造、性能测试、数据迁移、上线实施等各个环节做好衔接，保证业务不出问题。</li>
+</ol>
+<h2 id="总结">总结</h2>
+<p>今天我和你分享了 1 号店订单水平分库的实际案例，并给出了具体的做法和原因，相信你已经掌握了如何通过对数据库的水平拆分，来保证系统的高性能和可伸缩。</p>
+<p><strong>水平分库是针对有状态的存储节点进行水平扩展</strong>，相对于无状态的节点，系统改造的复杂性比较高，要考虑的点也比较多。通过今天的分享，希望你以后在设计一个复杂方案时，能够更全面地思考相关的细节，提升架构设计能力。</p>
+<p><strong>最后，给你留一道思考题</strong>：你公司的数据库有什么瓶颈吗，你计划对它做什么样的改造呢？</p>
+<p>欢迎在留言区和我互动，我会第一时间给你反馈。如果觉得有收获，也欢迎你把这篇文章分享给你的朋友。感谢阅读，我们下期再见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/">架构实战案例解析</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/18__%E8%BF%9B%E7%A8%8B%E7%9A%84%E5%88%9B%E5%BB%BA%E5%A6%82%E4%BD%95%E5%8F%91%E8%B5%B7%E4%B8%80%E4%B8%AA%E6%96%B0%E9%A1%B9%E7%9B%AE/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">18__进程的创建：如何发起一个新项目？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A0%94%E5%8F%91%E6%95%88%E7%8E%87%E7%A0%B4%E5%B1%80%E4%B9%8B%E9%81%93/18__%E8%93%9D%E7%BB%BF%E7%BA%A2%E9%BB%91%E7%81%B0%E5%BA%A6%E5%8F%91%E5%B8%83%E8%BF%99%E4%BA%9B%E4%BA%94%E9%A2%9C%E5%85%AD%E8%89%B2%E7%9A%84%E5%8F%91%E5%B8%83%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8/">
+            <span class="next-text nav-default">18__蓝绿红黑灰度发布：这些五颜六色的发布到底怎么用？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

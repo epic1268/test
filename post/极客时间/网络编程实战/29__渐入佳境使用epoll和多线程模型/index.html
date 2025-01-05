@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>29__渐入佳境：使用epoll和多线程模型 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 29 讲，欢迎回来。
+在前面的第 27 讲和第 28 讲中，我介绍了基于 poll 事件分发的 reactor 反应堆模式，以及主从反应堆模式。我们知道，和 poll 相比，Linux 提供的 epoll 是一种更为高效的事件分发机制。在这一讲里，我们将切换到 epoll 实现的主从反应堆模式，并且分析一下为什么 epoll 的性能会强于 poll 等传统的事件分发机制。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/29__%E6%B8%90%E5%85%A5%E4%BD%B3%E5%A2%83%E4%BD%BF%E7%94%A8epoll%E5%92%8C%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/29__%E6%B8%90%E5%85%A5%E4%BD%B3%E5%A2%83%E4%BD%BF%E7%94%A8epoll%E5%92%8C%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="29__渐入佳境：使用epoll和多线程模型">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 29 讲，欢迎回来。
+在前面的第 27 讲和第 28 讲中，我介绍了基于 poll 事件分发的 reactor 反应堆模式，以及主从反应堆模式。我们知道，和 poll 相比，Linux 提供的 epoll 是一种更为高效的事件分发机制。在这一讲里，我们将切换到 epoll 实现的主从反应堆模式，并且分析一下为什么 epoll 的性能会强于 poll 等传统的事件分发机制。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="29__渐入佳境：使用epoll和多线程模型">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 29 讲，欢迎回来。
+在前面的第 27 讲和第 28 讲中，我介绍了基于 poll 事件分发的 reactor 反应堆模式，以及主从反应堆模式。我们知道，和 poll 相比，Linux 提供的 epoll 是一种更为高效的事件分发机制。在这一讲里，我们将切换到 epoll 实现的主从反应堆模式，并且分析一下为什么 epoll 的性能会强于 poll 等传统的事件分发机制。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3799">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="29__渐入佳境：使用epoll和多线程模型">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 29 讲，欢迎回来。
+在前面的第 27 讲和第 28 讲中，我介绍了基于 poll 事件分发的 reactor 反应堆模式，以及主从反应堆模式。我们知道，和 poll 相比，Linux 提供的 epoll 是一种更为高效的事件分发机制。在这一讲里，我们将切换到 epoll 实现的主从反应堆模式，并且分析一下为什么 epoll 的性能会强于 poll 等传统的事件分发机制。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">29__渐入佳境：使用epoll和多线程模型</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3799 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何切换到-epoll">如何切换到 epoll</a></li>
+        <li><a href="#样例程序">样例程序</a></li>
+        <li><a href="#样例程序结果">样例程序结果</a></li>
+        <li><a href="#epoll-的性能分析">epoll 的性能分析</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 29 讲，欢迎回来。</p>
+<p>在前面的第 27 讲和第 28 讲中，我介绍了基于 poll 事件分发的 reactor 反应堆模式，以及主从反应堆模式。我们知道，和 poll 相比，Linux 提供的 epoll 是一种更为高效的事件分发机制。在这一讲里，我们将切换到 epoll 实现的主从反应堆模式，并且分析一下为什么 epoll 的性能会强于 poll 等传统的事件分发机制。</p>
+<h2 id="如何切换到-epoll">如何切换到 epoll</h2>
+<p>我已经将所有的代码已经放置到<a href="./yolanda.md">GitHub</a>上，你可以自行查看或下载。</p>
+<p>我们的网络编程框架是可以同时支持 poll 和 epoll 机制的，那么如何开启 epoll 的支持呢？</p>
+<p>lib/event_loop.c 文件的 event_loop_init_with_name 函数是关键，可以看到，这里是通过宏 EPOLL_ENABLE 来决定是使用 epoll 还是 poll 的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct event_loop *event_loop_init_with_name(char *thread_name) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#ifdef EPOLL_ENABLE
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    yolanda_msgx(&#34;set epoll as dispatcher, %s&#34;, eventLoop-&gt;thread_name);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    eventLoop-&gt;eventDispatcher = &amp;epoll_dispatcher;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    yolanda_msgx(&#34;set poll as dispatcher, %s&#34;, eventLoop-&gt;thread_name);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    eventLoop-&gt;eventDispatcher = &amp;poll_dispatcher;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#endif
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    eventLoop-&gt;event_dispatcher_data = eventLoop-&gt;eventDispatcher-&gt;init(eventLoop);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在根目录下的 CMakeLists.txt 文件里，引入 CheckSymbolExists，如果系统里有 epoll_create 函数和 sys/epoll.h，就自动开启 EPOLL_ENABLE。如果没有，EPOLL_ENABLE 就不会开启，自动使用 poll 作为默认的事件分发机制。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># check epoll and add config.h for the macro compilation
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">include(CheckSymbolExists)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">check_symbol_exists(epoll_create &#34;sys/epoll.h&#34; EPOLL_EXISTS)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if (EPOLL_EXISTS)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #    Linux 下设置为 epoll
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set(EPOLL_ENABLE 1 CACHE INTERNAL &#34;enable epoll&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     #    Linux 下也设置为 poll
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #    set(EPOLL_ENABLE &#34;&#34; CACHE INTERNAL &#34;not enable epoll&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">else ()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set(EPOLL_ENABLE &#34;&#34; CACHE INTERNAL &#34;not enable epoll&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">endif ()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>但是，为了能让编译器使用到这个宏，需要让 CMake 往 config.h 文件里写入这个宏的最终值，configure_file 命令就是起这个作用的。其中 config.h.cmake 是一个模板文件，已经预先创建在根目录下。同时还需要让编译器 include 这个 config.h 文件。include_directories 可以帮我们达成这个目标。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ${CMAKE_CURRENT_BINARY_DIR}/include/config.h)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样，在 Linux 下，就会默认使用 epoll 作为事件分发。</p>
+<p>那么前面的<a href="./146664.md">27 讲</a>和<a href="./148148.md">28 讲</a>中的程序案例如何改为使用 poll 的呢？</p>
+<p>我们可以修改 CMakeLists.txt 文件，把 Linux 下设置为 poll 的那段注释下的命令打开，同时关闭掉原先设置为 1 的命令就可以了。下面就是具体的示例代码。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># check epoll and add config.h for the macro compilation
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">include(CheckSymbolExists)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">check_symbol_exists(epoll_create &#34;sys/epoll.h&#34; EPOLL_EXISTS)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if (EPOLL_EXISTS)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #    Linux 下也设置为 poll
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     set(EPOLL_ENABLE &#34;&#34; CACHE INTERNAL &#34;not enable epoll&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">else ()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set(EPOLL_ENABLE &#34;&#34; CACHE INTERNAL &#34;not enable epoll&#34;)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">endif (
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>不管怎样，现在我们得到了一个 Linux 下使用 epoll 作为事件分发的版本，现在让我们使用它来编写程序吧。</p>
+<h2 id="样例程序">样例程序</h2>
+<p>我们的样例程序和<a href="./148148.md">第 28 讲</a>的一模一样，只是现在我们的事件分发机制从 poll 切换到了 epoll。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &lt;lib/acceptor.h&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/common.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/event_loop.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/tcp_server.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> char rot13_char(char c) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if ((c &gt;= &#39;a&#39; &amp;&amp; c &lt;= &#39;m&#39;) || (c &gt;= &#39;A&#39; &amp;&amp; c &lt;= &#39;M&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c + 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else if ((c &gt;= &#39;n&#39; &amp;&amp; c &lt;= &#39;z&#39;) || (c &gt;= &#39;N&#39; &amp;&amp; c &lt;= &#39;Z&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c - 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 连接建立之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onConnectionCompleted(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;connection completed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 数据读到 buffer 之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onMessage(struct buffer *input, struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;get message from tcp connection %s\n&#34;, tcpConnection-&gt;name);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;%s&#34;, input-&gt;data);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     struct buffer *output = buffer_new();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int size = buffer_readable_size(input);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (int i = 0; i &lt; size; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        buffer_append_char(output, rot13_char(buffer_read_char(input)));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    tcp_connection_send_buffer(tcpConnection, output);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 数据通过 buffer 写完之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onWriteCompleted(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;write completed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 连接关闭之后的 callback
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int onConnectionClosed(struct tcp_connection *tcpConnection) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;connection closed\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int c, char **v) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 主线程 event_loop
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct event_loop *eventLoop = event_loop_init();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始化 acceptor
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct acceptor *acceptor = acceptor_init(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始 tcp_server，可以指定线程数目，这里线程是 4，说明是一个 acceptor 线程，4 个 I/O 线程，没一个 I/O 线程
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //tcp_server 自己带一个 event_loop
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct TCPserver *tcpServer = tcp_server_init(eventLoop, acceptor, onConnectionCompleted, onMessage,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                                                  onWriteCompleted, onConnectionClosed, 4);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    tcp_server_start(tcpServer);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // main thread for acceptor
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    event_loop_run(eventLoop);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>关于这个程序，之前一直没有讲到的部分是缓冲区对象 buffer。这其实也是网络编程框架应该考虑的部分。</p>
+<p>我们希望框架可以对应用程序封装掉套接字读和写的部分，转而提供的是针对缓冲区对象的读和写操作。这样一来，从套接字收取数据、处理异常、发送数据等操作都被类似 buffer 这样的对象所封装和屏蔽，应用程序所要做的事情就会变得更加简单，从 buffer 对象中可以获取已接收到的字节流再进行应用层处理，比如这里通过调用 buffer_read_char 函数从 buffer 中读取一个字节。</p>
+<p>另外一方面，框架也必须对应用程序提供套接字发送的接口，接口的数据类型类似这里的 buffer 对象，可以看到，这里先生成了一个 buffer 对象，之后将编码后的结果填充到 buffer 对象里，最后调用 tcp_connection_send_buffer 将 buffer 对象里的数据通过套接字发送出去。</p>
+<p>这里像 onMessage、onConnectionClosed 几个回调函数都是运行在子反应堆线程中的，也就是说，刚刚提到的生成 buffer 对象，encode 部分的代码，是在子反应堆线程中执行的。这其实也是回调函数的内涵，回调函数本身只是提供了类似 Handlder 的处理逻辑，具体执行是由事件分发线程，或者说是 event loop 线程发起的。</p>
+<p>框架通过一层抽象，让应用程序的开发者只需要看到回调函数，回调函数中的对象，也都是如 buffer 和 tcp_connection 这样封装过的对象，这样像套接字、字节流等底层实现的细节就完全由框架来完成了。</p>
+<p>框架帮我们做了很多事情，那这些事情是如何做到的？在第四篇实战篇，我们将一一揭开答案。如果你有兴趣，不妨先看看实现代码。</p>
+<h2 id="样例程序结果">样例程序结果</h2>
+<p>启动服务器，可以从屏幕输出上看到，使用的是 epoll 作为事件分发器。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">$./</span><span class="n">epoll</span><span class="o">-</span><span class="n">server</span><span class="o">-</span><span class="n">multithreads</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">set</span> <span class="n">epoll</span> <span class="n">as</span> <span class="n">dispatcher</span><span class="p">,</span> <span class="n">main</span> <span class="n">thread</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">5</span><span class="p">,</span> <span class="n">main</span> <span class="n">thread</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">set</span> <span class="n">epoll</span> <span class="n">as</span> <span class="n">dispatcher</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">9</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">init</span> <span class="ow">and</span> <span class="k">signal</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">run</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">started</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">set</span> <span class="n">epoll</span> <span class="n">as</span> <span class="n">dispatcher</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">12</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">init</span> <span class="ow">and</span> <span class="k">signal</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">run</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">started</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">2</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">set</span> <span class="n">epoll</span> <span class="n">as</span> <span class="n">dispatcher</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">15</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">init</span> <span class="ow">and</span> <span class="k">signal</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">run</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">started</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">3</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">set</span> <span class="n">epoll</span> <span class="n">as</span> <span class="n">dispatcher</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">4</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">18</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">4</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">init</span> <span class="ow">and</span> <span class="k">signal</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">4</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">run</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">4</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">thread</span> <span class="n">started</span><span class="p">,</span> <span class="ne">Thread</span><span class="o">-</span><span class="mi">4</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">add</span> <span class="n">channel</span> <span class="n">fd</span> <span class="o">==</span> <span class="mi">6</span><span class="p">,</span> <span class="n">main</span> <span class="n">thread</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">[</span><span class="n">msg</span><span class="p">]</span> <span class="n">event</span> <span class="n">loop</span> <span class="n">run</span><span class="p">,</span> <span class="n">main</span> <span class="n">thread</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>开启多个 telnet 客户端，连接上该服务器，通过屏幕输入和服务器端交互。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to 127.0.0.1.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fafaf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">snsns
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>服务端显示不断地从 epoll_wait 中返回处理 I/O 事件。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span><span class="lnt">135
+</span><span class="lnt">136
+</span><span class="lnt">137
+</span><span class="lnt">138
+</span><span class="lnt">139
+</span><span class="lnt">140
+</span><span class="lnt">141
+</span><span class="lnt">142
+</span><span class="lnt">143
+</span><span class="lnt">144
+</span><span class="lnt">145
+</span><span class="lnt">146
+</span><span class="lnt">147
+</span><span class="lnt">148
+</span><span class="lnt">149
+</span><span class="lnt">150
+</span><span class="lnt">151
+</span><span class="lnt">152
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==6 for read, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 19
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==9 for read, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 9, revents=2, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] wakeup, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 19, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==19 for read, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 19, revents=2, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-19
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">afasf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==6 for read, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 20
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==12 for read, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 12, revents=2, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] wakeup, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 20, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==20 for read, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 20, revents=2, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-20
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">asfasfas
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==20 for read, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 20, revents=2, Thread-2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==6 for read, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 21
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==15 for read, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 15, revents=2, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] wakeup, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 21, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==21 for read, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 21, revents=2, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-21
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">dfasfadsf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==19 for read, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 19, revents=2, Thread-1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==6 for read, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 6, revents=2, main thread
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] new connection established, socket == 22
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection completed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==18 for read, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 18, revents=2, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] wakeup, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] add channel fd == 22, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==22 for read, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 22, revents=2, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get message from tcp connection connection-22
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fafaf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==22 for read, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 22, revents=2, Thread-4
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] epoll_wait wakeup, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] get message channel fd==21 for read, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">[msg] activate channel fd == 21, revents=2, Thread-3
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">connection closed
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其中主线程的 epoll_wait 只处理 acceptor 套接字的事件，表示的是连接的建立；反应堆子线程的 epoll_wait 主要处理的是已连接套接字的读写事件。文稿中的这幅图详细解释了这部分逻辑。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/d6483a3a1a92d7f82ea4c6a4b55388dc.png" alt=""></p>
+<h2 id="epoll-的性能分析">epoll 的性能分析</h2>
+<p>epoll 的性能凭什么就要比 poll 或者 select 好呢？这要从两个角度来说明。</p>
+<p>第一个角度是事件集合。在每次使用 poll 或 select 之前，都需要准备一个感兴趣的事件集合，系统内核拿到事件集合，进行分析并在内核空间构建相应的数据结构来完成对事件集合的注册。而 epoll 则不是这样，epoll 维护了一个全局的事件集合，通过 epoll 句柄，可以操纵这个事件集合，增加、删除或修改这个事件集合里的某个元素。要知道在绝大多数情况下，事件集合的变化没有那么的大，这样操纵系统内核就不需要每次重新扫描事件集合，构建内核空间数据结构。</p>
+<p>第二个角度是就绪列表。每次在使用 poll 或者 select 之后，应用程序都需要扫描整个感兴趣的事件集合，从中找出真正活动的事件，这个列表如果增长到 10K 以上，每次扫描的时间损耗也是惊人的。事实上，很多情况下扫描完一圈，可能发现只有几个真正活动的事件。而 epoll 则不是这样，epoll 返回的直接就是活动的事件列表，应用程序减少了大量的扫描时间。</p>
+<p>此外，epoll 还提供了更高级的能力——边缘触发。<a href="./143245.md">第 23 讲</a>通过一个直观的例子，讲解了边缘触发和条件触发的区别。</p>
+<p>这里再举一个例子说明一下。</p>
+<p>如果某个套接字有 100 个字节可以读，边缘触发和条件触发都会产生 read ready notification 事件，如果应用程序只读取了 50 个字节，边缘触发就会陷入等待；而条件触发则会因为还有 50 个字节没有读取完，不断地产生 read ready notification 事件。</p>
+<p>在边缘触发下，如果某个套接字缓冲区可以写，会无限次返回 write ready notification 事件，在这种情况下，如果应用程序没有准备好，不需要发送数据，一定需要解除套接字上的 ready notification 事件，否则 CPU 就直接跪了。</p>
+<p>我们简单地总结一下，边缘触发只会产生一次活动事件，性能和效率更高。不过，程序处理起来要更为小心。</p>
+<h2 id="总结">总结</h2>
+<p>本讲我们将程序框架切换到了 epoll 的版本，和 poll 版本相比，只是底层的框架做了更改，上层应用程序不用做任何修改，这也是程序框架强大的地方。和 poll 相比，epoll 从事件集合和就绪列表两个方面加强了程序性能，是 Linux 下高性能网络程序的首选。</p>
+<h2 id="思考题">思考题</h2>
+<p>最后我给大家给大家布置两道思考题：</p>
+<p>第一道，说说你对边缘触发和条件触发的理解。</p>
+<p>第二道，对于边缘触发和条件触发，onMessage 函数处理要注意什么？</p>
+<p>欢迎你在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%81%8C%E5%9C%BA%E6%B1%82%E7%94%9F%E6%94%BB%E7%95%A5/29__%E5%8A%A0%E7%8F%AD%E5%8A%A0%E7%8F%AD%E9%80%83%E4%B8%8D%E8%BF%87%E5%A6%82%E4%BD%95%E7%94%A8%E6%AD%A3%E7%A1%AE%E5%A7%BF%E5%8A%BF%E5%8A%A0%E7%8F%AD/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">29__加班：加班逃不过，如何用正确姿势加班？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%9D%A2%E8%AF%95%E7%8E%B0%E5%9C%BA/29__%E8%80%83%E5%AE%98%E9%9D%A2%E5%AF%B9%E9%9D%A2%E9%9D%A2%E8%AF%95%E7%BB%8F%E9%AA%8C%E8%B0%88%E4%B9%8B%E6%A0%A1%E6%8B%9B%E4%B8%8E%E7%A4%BE%E6%8B%9B/">
+            <span class="next-text nav-default">29__考官面对面：面试经验谈之校招与社招</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

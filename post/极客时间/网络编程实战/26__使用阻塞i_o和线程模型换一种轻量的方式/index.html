@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>26__使用阻塞I_O和线程模型：换一种轻量的方式 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 26 讲，欢迎回来。
+在前面一讲中，我们使用了进程模型来处理用户连接请求，进程切换上下文的代价是比较高的，幸运的是，有一种轻量级的模型可以处理多用户连接请求，这就是线程模型。这一讲里，我们就来了解一下线程模型。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/26__%E4%BD%BF%E7%94%A8%E9%98%BB%E5%A1%9Ei_o%E5%92%8C%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E6%8D%A2%E4%B8%80%E7%A7%8D%E8%BD%BB%E9%87%8F%E7%9A%84%E6%96%B9%E5%BC%8F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/26__%E4%BD%BF%E7%94%A8%E9%98%BB%E5%A1%9Ei_o%E5%92%8C%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E6%8D%A2%E4%B8%80%E7%A7%8D%E8%BD%BB%E9%87%8F%E7%9A%84%E6%96%B9%E5%BC%8F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="26__使用阻塞I_O和线程模型：换一种轻量的方式">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 26 讲，欢迎回来。
+在前面一讲中，我们使用了进程模型来处理用户连接请求，进程切换上下文的代价是比较高的，幸运的是，有一种轻量级的模型可以处理多用户连接请求，这就是线程模型。这一讲里，我们就来了解一下线程模型。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="26__使用阻塞I_O和线程模型：换一种轻量的方式">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 26 讲，欢迎回来。
+在前面一讲中，我们使用了进程模型来处理用户连接请求，进程切换上下文的代价是比较高的，幸运的是，有一种轻量级的模型可以处理多用户连接请求，这就是线程模型。这一讲里，我们就来了解一下线程模型。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4442">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="26__使用阻塞I_O和线程模型：换一种轻量的方式">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 26 讲，欢迎回来。
+在前面一讲中，我们使用了进程模型来处理用户连接请求，进程切换上下文的代价是比较高的，幸运的是，有一种轻量级的模型可以处理多用户连接请求，这就是线程模型。这一讲里，我们就来了解一下线程模型。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">26__使用阻塞I_O和线程模型：换一种轻量的方式</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4442 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#posix-线程模型">POSIX 线程模型</a></li>
+        <li><a href="#主要线程函数">主要线程函数</a>
+          <ul>
+            <li><a href="#创建线程">创建线程</a></li>
+            <li><a href="#终止线程">终止线程</a></li>
+            <li><a href="#回收已终止线程的资源">回收已终止线程的资源</a></li>
+            <li><a href="#分离线程">分离线程</a></li>
+          </ul>
+        </li>
+        <li><a href="#每个连接一个线程处理">每个连接一个线程处理</a></li>
+        <li><a href="#构建线程池处理多个连接">构建线程池处理多个连接</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 26 讲，欢迎回来。</p>
+<p>在前面一讲中，我们使用了进程模型来处理用户连接请求，进程切换上下文的代价是比较高的，幸运的是，有一种轻量级的模型可以处理多用户连接请求，这就是线程模型。这一讲里，我们就来了解一下线程模型。</p>
+<p>线程（thread）是运行在进程中的一个“逻辑流”，现代操作系统都允许在单进程中运行多个线程。线程由操作系统内核管理。每个线程都有自己的上下文（context），包括一个可以唯一标识线程的 ID（thread ID，或者叫 tid）、栈、程序计数器、寄存器等。在同一个进程中，所有的线程共享该进程的整个虚拟地址空间，包括代码、数据、堆、共享库等。</p>
+<p>在前面的程序中，我们没有显式使用线程，但这不代表线程没有发挥作用。实际上，每个进程一开始都会产生一个线程，一般被称为主线程，主线程可以再产生子线程，这样的主线程 - 子线程对可以叫做一个对等线程。</p>
+<p>你可能会问，既然可以使用多进程来处理并发，为什么还要使用多线程模型呢？</p>
+<p>简单来说，在同一个进程下，线程上下文切换的开销要比进程小得多。怎么理解线程上下文呢？我们的代码被 CPU 执行的时候，是需要一些数据支撑的，比如程序计数器告诉 CPU 代码执行到哪里了，寄存器里存了当前计算的一些中间值，内存里放置了一些当前用到的变量等，从一个计算场景，切换到另外一个计算场景，程序计数器、寄存器等这些值重新载入新场景的值，就是线程的上下文切换。</p>
+<h2 id="posix-线程模型">POSIX 线程模型</h2>
+<p>POSIX 线程是现代 UNIX 系统提供的处理线程的标准接口。POSIX 定义的线程函数大约有 60 多个，这些函数可以帮助我们创建线程、回收线程。接下来我们先看一个简单的例子程序。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int another_shared = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> void thread_run(void *arg) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int *calculator = (int *) arg;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;hello, world, tid == %d \n&#34;, pthread_self());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (int i = 0; i &lt; 1000; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        *calculator += 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        another_shared += 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int c, char **v) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int calculator;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     pthread_t tid1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_t tid2;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     pthread_create(&amp;tid1, NULL, thread_run, &amp;calculator);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_create(&amp;tid2, NULL, thread_run, &amp;calculator);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     pthread_join(tid1, NULL);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_join(tid2, NULL);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     printf(&#34;calculator is %d \n&#34;, calculator);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;another_shared is %d \n&#34;, another_shared);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>thread_helloworld 程序中，主线程依次创建了两个子线程，然后等待这两个子线程处理完毕之后终止。每个子线程都在对两个共享变量进行计算，最后在主线程中打印出最后的计算结果。</p>
+<p>程序的第 18 和 19 行分别调用了 pthread_create 创建了两个线程，每个线程的入口都是 thread_run 函数，这里我们使用了 calculator 这个全局变量，并且通过传地址指针的方式，将这个值传给了 thread_run 函数。当调用 pthread_create 结束，子线程会立即执行，主线程在此后调用了 pthread_join 函数等待子线程结束。</p>
+<p>运行这个程序，很幸运，计算的结果是正确的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./thread-helloworld
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">hello, world, tid == 125607936 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">hello, world, tid == 126144512 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">calculator is 2000 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">another_shared is 2000 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="主要线程函数">主要线程函数</h2>
+<h3 id="创建线程">创建线程</h3>
+<p>正如前面看到，通过调用 pthread_create 函数来创建一个线程。这个函数的原型如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">pthread_create</span><span class="p">(</span><span class="n">pthread_t</span> <span class="o">*</span><span class="n">tid</span><span class="p">,</span> <span class="k">const</span> <span class="n">pthread_attr_t</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           <span class="n">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="k">func</span><span class="p">)(</span><span class="n">void</span> <span class="o">*</span><span class="p">),</span> <span class="n">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="err">返回：若成功则为</span> <span class="mi">0</span><span class="err">，若出错则为正的</span> <span class="n">Exxx</span> <span class="err">值</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每个线程都有一个线程 ID（tid）唯一来标识，其数据类型为 pthread_t，一般是 unsigned int。pthread_create 函数的第一个输出参数 tid 就是代表了线程 ID，如果创建线程成功，tid 就返回正确的线程 ID。</p>
+<p>每个线程都会有很多属性，比如优先级、是否应该成为一个守护进程等，这些值可以通过 pthread_attr_t 来描述，一般我们不会特殊设置，可以直接指定这个参数为 NULL。</p>
+<p>第三个参数为新线程的入口函数，该函数可以接收一个参数 arg，类型为指针，如果我们想给线程入口函数传多个值，那么需要把这些值包装成一个结构体，再把这个结构体的地址作为 pthread_create 的第四个参数，在线程入口函数内，再将该地址转为该结构体的指针对象。</p>
+<p>在新线程的入口函数内，可以执行 pthread_self 函数返回线程 tid。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">pthread_t pthread_self(void)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="终止线程">终止线程</h3>
+<p>终止一个线程最直接的方法是在父线程内调用以下函数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void pthread_exit(void *status)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当调用这个函数之后，父线程会等待其他所有的子线程终止，之后父线程自己终止。</p>
+<p>当然，如果一个子线程入口函数直接退出了，那么子线程也就自然终止了。所以，绝大多数的子线程执行体都是一个无限循环。</p>
+<p>也可以通过调用 pthread_cancel 来主动终止一个子线程，和 pthread_exit 不同的是，它可以指定某个子线程终止。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int pthread_cancel(pthread_t tid)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="回收已终止线程的资源">回收已终止线程的资源</h3>
+<p>我们可以通过调用 pthread_join 回收已终止线程的资源：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int pthread_join(pthread_t tid, void ** thread_return)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当调用 pthread_join 时，主线程会阻塞，直到对应 tid 的子线程自然终止。和 pthread_cancel 不同的是，它不会强迫子线程终止。</p>
+<h3 id="分离线程">分离线程</h3>
+<p>一个线程的重要属性是可结合的，或者是分离的。一个可结合的线程是能够被其他线程杀死和回收资源的；而一个分离的线程不能被其他线程杀死或回收资源。一般来说，默认的属性是可结合的。</p>
+<p>我们可以通过调用 pthread_detach 函数可以分离一个线程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int pthread_detach(pthread_t tid)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在高并发的例子里，每个连接都由一个线程单独处理，在这种情况下，服务器程序并不需要对每个子线程进行终止，这样的话，每个子线程可以在入口函数开始的地方，把自己设置为分离的，这样就能在它终止后自动回收相关的线程资源了，就不需要调用 pthread_join 函数了。</p>
+<h2 id="每个连接一个线程处理">每个连接一个线程处理</h2>
+<p>接下来，我们改造一下服务器端程序。我们的目标是这样：每次有新的连接到达后，创建一个新线程，而不是用新进程来处理它。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/common.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> extern void loop_echo(int);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> void thread_run(void *arg) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_detach(pthread_self());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int fd = (int) arg;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    loop_echo(fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int c, char **v) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int listener_fd = tcp_server_listen(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_t tid;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        struct sockaddr_storage ss;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        socklen_t slen = sizeof(ss);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int fd = accept(listener_fd, (struct sockaddr *) &amp;ss, &amp;slen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (fd &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;accept failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            pthread_create(&amp;tid, NULL, &amp;thread_run, (void *) fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个程序的第 18 行阻塞调用在 accept 上，一旦有新连接建立，阻塞调用返回，调用 pthread_create 创建一个子线程来处理这个连接。</p>
+<p>描述连接最主要的是连接描述字，这里通过强制把描述字转换为 void * 指针的方式，完成了传值。如果你对这部分有点不理解，建议看一下 C 语言相关的指针部分内容。我们这里可以简单总结一下，虽然传的是一个指针，但是这个指针里存放的并不是一个地址，而是连接描述符的数值。</p>
+<p>新线程入口函数 thread_run 里，第 6 行使用了 pthread_detach 方法，将子线程转变为分离的，也就意味着子线程独自负责线程资源回收。第 7 行，强制将指针转变为描述符数据，和前面将描述字转换为 void * 指针对应，第 8 行调用 loop_echo 方法处理这个连接的数据读写。</p>
+<p>loop_echo 的程序如下，在接收客户端的数据之后，再编码回送出去。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">char rot13_char(char c) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if ((c &gt;= &#39;a&#39; &amp;&amp; c &lt;= &#39;m&#39;) || (c &gt;= &#39;A&#39; &amp;&amp; c &lt;= &#39;M&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c + 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else if ((c &gt;= &#39;n&#39; &amp;&amp; c &lt;= &#39;z&#39;) || (c &gt;= &#39;N&#39; &amp;&amp; c &lt;= &#39;Z&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c - 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> void loop_echo(int fd) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char outbuf[MAX_LINE + 1];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    size_t outbuf_used = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ssize_t result;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        char ch;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        result = recv(fd, &amp;ch, 1, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         // 断开连接或者出错
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (result == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } else if (result == -1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;read error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (outbuf_used &lt; sizeof(outbuf)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            outbuf[outbuf_used++] = rot13_char(ch);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (ch == &#39;\n&#39;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            send(fd, outbuf, outbuf_used, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            outbuf_used = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>运行这个程序之后，开启多个 telnet 客户端，可以看到这个服务器程序可以处理多个并发连接并回送数据。单独一个连接退出也不会影响其他连接的数据收发。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to localhost.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">aaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">nnn
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="构建线程池处理多个连接">构建线程池处理多个连接</h2>
+<p>上面的服务器端程序虽然可以正常工作，不过它有一个缺点，那就是如果并发连接过多，就会引起线程的频繁创建和销毁。虽然线程切换的上下文开销不大，但是线程创建和销毁的开销却是不小的。</p>
+<p>能不能对这个程序进行一些优化呢？</p>
+<p>我们可以使用预创建线程池的方式来进行优化。在服务器端启动时，可以先按照固定大小预创建出多个线程，当有新连接建立时，往连接字队列里放置这个新连接描述字，线程池里的线程负责从连接字队列里取出连接描述字进行处理。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/01ce453bf03733175f6fd02f2be72931.png" alt=""><br>
+这个程序的关键是连接字队列的设计，因为这里既有往这个队列里放置描述符的操作，也有从这个队列里取出描述符的操作。</p>
+<p>对此，需要引入两个重要的概念，一个是锁 mutex，一个是条件变量 condition。锁很好理解，加锁的意思就是其他线程不能进入；条件变量则是在多个线程需要交互的情况下，用来线程间同步的原语。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">定义一个队列</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">typedef</span> <span class="n">struct</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">number</span><span class="p">;</span>  <span class="o">//</span> <span class="err">队列里的描述字最大个数</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="o">*</span><span class="n">fd</span><span class="p">;</span>     <span class="o">//</span> <span class="err">这是一个数组指针</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">front</span><span class="p">;</span>   <span class="o">//</span> <span class="err">当前队列的头位置</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">rear</span><span class="p">;</span>    <span class="o">//</span> <span class="err">当前队列的尾位置</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_t</span> <span class="n">mutex</span><span class="p">;</span>  <span class="o">//</span> <span class="err">锁</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_cond_t</span> <span class="n">cond</span><span class="p">;</span>    <span class="o">//</span> <span class="err">条件变量</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">block_queue</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">初始化队列</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">void</span> <span class="n">block_queue_init</span><span class="p">(</span><span class="n">block_queue</span> <span class="o">*</span><span class="n">blockQueue</span><span class="p">,</span> <span class="ne">int</span> <span class="n">number</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">number</span> <span class="o">=</span> <span class="n">number</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">fd</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="ne">int</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">front</span> <span class="o">=</span> <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">rear</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">,</span> <span class="n">NULL</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_cond_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">cond</span><span class="p">,</span> <span class="n">NULL</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">往队列里放置一个描述字</span> <span class="n">fd</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">void</span> <span class="n">block_queue_push</span><span class="p">(</span><span class="n">block_queue</span> <span class="o">*</span><span class="n">blockQueue</span><span class="p">,</span> <span class="ne">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">一定要先加锁，因为有多个线程需要读写队列</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">将描述字放到队列尾的位置</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">fd</span><span class="p">[</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">rear</span><span class="p">]</span> <span class="o">=</span> <span class="n">fd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">如果已经到最后，重置尾的位置</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">rear</span> <span class="o">==</span> <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">number</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">rear</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;push fd </span><span class="si">%d</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">通知其他等待读的线程，有新的连接字等待处理</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_cond_signal</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">cond</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">解锁</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">从队列里读出描述字进行处理</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">block_queue_pop</span><span class="p">(</span><span class="n">block_queue</span> <span class="o">*</span><span class="n">blockQueue</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">加锁</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">判断队列里没有新的连接字可以处理，就一直条件等待，直到有新的连接字入队列</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">front</span> <span class="o">==</span> <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">rear</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">pthread_cond_wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">cond</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">取出队列头的连接字</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">fd</span><span class="p">[</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">front</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">如果已经到最后，重置头的位置</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">++</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">front</span> <span class="o">==</span> <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">number</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">front</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;pop fd </span><span class="si">%d</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">解锁</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">pthread_mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">blockQueue</span><span class="o">-&gt;</span><span class="n">mutex</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">返回连接字</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">fd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>  
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我在文稿里放置了 block_queue 相关的定义和实现，并在关键的地方加了一些蛛丝，有几个地方需要特别注意：</p>
+<p>第一是记得对操作进行加锁和解锁，这里是通过 pthread_mutex_lock 和 pthread_mutex_unlock 来完成的。</p>
+<p>第二是当工作线程没有描述字可用时，需要等待，第 43 行通过调用 pthread_cond_wait，所有的工作线程等待有新的描述字可达。第 32 行，主线程通知工作线程有新的描述符需要服务。</p>
+<p>服务器端程序如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void thread_run(void *arg) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_t tid = pthread_self();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    pthread_detach(tid);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     block_queue *blockQueue = (block_queue *) arg;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int fd = block_queue_pop(blockQueue);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        printf(&#34;get fd in thread, fd==%d, tid == %d&#34;, fd, tid);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        loop_echo(fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int c, char **v) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int listener_fd = tcp_server_listen(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     block_queue blockQueue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    block_queue_init(&amp;blockQueue, BLOCK_QUEUE_SIZE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     thread_array = calloc(THREAD_NUMBER, sizeof(Thread));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int i;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (i = 0; i &lt; THREAD_NUMBER; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        pthread_create(&amp;(thread_array[i].thread_tid), NULL, &amp;thread_run, (void *) &amp;blockQueue);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        struct sockaddr_storage ss;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        socklen_t slen = sizeof(ss);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        int fd = accept(listener_fd, (struct sockaddr *) &amp;ss, &amp;slen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (fd &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;accept failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            block_queue_push(&amp;blockQueue, fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>有了描述字队列，主程序变得非常简洁。第 19-23 行预创建了多个线程，组成了一个线程池。28-32 行在新连接建立后，将连接描述字加入到队列中。</p>
+<p>7-9 行是工作线程的主循环，从描述字队列中取出描述字，对这个连接进行服务处理。</p>
+<p>同样的，运行这个程序之后，开启多个 telnet 客户端，可以看到这个服务器程序可以正常处理多个并发连接并回显。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to localhost.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">aaa
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">nnn
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>和前面的程序相比，线程创建和销毁的开销大大降低，但因为线程池大小固定，又因为使用了阻塞套接字，肯定会出现有连接得不到及时服务的场景。这个问题的解决还是要回到我在开篇词里提到的方案上来，多路 I/O 复用加上线程来处理，仅仅使用阻塞 I/O 模型和线程是没有办法达到极致的高并发处理能力。</p>
+<h2 id="总结">总结</h2>
+<p>这一讲，我们使用了线程来构建服务器端程序。一种是每次动态创建线程，另一种是使用线程池提高效率。和进程相比，线程的语义更轻量，使用的场景也更多。线程是高性能网络服务器必须掌握的核心知识，希望你能够通过本讲的学习，牢牢掌握它。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，给你留两道思考题。</p>
+<p>第一道，连接字队列的实现里，有一个重要情况没有考虑，就是队列里没有可用的位置了，想想看，如何对这种情况进行优化？</p>
+<p>第二道，我在讲到第一个 hello-world 计数器应用时，说“结果是幸运”这是为什么呢？怎么理解呢？</p>
+<p>欢迎你在评论区写下你的思考，我会和你一起思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E4%B9%8B%E7%BE%8E/26__%E5%AE%9E%E6%88%98%E4%BA%8C%E4%B8%8B%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E6%94%AF%E6%8C%81%E5%90%84%E7%A7%8D%E7%BB%9F%E8%AE%A1%E8%A7%84%E5%88%99%E7%9A%84%E6%80%A7%E8%83%BD%E8%AE%A1%E6%95%B0%E5%99%A8/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">26__实战二（下）：如何实现一个支持各种统计规则的性能计数器？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E4%B8%9A%E5%8A%A1%E5%BC%80%E5%8F%91%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF100%E4%BE%8B/26__%E6%95%B0%E6%8D%AE%E5%AD%98%E5%82%A8nosql%E4%B8%8Erdbms%E5%A6%82%E4%BD%95%E5%8F%96%E9%95%BF%E8%A1%A5%E7%9F%AD%E7%9B%B8%E8%BE%85%E7%9B%B8%E6%88%90/">
+            <span class="next-text nav-default">26__数据存储：NoSQL与RDBMS如何取长补短、相辅相成？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

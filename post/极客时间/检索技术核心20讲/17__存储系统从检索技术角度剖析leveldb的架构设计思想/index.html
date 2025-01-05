@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17__存储系统：从检索技术角度剖析LevelDB的架构设计思想 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是陈东。
+LevelDB 是由 Google 开源的存储系统的代表，在工业界中被广泛地使用。它的性能非常突出，官方公布的 LevelDB 的随机读性能可以达到 6 万条记录 / 秒。那这是怎么做到的呢？这就和 LevelDB 的具体设计和实现有关了。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/17__%E5%AD%98%E5%82%A8%E7%B3%BB%E7%BB%9F%E4%BB%8E%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E8%A7%92%E5%BA%A6%E5%89%96%E6%9E%90leveldb%E7%9A%84%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1%E6%80%9D%E6%83%B3/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/17__%E5%AD%98%E5%82%A8%E7%B3%BB%E7%BB%9F%E4%BB%8E%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E8%A7%92%E5%BA%A6%E5%89%96%E6%9E%90leveldb%E7%9A%84%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1%E6%80%9D%E6%83%B3/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17__存储系统：从检索技术角度剖析LevelDB的架构设计思想">
+  <meta property="og:description" content="你好，我是陈东。
+LevelDB 是由 Google 开源的存储系统的代表，在工业界中被广泛地使用。它的性能非常突出，官方公布的 LevelDB 的随机读性能可以达到 6 万条记录 / 秒。那这是怎么做到的呢？这就和 LevelDB 的具体设计和实现有关了。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="检索技术核心20讲">
+
+  <meta itemprop="name" content="17__存储系统：从检索技术角度剖析LevelDB的架构设计思想">
+  <meta itemprop="description" content="你好，我是陈东。
+LevelDB 是由 Google 开源的存储系统的代表，在工业界中被广泛地使用。它的性能非常突出，官方公布的 LevelDB 的随机读性能可以达到 6 万条记录 / 秒。那这是怎么做到的呢？这就和 LevelDB 的具体设计和实现有关了。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5042">
+  <meta itemprop="keywords" content="检索技术核心20讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17__存储系统：从检索技术角度剖析LevelDB的架构设计思想">
+  <meta name="twitter:description" content="你好，我是陈东。
+LevelDB 是由 Google 开源的存储系统的代表，在工业界中被广泛地使用。它的性能非常突出，官方公布的 LevelDB 的随机读性能可以达到 6 万条记录 / 秒。那这是怎么做到的呢？这就和 LevelDB 的具体设计和实现有关了。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17__存储系统：从检索技术角度剖析LevelDB的架构设计思想</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5042 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何利用读写分离设计将内存数据高效存储到磁盘">如何利用读写分离设计将内存数据高效存储到磁盘？</a></li>
+        <li><a href="#sstable-的分层管理设计">SSTable 的分层管理设计</a></li>
+        <li><a href="#如何查找对应的-sstable-文件">如何查找对应的 SSTable 文件</a></li>
+        <li><a href="#sstable-文件中的检索加速">SSTable 文件中的检索加速</a></li>
+        <li><a href="#利用缓存加速检索-sstable-文件的过程">利用缓存加速检索 SSTable 文件的过程</a></li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#课堂讨论">课堂讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是陈东。</p>
+<p>LevelDB 是由 Google 开源的存储系统的代表，在工业界中被广泛地使用。它的性能非常突出，官方公布的 LevelDB 的随机读性能可以达到 6 万条记录 / 秒。那这是怎么做到的呢？这就和 LevelDB 的具体设计和实现有关了。</p>
+<p>LevelDB 是基于 LSM 树优化而来的存储系统。都做了哪些优化呢？我们知道，LSM 树会将索引分为内存和磁盘两部分，并在内存达到阈值时启动树合并。但是，这里面存在着大量的细节问题。比如说，数据在内存中如何高效检索？数据是如何高效地从内存转移到磁盘的？以及我们如何在磁盘中对数据进行组织管理？还有数据是如何从磁盘中高效地检索出来的？</p>
+<p>其实，这些问题也是很有代表性的工业级系统的实现问题。LevelDB 针对这些问题，使用了大量的检索技术进行优化设计。今天，我们就一起来看看，LevelDB 究竟是怎么优化检索系统，提高效率的。</p>
+<h2 id="如何利用读写分离设计将内存数据高效存储到磁盘">如何利用读写分离设计将内存数据高效存储到磁盘？</h2>
+<p>首先，对内存中索引的高效检索，我们可以用很多检索技术，如红黑树、跳表等，这些数据结构会比 B+ 树更高效。因此，LevelDB 对于 LSM 树的第一个改进，就是使用跳表代替 B+ 树来实现内存中的 C0 树。</p>
+<p>好，解决了第一个问题。那接下来的问题就是，内存数据要如何高效存储到磁盘。在第 7 讲中我们说过，我们是将内存中的 C0 树和磁盘上的 C1 树归并来存储的。但如果内存中的数据一边被写入修改，一边被写入磁盘，我们在归并的时候就会遇到数据的一致性管理问题。一般来说，这种情况是需要进行“加锁”处理的，但“加锁”处理又会大幅度降低检索效率。</p>
+<p>为此，LevelDB 做了读写分离的设计。它将内存中的数据分为两块，一块叫作 <strong>MemTable</strong>，它是可读可写的。另一块叫作 <strong>Immutable MemTable</strong>，它是只读的。这两块数据的数据结构完全一样，都是跳表。那它们是怎么应用的呢？</p>
+<p>具体来说就是，当 MemTable 的存储数据达到上限时，我们直接将它切换为只读的 Immutable MemTable，然后重新生成一个新的 MemTable，来支持新数据的写入和查询。这时，将内存索引存储到磁盘的问题，就变成了将 Immutable MemTable 写入磁盘的问题。而且，由于 Immutable MemTable 是只读的，因此，它不需要加锁就可以高效地写入磁盘中。</p>
+<p>好了，数据的一致性管理问题解决了，我们接着看 C0 树和 C1 树的归并。在原始 LSM 树的设计中，内存索引写入磁盘时是直接和磁盘中的 C1 树进行归并的。但如果工程中也这么实现的话，会有两个很严重的问题：</p>
+<ol>
+<li>合并代价很高，因为 C1 树很大，而 C0 树很小，这会导致它们在合并时产生大量的磁盘 IO；</li>
+<li>合并频率会很频繁，由于 C0 树很小，很容易被写满，因此系统会频繁进行 C0 树和 C1 树的合并，这样频繁合并会带来的大量磁盘 IO，这更是系统无法承受的。</li>
+</ol>
+<p>那针对这两个问题，LevelDB 采用了延迟合并的设计来优化。具体来说就是，先将 Immutable MemTable 顺序快速写入磁盘，直接变成一个个 <strong>SSTable</strong>（Sorted String Table）文件，之后再对这些 SSTable 文件进行合并。这样就避免了 C0 树和 C1 树昂贵的合并代价。至于 SSTable 文件是什么，以及多个 SSTable 文件怎么合并，我们一会儿再详细分析。</p>
+<p>好了，现在你已经知道了，内存数据高效存储到磁盘上的具体方案了。那在这种方案下，数据又是如何检索的呢？在检索一个数据的时候，我们会先在 MemTable 中查找，如果查找不到再去 Immutable MemTable 中查找。如果 Immutable MemTable 也查询不到，我们才会到磁盘中去查找。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/51394191cb7cfa5283caeac7fdc25485.png" alt=""></p>
+<p>增加 Immutable MemTable 设计的示意图</p>
+<p>因为磁盘中原有的 C1 树被多个较小的 SSTable 文件代替了。那现在我们要解决的问题就变成了，如何快速提高磁盘中多个 SSTable 文件的检索效率。</p>
+<h2 id="sstable-的分层管理设计">SSTable 的分层管理设计</h2>
+<p>我们知道，SSTable 文件是由 Immutable MemTable 将数据顺序导入生成的。尽管 SSTable 中的数据是有序的，但是每个 SSTable 覆盖的数据范围都是没有规律的，所以 SSTable 之间的数据很可能有重叠。</p>
+<p>比如说，第一个 SSTable 中的数据从 1 到 1000，第二个 SSTable 中的数据从 500 到 1500。那么当我们要查询 600 这个数据时，我们并不清楚应该在第一个 SSTable 中查找，还是在第二个 SSTable 中查找。最差的情况是，我们需要查询每一个 SSTable，这会带来非常巨大的磁盘访问开销。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/786e49f3d3c148dfa8fb6ea66c0dc18f.png" alt=""></p>
+<p>范围重叠时，查询多个 SSTable 的示意图</p>
+<p>因此，对于 SSTable 文件，我们需要将它整理一下，将 SSTable 文件中存的数据进行重新划分，让每个 SSTable 的覆盖范围不重叠。这样我们就能将 SSTable 按照覆盖范围来排序了。并且，由于每个 SSTable 覆盖范围不重叠，当我们需要查找数据的时候，我们只需要通过二分查找的方式，找到对应的一个 SSTable 文件，就可以在这个 SSTable 中完成查询了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/3fc8bb6eec19151f0d11b61ff7eb18b0.png" alt=""></p>
+<p>范围不重叠时，只需查询一个 SSTable 的示意图</p>
+<p>但是要让所有 SSTable 文件的覆盖范围不重叠，不是一个很简单的事情。为什么这么说呢？我们看一下这个处理过程。系统在最开始时，只会生成一个 SSTable 文件，这时候我们不需要进行任何处理，当系统生成第二个 SSTable 的时候，为了保证覆盖范围不重合，我们需要将这两个 SSTable 用多路归并的方式处理，生成新的 SSTable 文件。</p>
+<p>那为了方便查询，我们要保证每个 SSTable 文件不要太大。因此，LevelDB 还控制了每个 SSTable 文件的容量上限（不超过 2M）。这样一来，两个 SSTable 合并就会生成 1 个到 2 个新的 SSTable。</p>
+<p>这时，新的 SSTable 文件之间的覆盖范围就不重合了。当系统再新增一个 SSTable 时，我们还用之前的处理方式，来计算这个新的 SSTable 的覆盖范围，然后和已经排好序的 SSTable 比较，找出覆盖范围有重合的所有 SSTable 进行多路归并。这种多个 SSTable 进行多路归并，生成新的多个 SSTable 的过程，也叫作 Compaction。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/a75596c49db8cbcc75e4b954fbbd86a1.png" alt=""></p>
+<p>SSTable 保持有序的多路归并过程</p>
+<p>随着 SSTable 文件的增多，多路归并的对象也会增多。那么，最差的情况会是什么呢？最差的情况是所有的 SSTable 都要进行多路归并。这几乎是一个不可能被接受的时间消耗，系统的读写性能都会受到很严重的影响。</p>
+<p>那我们该怎么降低多路归并涉及的 SSTable 个数呢？在第 9 讲中，我们提到过，对于少量索引数据和大规模索引数据的合并，我们可以采用滚动合并法来避免大量数据的无效复制。因此，LevelDB 也采用了这个方法，将 SSTable 进行分层管理，然后逐层滚动合并。这就是 LevelDB 的分层思想，也是 LevelDB 的命名原因。接下来，我们就一起来看看 LevelDB 具体是怎么设计的。</p>
+<p>首先，**从 Immutable MemTable 转成的 SSTable 会被放在 Level 0 层。**Level 0 层最多可以放 4 个 SSTable 文件。当 Level 0 层满了以后，我们就要将它们进行多路归并，生成新的有序的多个 SSTable 文件，这一层有序的 SSTable 文件就是 Level 1 层。</p>
+<p>接下来，如果 Level 0 层又存入了新的 4 个 SSTable 文件，那么就需要和 Level 1 层中相关的 SSTable 进行多路归并了。但前面我们也分析过，如果 Level 1 中的 SSTable 数量很多，那么在大规模的文件合并时，磁盘 IO 代价会非常大。因此，LevelDB 的解决方案就是，<strong>给 Level 1 中的 SSTable 文件的总容量设定一个上限</strong>（默认设置为 10M），这样多路归并时就有了一个代价上限。</p>
+<p>当 Level 1 层的 SSTable 文件总容量达到了上限之后，我们就需要选择一个 SSTable 的文件，将它并入下一层（为保证一层中每个 SSTable 文件都有机会并入下一层，我们选择 SSTable 文件的逻辑是轮流选择。也就是说第一次我们选择了文件 A，下一次就选择文件 A 后的一个文件）。<strong>下一层会将容量上限翻 10 倍</strong>，这样就能容纳更多的 SSTable 了。依此类推，如果下一层也存满了，我们就在该层中选择一个 SSTable，继续并入下一层。这就是 LevelDB 的分层设计了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/a9387cf63d96080f8a7e9a223e540477.png" alt=""></p>
+<p>LevelDB 的层次结构示意图</p>
+<p>尽管 LevelDB 通过限制每层的文件总容量大小，能保证做多路归并时，会有一个开销上限。但是层数越大，容量上限就越大，那发生在下层的多路归并依然会造成大量的磁盘 IO 开销。这该怎么办呢？</p>
+<p>对于这个问题，LevelDB 是通过加入一个限制条件解决的。在多路归并生成第 n 层的 SSTable 文件时，LevelDB 会判断生成的 SSTable 和第 n+1 层的重合覆盖度，如果重合覆盖度超过了 10 个文件，就结束这个 SSTable 的生成，继续生成下一个 SSTable 文件。</p>
+<p>通过这个限制，<strong>LevelDB 就保证了第 n 层的任何一个 SSTable 要和第 n+1 层做多路归并时，最多不会有超过 10 个 SSTable 参与</strong>，从而保证了归并性能。</p>
+<h2 id="如何查找对应的-sstable-文件">如何查找对应的 SSTable 文件</h2>
+<p>在理解了这样的架构之后，我们再来看看当我们想在磁盘中查找一个元素时，具体是怎么操作的。</p>
+<p>首先，我们会在 Level 0 层中进行查找。由于 Level 0 层的 SSTable 没有做过多路归并处理，它们的覆盖范围是有重合的。因此，我们需要检查 Level 0 层中所有符合条件的 SSTable，在其中查找对应的元素。如果 Level 0 没有查到，那么就下沉一层继续查找。</p>
+<p>而从 Level 1 开始，每一层的 SSTable 都做过了处理，这能保证覆盖范围不重合的。因此，对于同一层中的 SSTable，我们可以使用二分查找算法快速定位唯一的一个 SSTable 文件。如果查到了，就返回对应的 SSTable 文件；如果没有查到，就继续沉入下一层，直到查到了或查询结束。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/9ec48fcb36ea96d059e00af367d5c2b0.png" alt=""></p>
+<p>LevelDB 分层检索过程示意图</p>
+<p>可以看到，通过这样的一种架构设计，我们就将 SSTable 进行了有序的管理，使得查询操作可以快速被限定在有限的 SSTable 中，从而达到了加速检索的目的。</p>
+<h2 id="sstable-文件中的检索加速">SSTable 文件中的检索加速</h2>
+<p>那在定位到了对应的 SSTable 文件后，接下来我们该怎么查询指定的元素呢？这个时候，前面我们学过的一些检索技术，现在就可以派上用场了。</p>
+<p>首先，LevelDB 使用索引与数据分离的设计思想，将 SSTable 分为数据存储区和数据索引区两大部分。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/8200ab7da8c175cd1a33bea609b8b00a.png" alt=""></p>
+<p>SSTable 文件格式</p>
+<p>我们在读取 SSTable 文件时，不需要将整个 SSTable 文件全部读入内存，只需要先将数据索引区中的相关数据读入内存就可以了。这样就能大幅减少磁盘 IO 次数。</p>
+<p>然后，我们需要快速确定这个 SSTable 是否包含查询的元素。对于这种是否存在的状态查询，我们可以使用前面讲过的 BloomFilter 技术进行高效检索。也就是说，我们可以从数据索引区中读出 BloomFilter 的数据。这样，我们就可以使用 O(1) 的时间代价在 BloomFilter 中查询。如果查询结果是不存在，我们就跳过这个 SSTable 文件。而如果 BloomFilter 中查询的结果是存在，我们就继续进行精确查找。</p>
+<p>在进行精确查找时，我们将数据索引区中的 Index Block 读出，Index Block 中的每条记录都记录了每个 Data Block 的最小分隔 key、起始位置，还有 block 的大小。由于所有的记录都是根据 Key 排好序的，因此，我们可以使用二分查找算法，在 Index Block 中找到我们想查询的 Key。</p>
+<p>那最后一步，就是将这个 Key 对应的 Data block 从 SSTable 文件中读出来，这样我们就完成了数据的查找和读取。</p>
+<h2 id="利用缓存加速检索-sstable-文件的过程">利用缓存加速检索 SSTable 文件的过程</h2>
+<p>在加速检索 SSTable 文件的过程中，你会发现，每次对 SSTable 进行二分查找时，我们都需要将 Index Block 和相应的 Data Block 分别从磁盘读入内存，这样就会造成两次磁盘 I/O 操作。我们知道磁盘 I/O 操作在性能上，和内存相比是非常慢的，这也会影响数据的检索速度。那这个环节我们该如何优化呢？常见的一种解决方案就是使用缓存。LevelDB 具体是怎么做的呢？</p>
+<p>针对这两次读磁盘操作，LevelDB 分别设计了 table cache 和 block cache 两个缓存。其中，block cache 是配置可选的，它是将最近使用的 Data Block 加载在内存中。而 table cache 则是将最近使用的 SSTable 的 Index Block 加载在内存中。这两个缓存都使用 LRU 机制进行替换管理。</p>
+<p>那么，当我们想读取一个 SSTable 的 Index Block 时，首先要去 table cache 中查找。如果查到了，就可以避免一次磁盘操作，从而提高检索效率。同理，如果接下来要读取对应的 Data Block 数据，那么我们也先去 block cache 中查找。如果未命中，我们才会去真正读磁盘。</p>
+<p>这样一来，我们就可以省去非常耗时的 I/O 操作，从而加速相关的检索操作了。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>好了，今天我们学习了 LevelDB 提升检索效率的优化方案。下面，我带你总结回顾一下今天的重点内容。</p>
+<p>首先，在内存中检索数据的环节，LevelDB 使用跳表代替 B+ 树，提高了内存检索效率。</p>
+<p>其次，在将数据从内存写入磁盘的环节，LevelDB 先是使用了<strong>读写分离</strong>的设计，增加了一个只读的 Immutable MemTable 结构，避免了给内存索引加锁。然后，LevelDB 又采用了<strong>延迟合并</strong>设计来优化归并。具体来说就是，它先快速将 C0 树落盘生成 SSTable 文件，再使用其他异步进程对这些 SSTable 文件合并处理。</p>
+<p>而在管理多个 SSTable 文件的环节，LevelDB 使用<strong>分层和滚动合并</strong>的设计来组织多个 SSTable 文件，避免了 C0 树和 C1 树的合并带来的大量数据被复制的问题。</p>
+<p>最后，在磁盘中检索数据的环节，因为 SSTable 文件是有序的，所以我们通过<strong>多层二分查找</strong>的方式，就能快速定位到需要查询的 SSTable 文件。接着，在 SSTable 文件内查找元素时，LevelDB 先是使用<strong>索引与数据分离</strong>的设计，减少磁盘 IO，又使用 <strong>BloomFilter 和二分查找</strong>来完成检索加速。加速检索的过程中，LevelDB 又使用<strong>缓存技术</strong>，将会被反复读取的数据缓存在内存中，从而避免了磁盘开销。</p>
+<p>总的来说，一个高性能的系统会综合使用多种检索技术。而 LevelDB 的实现，就可以看作是我们之前学过的各种检索技术的落地实践。因此，这一节的内容，我建议你多看几遍，这对我们之后的学习也会有非常大的帮助。</p>
+<h2 id="课堂讨论">课堂讨论</h2>
+<ol>
+<li>当我们查询一个 key 时，为什么在某一层的 SSTable 中查到了以后，就可以直接返回，不用再去下一层查找了呢？如果下一层也有 SSTable 存储了这个 key 呢？</li>
+<li>为什么从 Level 1 层开始，我们是限制 SSTable 的总容量大小，而不是像在 Level 0 层一样限制 SSTable 的数量？ （提示：SSTable 的生成过程会受到约束，无法保证每一个 SSTable 文件的大小）</li>
+</ol>
+<p>欢迎在留言区畅所欲言，说出你的思考过程和最终答案。如果有收获，也欢迎把这一讲分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%A3%80%E7%B4%A2%E6%8A%80%E6%9C%AF%E6%A0%B8%E5%BF%8320%E8%AE%B2/">检索技术核心20讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%80%A7%E8%83%BD%E5%B7%A5%E7%A8%8B%E9%AB%98%E6%89%8B%E8%AF%BE/17__%E5%AD%98%E5%82%A8%E7%AF%87%E5%A6%82%E4%BD%95%E6%A0%B9%E6%8D%AE%E6%80%A7%E8%83%BD%E4%BC%98%E7%BC%BA%E7%82%B9%E9%80%89%E6%8B%A9%E6%9C%80%E5%90%88%E9%80%82%E7%9A%84%E5%AD%98%E5%82%A8%E7%B3%BB%E7%BB%9F/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">17__存储篇：如何根据性能优缺点选择最合适的存储系统？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/reacthooks%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E6%88%98/17__%E6%89%93%E5%8C%85%E9%83%A8%E7%BD%B2%E4%BD%A0%E7%9A%84%E5%BA%94%E7%94%A8%E6%98%AF%E5%A6%82%E4%BD%95%E4%B8%8A%E7%BA%BF%E7%9A%84/">
+            <span class="next-text nav-default">17__打包部署：你的应用是如何上线的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

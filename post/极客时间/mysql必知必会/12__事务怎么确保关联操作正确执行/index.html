@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__事务：怎么确保关联操作正确执行？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是朱晓峰。
+我们经常会遇到这样的场景：几个相互关联的数据操作，必须是全部执行，或者全部不执行，不可以出现部分执行的情况。比如说，你从微信账号里提现 100 元到银行卡上，这个动作就包括了相互关联的 2 个步骤，首先是微信账号减 100 元，然后是银行卡账号加 100 元（这里假设没有手续费）。假如因为某种异常，这 2 个操作只执行了一个，另外一个没有执行，就会出现你的钱少了 100 元，或者你的钱多了 100 元的情况，这肯定是不能接受的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/12__%E4%BA%8B%E5%8A%A1%E6%80%8E%E4%B9%88%E7%A1%AE%E4%BF%9D%E5%85%B3%E8%81%94%E6%93%8D%E4%BD%9C%E6%AD%A3%E7%A1%AE%E6%89%A7%E8%A1%8C/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/12__%E4%BA%8B%E5%8A%A1%E6%80%8E%E4%B9%88%E7%A1%AE%E4%BF%9D%E5%85%B3%E8%81%94%E6%93%8D%E4%BD%9C%E6%AD%A3%E7%A1%AE%E6%89%A7%E8%A1%8C/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__事务：怎么确保关联操作正确执行？">
+  <meta property="og:description" content="你好，我是朱晓峰。
+我们经常会遇到这样的场景：几个相互关联的数据操作，必须是全部执行，或者全部不执行，不可以出现部分执行的情况。比如说，你从微信账号里提现 100 元到银行卡上，这个动作就包括了相互关联的 2 个步骤，首先是微信账号减 100 元，然后是银行卡账号加 100 元（这里假设没有手续费）。假如因为某种异常，这 2 个操作只执行了一个，另外一个没有执行，就会出现你的钱少了 100 元，或者你的钱多了 100 元的情况，这肯定是不能接受的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="MySQL必知必会">
+
+  <meta itemprop="name" content="12__事务：怎么确保关联操作正确执行？">
+  <meta itemprop="description" content="你好，我是朱晓峰。
+我们经常会遇到这样的场景：几个相互关联的数据操作，必须是全部执行，或者全部不执行，不可以出现部分执行的情况。比如说，你从微信账号里提现 100 元到银行卡上，这个动作就包括了相互关联的 2 个步骤，首先是微信账号减 100 元，然后是银行卡账号加 100 元（这里假设没有手续费）。假如因为某种异常，这 2 个操作只执行了一个，另外一个没有执行，就会出现你的钱少了 100 元，或者你的钱多了 100 元的情况，这肯定是不能接受的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4297">
+  <meta itemprop="keywords" content="MySQL必知必会">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__事务：怎么确保关联操作正确执行？">
+  <meta name="twitter:description" content="你好，我是朱晓峰。
+我们经常会遇到这样的场景：几个相互关联的数据操作，必须是全部执行，或者全部不执行，不可以出现部分执行的情况。比如说，你从微信账号里提现 100 元到银行卡上，这个动作就包括了相互关联的 2 个步骤，首先是微信账号减 100 元，然后是银行卡账号加 100 元（这里假设没有手续费）。假如因为某种异常，这 2 个操作只执行了一个，另外一个没有执行，就会出现你的钱少了 100 元，或者你的钱多了 100 元的情况，这肯定是不能接受的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__事务：怎么确保关联操作正确执行？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4297 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#什么是事务">什么是事务？</a></li>
+        <li><a href="#如何确保操作的原子性和数据的一致性">如何确保操作的原子性和数据的一致性？</a></li>
+        <li><a href="#如何用好事务的隔离性">如何用好事务的隔离性？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是朱晓峰。</p>
+<p>我们经常会遇到这样的场景：几个相互关联的数据操作，必须是全部执行，或者全部不执行，不可以出现部分执行的情况。比如说，你从微信账号里提现 100 元到银行卡上，这个动作就包括了相互关联的 2 个步骤，首先是微信账号减 100 元，然后是银行卡账号加 100 元（这里假设没有手续费）。假如因为某种异常，这 2 个操作只执行了一个，另外一个没有执行，就会出现你的钱少了 100 元，或者你的钱多了 100 元的情况，这肯定是不能接受的。</p>
+<p>如何才能确保多个关联操作全部执行呢？这时就要用到事务了。接下来我就重点讲一讲什么是事务，以及如何正确使用事务。</p>
+<h2 id="什么是事务">什么是事务？</h2>
+<p>事务是 MySQL 的一项功能，它可以使一组数据操作（也叫 DML 操作，是英文 Data Manipulation Language 的缩写，包括 SELECT、INSERT、UPDATE 和 DELETE），要么全部执行，要么全部不执行，不会因为某种异常情况（比如硬件故障、停电、网络中断等）出现只执行一部分操作的情况。</p>
+<p>事务的语法结构如下所示：</p>
+<p>START TRANSACTION 或者 BEGIN（开始事务）<br>
+一组 DML 语句<br>
+COMMIT（提交事务）<br>
+ROLLBACK（事务回滚）</p>
+<p>我解释一下这几个关键字。</p>
+<ol>
+<li><strong>START TRANSACTION 和 BEGIN</strong>：表示开始事务，意思是通知 MySQL，后面的 DML 操作都是当前事务的一部分。</li>
+<li><strong>COMMIT</strong>：表示提交事务，意思是执行当前事务的全部操作，让数据更改永久有效。</li>
+<li><strong>ROLLBACK</strong>：表示回滚当前事务的操作，取消对数据的更改。</li>
+</ol>
+<p>事务有 4 个主要特征，分别是原子性（atomicity）、一致性（consistency）、持久性（durability）和隔离性（isolation）。</p>
+<ol>
+<li>原子性：表示事务中的操作要么全部执行，要么全部不执行，像一个整体，不能从中间打断。</li>
+<li>一致性：表示数据的完整性不会因为事务的执行而受到破坏。</li>
+<li>隔离性：表示多个事务同时执行的时候，不互相干扰。不同的隔离级别，相互独立的程度不同。</li>
+<li>持久性：表示事务对数据的修改是永久有效的，不会因为系统故障而失效。</li>
+</ol>
+<p>持久性非常好理解，我就不多说了，接下来我重点讲一讲事务的原子性、一致性和隔离性，这是确保关联操作正确执行的关键。</p>
+<h2 id="如何确保操作的原子性和数据的一致性">如何确保操作的原子性和数据的一致性？</h2>
+<p>我借助一个超市的收银员帮顾客结账的简单场景来讲解。在系统中，结算的动作主要就是销售流水的产生和库存的消减。这里会涉及销售流水表和库存表，如下所示：</p>
+<p>销售流水表（demo.mytrans）：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/daea9a557b34d8c56c3786501f1ff4f4.png" alt=""></p>
+<p>库存表（demo.inventory）：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/81257c385a8a065a6a6809ab26284cfb.png" alt=""></p>
+<p>现在，假设门店销售了 5 个商品编号是 1 的商品，这个动作实际上包括了 2 个相互关联的数据库操作：</p>
+<ol>
+<li>向流水表中插入一条“1 号商品卖了 5 个”的销售流水；</li>
+<li>把库存表中的 1 号商品的库存减 5。</li>
+</ol>
+<p>这里包含了 2 个 DML 操作，为了避免意外事件导致的一个操作执行了而另一个没有执行的情况，我把它们放到一个事务里面，利用事务中数据操作的原子性，来确保数据的一致性。</p>
+<p>mysql&gt; START TRANSACTION;   &ndash; 开始事务<br>
+Query OK, 0 rows affected (0.00 sec)<br>
+mysql&gt; INSERT INTO demo.mytrans VALUES (1,1,5); &ndash; 插入流水<br>
+Query OK, 1 row affected (0.00 sec)<br>
+mysql&gt; UPDATE demo.inventory SET invquantity = invquantity - 5 WHERE itemnumber = 1;                         &ndash; 更新库存<br>
+Query OK, 1 row affected (0.00 sec)<br>
+Rows matched: 1 Changed: 1 Warnings: 0<br>
+mysql&gt; COMMIT;                          &ndash; 提交事务<br>
+Query OK, 0 rows affected (0.06 sec)</p>
+<p>然后我们查询一下结果：</p>
+<p>mysql&gt; SELECT * FROM demo.mytrans;   &ndash; 流水插入成功了<br>
++&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;-+<br>
+| transid | itemnumber | quantity |<br>
++&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;-+<br>
+| 1 | 1 | 5.000 |<br>
++&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;-+<br>
+1 row in set (0.00 sec)<br>
+mysql&gt; SELECT * FROM demo.inventory; &ndash; 库存消减成功了<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| itemnumber | invquantity |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| 1 | 5.000 |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+1 row in set (0.00 sec)</p>
+<p>这样，通过把 2 个相关操作放到事务里面，我们就实现了一个事务操作。</p>
+<p>这里有一个坑，我要提醒你一下。<strong>事务并不会自动帮你处理 SQL 语句执行中的错误</strong>，如果你对事务中的某一步数据操作发生的错误不做处理，继续提交的话，仍然会导致数据不一致。</p>
+<p>为了方便你理解，我举个小例子。</p>
+<p>假如我们的插入一条销售流水的语句少了一个字段，执行的时候出现错误了，如果我们不对这个错误做回滚处理，继续执行后面的操作，最后提交事务，结果就会出现没有流水但库存消减了的情况：</p>
+<p>mysql&gt; START TRANSACTION;<br>
+Query OK, 0 rows affected (0.00 sec)</p>
+<p>mysql&gt; INSERT INTO demo.mytrans VALUES (1,5); &ndash; 这个插入语句出错了<br>
+ERROR 1136 (21S01): Column count doesn&rsquo;t match value count at row 1</p>
+<p>mysql&gt; UPDATE demo.inventory SET invquantity = invquantity - 5 WHERE itemnumber = 1;<br>
+Query OK, 1 row affected (0.00 sec)    &ndash; 后面的更新语句仍然执行成功了<br>
+Rows matched: 1 Changed: 1 Warnings: 0</p>
+<p>mysql&gt; COMMIT;<br>
+Query OK, 0 rows affected (0.03 sec)   &ndash; 事务提交成功了</p>
+<p>我们查一下表的内容：</p>
+<p>mysql&gt; SELECT * FROM demo.mytrans;    &ndash; 流水没有插入成功<br>
+Empty set (0.16 sec)<br>
+mysql&gt; SELECT * FROM demo.inventory;   &ndash; 库存消减成功了<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| itemnumber | invquantity |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| 1 | 5.000 |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+1 row in set (0.00 sec)</p>
+<p>结果显示，流水插入失败了，但是库存更新成功了，这时候没有销售流水，但是库存却被消减了。</p>
+<p>这就是因为没有正确使用事务导致的数据不完整问题。那么，如何使用事务，才能避免这种由于事务中的某一步或者几步操作出现错误，而导致数据不完整的情况发生呢？这就要用到事务中错误处理和回滚了：</p>
+<ol>
+<li>如果发现事务中的某个操作发生错误，要及时使用回滚；</li>
+<li>只有事务中的所有操作都可以正常执行，才进行提交。</li>
+</ol>
+<p>那这里的关键就是判断操作是不是发生了错误。我们可以通过 MySQL 的函数 ROW_COUNT() 的返回，来判断一个 DML 操作是否失败，-1 表示操作失败，否则就表示影响的记录数。</p>
+<p>mysql&gt; INSERT INTO demo.mytrans VALUES (1,5);<br>
+ERROR 1136 (21S01): Column count doesn&rsquo;t match value count at row 1<br>
+mysql&gt; SELECT ROW_COUNT();<br>
++&mdash;&mdash;&mdash;&mdash;-+<br>
+| ROW_COUNT() |<br>
++&mdash;&mdash;&mdash;&mdash;-+<br>
+| -1 |<br>
++&mdash;&mdash;&mdash;&mdash;-+<br>
+1 row in set (0.00 sec)</p>
+<p>另外一个经常会用到事务的地方是存储过程。由于存储过程中包含很多相互关联的数据操作，所以会大量使用事务。我们可以在 MySQL 的存储过程中，通过获取 SQL 错误，来决定事务是提交还是回滚：</p>
+<p>mysql&gt; DELIMITER //                   &ndash; 修改分隔符为 //<br>
+mysql&gt; CREATE PROCEDURE demo.mytest() &ndash; 创建存储过程<br>
+-&gt; BEGIN                              &ndash; 开始程序体<br>
+-&gt; DECLARE EXIT HANDLER FOR SQLEXCEPTION ROLLBACK; &ndash; 定义 SQL 操作发生错误是自动回滚<br>
+-&gt; START TRANSACTION;                              &ndash; 开始事务<br>
+-&gt; INSERT INTO demo.mytrans VALUES (1,5);<br>
+-&gt; UPDATE demo.inventory SET invquantity = invquantity - 5;<br>
+-&gt; COMMIT;                                         &ndash; 提交事务<br>
+-&gt; END<br>
+-&gt; //                                              &ndash; 完成创建存储过程<br>
+Query OK, 0 rows affected (0.05 sec)</p>
+<p>mysql&gt; DELIMITER ;                                 &ndash; 恢复分隔符为；<br>
+mysql&gt; CALL demo.mytest();                         &ndash; 调用存储过程<br>
+Query OK, 0 rows affected (0.00 sec)</p>
+<p>mysql&gt; SELECT * FROM demo.mytrans;                 &ndash; 销售流水没有插入<br>
+Empty set (0.00 sec)<br>
+mysql&gt; SELECT * FROM demo.inventory;               &ndash; 库存也没有消减，说明事务回滚了<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| itemnumber | invquantity |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+| 1 | 10.000 |<br>
++&mdash;&mdash;&mdash;&mdash;+&mdash;&mdash;&mdash;&mdash;-+<br>
+1 row in set (0.00 sec)</p>
+<p>这里，我们要先通过“DELIMITER //”语句把 MySQL 语句的结束标识改为“//”（默认语句的结束标识是“;”）。这样做的目的是告诉 MySQL 一直到“//”才是语句的结束，否则，MySQL 会在遇到第一个“;”的时候认为语句已经结束，并且执行。这样就会报错，自然也就没办法创建存储过程了。</p>
+<p>创建结束以后，我们还要录入“//”，告诉 MySQL 存储过程创建完成了，并且通过“DELIMITER ;”，再把语句结束标识改回到“;”。</p>
+<p>关于存储过程，我会在后面的课程里给你详细介绍。这里你只需要知道，在这个存储过程中，我使用了“DECLARE EXIT HANDLER FOR SQLEXCEPTION ROLLBACK;”这个语句，来监控 SQL 语句的执行结果，一旦发发生错误，就自动回滚并退出。通过这个机制，我们就实现了对事务中的 SQL 操作进行监控，如果发现事务中的任何 SQL 操作发生错误，就自动回滚。</p>
+<p>总之，<strong>我们要把重要的关联操作放在事务中，确保操作的原子性，并且对失败的操作进行回滚处理</strong>。只有这样，才能真正发挥事务的作用，保证关联操作全部成功或全部失败，最终确保数据的一致性。</p>
+<h2 id="如何用好事务的隔离性">如何用好事务的隔离性？</h2>
+<p>接下来，我们再学习下如何用好事务的隔离性。</p>
+<p>超市经营者提出，门店要支持网上会员销售，现在我们假设会员张三是储值会员，他的会员卡里有 100 元。张三用会员卡到门店消费 100 元，他爱人用他的会员卡在网上消费 100 元。</p>
+<p>张三在门店消费结算的时候，开启了一个事务 A，包括这样 3 个操作：</p>
+<ol>
+<li>读取卡内金额为 100；</li>
+<li>更新卡内金额为 0；</li>
+<li>插入一条销售流水。</li>
+</ol>
+<p>张三的爱人在网上购物，开启了一个事务 B，也来读取卡内金额。如果 B 读取卡内金额的操作，发生在 A 更新卡内金额之后，并且在插入销售流水之前，那么 B 读出的金额应该是多少呢？如果 B 读出 0 元，那么，A 有可能由于后面的操作失败而回滚。因此，B 可能会读到一条错误信息，而导致本来可以成功的交易失败。有什么办法可以解决这个问题呢？</p>
+<p>这个时候，就会用到 MySQL 的另外一种机制：“锁”。MySQL 可以把 A 中被修改过而且还没有提交的数据锁住，让 B 处于等待状态，一直到 A 提交完成，或者失败回滚，再释放锁，允许 B 读取这个数据。这样就可以防止因为 A 回滚而导致 B 读取错误的可能了。</p>
+<p>MySQL 中的锁有很多种，功能也十分强大。咱们这门课里不要求你掌握锁，你只要知道，MySQL 可以用锁来控制事务对数据的操作，就可以了。</p>
+<p>通过对锁的使用，可以实现事务之间的相互隔离。<strong>锁的使用方式不同，隔离的程度也不同</strong>。</p>
+<p>MySQL 支持 4 种事务隔离等级。</p>
+<ol>
+<li>READ UNCOMMITTED：可以读取事务中还未提交的被更改的数据。</li>
+<li>READ COMMITTED：只能读取事务中已经提交的被更改的数据。</li>
+<li>REPEATABLE READ：表示一个事务中，对一个数据读取的值，永远跟第一次读取的值一致，不受其他事务中数据操作的影响。这也是 MySQL 的默认选项。</li>
+<li>SERIALIZABLE：表示任何一个事务，一旦对某一个数据进行了任何操作，那么，一直到这个事务结束，MySQL 都会把这个数据锁住，禁止其他事务对这个数据进行任何操作。</li>
+</ol>
+<p>一般来讲，使用 MySQL 默认的隔离等级 REPEATABLE READ，就已经够了。不过，也不排除需要对一些关键的数据操作，使用最高的隔离等级 SERIALIZABLE。</p>
+<p>举个例子，在我们的超市项目中，就对每天的日结操作设置了最高的隔离等级。因为日结要进行大量的核心数据计算，包括成本、毛利、毛利率、周转率，等等，并把结果保存起来，作为各类查询、报表系统、决策支持模块的基础，绝对不能出现数据错误。</p>
+<p>当然，<strong>计算完成之后，你也不要忘记把隔离等级恢复到系统默认的状态</strong>，否则，会对日常的系统营运效率产生比较大的影响。</p>
+<p>事务的隔离性对并发操作非常有用。当许多用户同时操作数据库的时候，隔离性可以确保各个连接之间互相不影响。这里我要提醒你的是，正确设置事务的隔离等级很重要。</p>
+<p>一方面，<strong>对于一些核心的数据更改操作，你可能需要较高的隔离等级</strong>，比如涉及金额的修改；另一方面，<strong>你要考虑资源的消耗，不能使系统整体的效率受到太大的影响</strong>。所以，要根据具体的应用场景，正确地使用事务。</p>
+<h2 id="总结">总结</h2>
+<p>事务可以确保事务中的一系列操作全部被执行，不会被打断；或者全部不被执行，等待再次执行。事务中的操作，具有原子性、一致性、永久性和隔离性的特征。但是这并不意味着，被事务包裹起来的一系列 DML 数据操作就一定会全部成功，或者全部失败。你需要对操作是否成功的结果进行判断，并通知 MySQL 针对不同情况，分别完成事务提交或者回滚操作，才能最终确保事务中的操作全部成功或全部失败。</p>
+<p>MySQL 支持 4 种不同的事务隔离等级，等级越高，消耗的系统资源也越多，你要根据实际情况进行设定。</p>
+<p>在 MySQL 中，并不是所有的操作都可以回滚。比如创建数据库、创建数据表、删除数据库、删除数据表等，这些操作是不可以回滚的，所以，你在操作的时候要特别小心，特别是在删除数据库、数据表时，最好先做备份，防止误操作。</p>
+<h2 id="思考题">思考题</h2>
+<p>学完了这节课以后，如果现在有人对你说，事务就是确保事务中的数据操作，要么全部正确执行，要么全部失败，你觉得这句话对吗？为什么？</p>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得今天的内容对你有所帮助，也欢迎你把它分享给你的朋友或同事，我们下节课见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/mysql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/">MySQL必知必会</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/12__%E4%BD%BF%E7%94%A8%E5%87%BD%E6%95%B0%E7%9A%84%E6%AD%A3%E7%A1%AE%E5%A7%BF%E5%8A%BF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__使用函数的正确姿势</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BA%BA%E4%BA%BA%E9%83%BD%E8%83%BD%E5%AD%A6%E4%BC%9A%E7%9A%84%E7%BC%96%E7%A8%8B%E5%85%A5%E9%97%A8%E8%AF%BE/12__%E6%95%B0%E5%AD%A6%E5%BD%92%E7%BA%B3%E6%B3%95%E6%90%9E%E5%AE%9A%E5%BE%AA%E7%8E%AF%E4%B8%8E%E9%80%92%E5%BD%92%E7%9A%84%E9%92%A5%E5%8C%99/">
+            <span class="next-text nav-default">12__数学归纳法：搞定循环与递归的钥匙</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

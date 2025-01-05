@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>18__PartitionStateMachine：揭秘分区状态机实现原理 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是胡夕。今天我们进入到分区状态机（PartitionStateMachine）源码的学习。
+PartitionStateMachine 负责管理 Kafka 分区状态的转换，和 ReplicaStateMachine 是一脉相承的。从代码结构、实现功能和设计原理来看，二者都极为相似。上节课我们已经学过了 ReplicaStateMachine，相信你在学习这节课的 PartitionStateMachine 时，会轻松很多。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/18__partitionstatemachine%E6%8F%AD%E7%A7%98%E5%88%86%E5%8C%BA%E7%8A%B6%E6%80%81%E6%9C%BA%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/18__partitionstatemachine%E6%8F%AD%E7%A7%98%E5%88%86%E5%8C%BA%E7%8A%B6%E6%80%81%E6%9C%BA%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="18__PartitionStateMachine：揭秘分区状态机实现原理">
+  <meta property="og:description" content="你好，我是胡夕。今天我们进入到分区状态机（PartitionStateMachine）源码的学习。
+PartitionStateMachine 负责管理 Kafka 分区状态的转换，和 ReplicaStateMachine 是一脉相承的。从代码结构、实现功能和设计原理来看，二者都极为相似。上节课我们已经学过了 ReplicaStateMachine，相信你在学习这节课的 PartitionStateMachine 时，会轻松很多。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kafka核心源码解读">
+
+  <meta itemprop="name" content="18__PartitionStateMachine：揭秘分区状态机实现原理">
+  <meta itemprop="description" content="你好，我是胡夕。今天我们进入到分区状态机（PartitionStateMachine）源码的学习。
+PartitionStateMachine 负责管理 Kafka 分区状态的转换，和 ReplicaStateMachine 是一脉相承的。从代码结构、实现功能和设计原理来看，二者都极为相似。上节课我们已经学过了 ReplicaStateMachine，相信你在学习这节课的 PartitionStateMachine 时，会轻松很多。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="8079">
+  <meta itemprop="keywords" content="Kafka核心源码解读">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="18__PartitionStateMachine：揭秘分区状态机实现原理">
+  <meta name="twitter:description" content="你好，我是胡夕。今天我们进入到分区状态机（PartitionStateMachine）源码的学习。
+PartitionStateMachine 负责管理 Kafka 分区状态的转换，和 ReplicaStateMachine 是一脉相承的。从代码结构、实现功能和设计原理来看，二者都极为相似。上节课我们已经学过了 ReplicaStateMachine，相信你在学习这节课的 PartitionStateMachine 时，会轻松很多。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">18__PartitionStateMachine：揭秘分区状态机实现原理</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 8079 字 </span>
+          <span class="more-meta"> 预计阅读 17 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#partitionstatemachine-简介">PartitionStateMachine 简介</a></li>
+        <li><a href="#类定义与字段">类定义与字段</a></li>
+        <li><a href="#分区状态">分区状态</a></li>
+        <li><a href="#分区-leader-选举的场景及方法">分区 Leader 选举的场景及方法</a>
+          <ul>
+            <li><a href="#partitionleaderelectionstrategy">PartitionLeaderElectionStrategy</a></li>
+            <li><a href="#partitionleaderelectionalgorithms">PartitionLeaderElectionAlgorithms</a></li>
+          </ul>
+        </li>
+        <li><a href="#处理分区状态转换的方法">处理分区状态转换的方法</a>
+          <ul>
+            <li><a href="#handlestatechanges">handleStateChanges</a></li>
+            <li><a href="#dohandlestatechanges">doHandleStateChanges</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后讨论">课后讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是胡夕。今天我们进入到分区状态机（PartitionStateMachine）源码的学习。</p>
+<p>PartitionStateMachine 负责管理 Kafka 分区状态的转换，和 ReplicaStateMachine 是一脉相承的。从代码结构、实现功能和设计原理来看，二者都极为相似。上节课我们已经学过了 ReplicaStateMachine，相信你在学习这节课的 PartitionStateMachine 时，会轻松很多。</p>
+<p>在面试的时候，很多面试官都非常喜欢问 Leader 选举的策略。学完了今天的课程之后，你不但能够说出 4 种 Leader 选举的场景，还能总结出它们的共性。对于面试来说，绝对是个加分项！</p>
+<p>话不多说，我们就正式开始吧。</p>
+<h2 id="partitionstatemachine-简介">PartitionStateMachine 简介</h2>
+<p>PartitionStateMachine.scala 文件位于 controller 包下，代码结构不复杂，可以看下这张思维导图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/aed88f5a8e321270bd601a8c7479ce09.png" alt=""></p>
+<p>代码总共有 5 大部分。</p>
+<ol>
+<li><strong>PartitionStateMachine</strong>：分区状态机抽象类。它定义了诸如 startup、shutdown 这样的公共方法，同时也给出了处理分区状态转换入口方法 handleStateChanges 的签名。</li>
+<li><strong>ZkPartitionStateMachine</strong>：PartitionStateMachine 唯一的继承子类。它实现了分区状态机的主体逻辑功能。和 ZkReplicaStateMachine 类似，ZkPartitionStateMachine 重写了父类的 handleStateChanges 方法，并配以私有的 doHandleStateChanges 方法，共同实现分区状态转换的操作。</li>
+<li><strong>PartitionState 接口及其实现对象</strong>：定义 4 类分区状态，分别是 NewPartition、OnlinePartition、OfflinePartition 和 NonExistentPartition。除此之外，还定义了它们之间的流转关系。</li>
+<li><strong>PartitionLeaderElectionStrategy 接口及其实现对象</strong>：定义 4 类分区 Leader 选举策略。你可以认为它们是发生 Leader 选举的 4 种场景。</li>
+<li><strong>PartitionLeaderElectionAlgorithms</strong>：分区 Leader 选举的算法实现。既然定义了 4 类选举策略，就一定有相应的实现代码，PartitionLeaderElectionAlgorithms 就提供了这 4 类选举策略的实现代码。</li>
+</ol>
+<h2 id="类定义与字段">类定义与字段</h2>
+<p>PartitionStateMachine 和 ReplicaStateMachine 非常类似，我们先看下面这两段代码：</p>
+<p>// PartitionStateMachine 抽象类定义<br>
+abstract class PartitionStateMachine(<br>
+controllerContext: ControllerContext) extends Logging {<br>
+&hellip;&hellip;<br>
+}<br>
+// ZkPartitionStateMachine 继承子类定义<br>
+class ZkPartitionStateMachine(config: KafkaConfig,<br>
+stateChangeLogger: StateChangeLogger,<br>
+controllerContext: ControllerContext,<br>
+zkClient: KafkaZkClient,<br>
+controllerBrokerRequestBatch: ControllerBrokerRequestBatch) extends PartitionStateMachine(controllerContext) {<br>
+// Controller 所在 Broker 的 Id<br>
+private val controllerId = config.brokerId<br>
+&hellip;&hellip;<br>
+}</p>
+<p>从代码中，可以发现，它们的类定义一模一样，尤其是 ZkPartitionStateMachine 和 ZKReplicaStateMachine，它们接收的字段列表都是相同的。此刻，你应该可以体会到它们要做的处理逻辑，其实也是差不多的。</p>
+<p>同理，ZkPartitionStateMachine 实例的创建和启动时机也跟 ZkReplicaStateMachine 的完全相同，即：每个 Broker 进程启动时，会在创建 KafkaController 对象的过程中，生成 ZkPartitionStateMachine 实例，而只有 Controller 组件所在的 Broker，才会启动分区状态机。</p>
+<p>下面这段代码展示了 ZkPartitionStateMachine 实例创建和启动的位置：</p>
+<p>class KafkaController(&hellip;&hellip;) {<br>
+&hellip;&hellip;<br>
+// 在 KafkaController 对象创建过程中，生成 ZkPartitionStateMachine 实例<br>
+val partitionStateMachine: PartitionStateMachine =<br>
+new ZkPartitionStateMachine(config, stateChangeLogger,<br>
+controllerContext, zkClient,<br>
+new ControllerBrokerRequestBatch(config,<br>
+controllerChannelManager, eventManager, controllerContext,<br>
+stateChangeLogger))<br>
+&hellip;&hellip;<br>
+private def onControllerFailover(): Unit = {<br>
+&hellip;&hellip;<br>
+replicaStateMachine.startup() // 启动副本状态机<br>
+partitionStateMachine.startup() // 启动分区状态机<br>
+&hellip;&hellip;<br>
+}<br>
+}</p>
+<p>有句话我要再强调一遍：<strong>每个 Broker 启动时，都会创建对应的分区状态机和副本状态机实例，但只有 Controller 所在的 Broker 才会启动它们</strong>。如果 Controller 变更到其他 Broker，老 Controller 所在的 Broker 要调用这些状态机的 shutdown 方法关闭它们，新 Controller 所在的 Broker 调用状态机的 startup 方法启动它们。</p>
+<h2 id="分区状态">分区状态</h2>
+<p>既然 ZkPartitionStateMachine 是管理分区状态转换的，那么，我们至少要知道分区都有哪些状态，以及 Kafka 规定的转换规则是什么。这就是 PartitionState 接口及其实现对象做的事情。和 ReplicaState 类似，PartitionState 定义了分区的状态空间以及流转规则。</p>
+<p>我以 OnlinePartition 状态为例，说明下代码是如何实现流转的：</p>
+<p>sealed trait PartitionState {<br>
+def state: Byte // 状态序号，无实际用途<br>
+def validPreviousStates: Set[PartitionState] // 合法前置状态集合<br>
+}</p>
+<p>case object OnlinePartition extends PartitionState {<br>
+val state: Byte = 1<br>
+val validPreviousStates: Set[PartitionState] = Set(NewPartition, OnlinePartition, OfflinePartition)<br>
+}</p>
+<p>如代码所示，每个 PartitionState 都定义了名为 validPreviousStates 的集合，也就是每个状态对应的合法前置状态集。</p>
+<p>对于 OnlinePartition 而言，它的合法前置状态集包括 NewPartition、OnlinePartition 和 OfflinePartition。在 Kafka 中，从合法状态集以外的状态向目标状态进行转换，将被视为非法操作。</p>
+<p>目前，Kafka 为分区定义了 4 类状态。</p>
+<ol>
+<li>NewPartition：分区被创建后被设置成这个状态，表明它是一个全新的分区对象。处于这个状态的分区，被 Kafka 认为是“未初始化”，因此，不能选举 Leader。</li>
+<li>OnlinePartition：分区正式提供服务时所处的状态。</li>
+<li>OfflinePartition：分区下线后所处的状态。</li>
+<li>NonExistentPartition：分区被删除，并且从分区状态机移除后所处的状态。</li>
+</ol>
+<p>下图展示了完整的分区状态转换规则：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/b6ed9953d745a4f497bbd5be828e3886.png" alt=""></p>
+<p>图中的双向箭头连接的两个状态可以彼此进行转换，如 OnlinePartition 和 OfflinePartition。Kafka 允许一个分区从 OnlinePartition 切换到 OfflinePartition，反之亦然。</p>
+<p>另外，OnlinePartition 和 OfflinePartition 都有一根箭头指向自己，这表明 OnlinePartition 切换到 OnlinePartition 的操作是允许的。<strong>当分区 Leader 选举发生的时候，就可能出现这种情况。接下来，我们就聊聊分区 Leader 选举那些事儿</strong>。</p>
+<h2 id="分区-leader-选举的场景及方法">分区 Leader 选举的场景及方法</h2>
+<p>刚刚我们说了两个状态机的相同点，接下来，我们要学习的分区 Leader 选举，可以说是 PartitionStateMachine 特有的功能了。</p>
+<p>每个分区都必须选举出 Leader 才能正常提供服务，因此，对于分区而言，Leader 副本是非常重要的角色。既然这样，我们就必须要了解 Leader 选举什么流程，以及在代码中是如何实现的。我们重点学习下选举策略以及具体的实现方法代码。</p>
+<h3 id="partitionleaderelectionstrategy">PartitionLeaderElectionStrategy</h3>
+<p>先明确下分区 Leader 选举的含义，其实很简单，就是为 Kafka 主题的某个分区推选 Leader 副本。</p>
+<p>那么，Kafka 定义了哪几种推选策略，或者说，在什么情况下需要执行 Leader 选举呢？</p>
+<p>这就是 PartitionLeaderElectionStrategy 接口要做的事情，请看下面的代码：</p>
+<p>// 分区 Leader 选举策略接口<br>
+sealed trait PartitionLeaderElectionStrategy<br>
+// 离线分区 Leader 选举策略<br>
+final case class OfflinePartitionLeaderElectionStrategy(<br>
+allowUnclean: Boolean) extends PartitionLeaderElectionStrategy<br>
+// 分区副本重分配 Leader 选举策略 <br>
+final case object ReassignPartitionLeaderElectionStrategy<br>
+extends PartitionLeaderElectionStrategy<br>
+// 分区 Preferred 副本 Leader 选举策略<br>
+final case object PreferredReplicaPartitionLeaderElectionStrategy<br>
+extends PartitionLeaderElectionStrategy<br>
+// Broker Controlled 关闭时 Leader 选举策略<br>
+final case object ControlledShutdownPartitionLeaderElectionStrategy<br>
+extends PartitionLeaderElectionStrategy</p>
+<p>当前，分区 Leader 选举有 4 类场景。</p>
+<ol>
+<li>OfflinePartitionLeaderElectionStrategy：因为 Leader 副本下线而引发的分区 Leader 选举。</li>
+<li>ReassignPartitionLeaderElectionStrategy：因为执行分区副本重分配操作而引发的分区 Leader 选举。</li>
+<li>PreferredReplicaPartitionLeaderElectionStrategy：因为执行 Preferred 副本 Leader 选举而引发的分区 Leader 选举。</li>
+<li>ControlledShutdownPartitionLeaderElectionStrategy：因为正常关闭 Broker 而引发的分区 Leader 选举。</li>
+</ol>
+<h3 id="partitionleaderelectionalgorithms">PartitionLeaderElectionAlgorithms</h3>
+<p>针对这 4 类场景，分区状态机的 PartitionLeaderElectionAlgorithms 对象定义了 4 个方法，分别负责为每种场景选举 Leader 副本，这 4 种方法是：</p>
+<ol>
+<li>offlinePartitionLeaderElection；</li>
+<li>reassignPartitionLeaderElection；</li>
+<li>preferredReplicaPartitionLeaderElection；</li>
+<li>controlledShutdownPartitionLeaderElection。</li>
+</ol>
+<p>offlinePartitionLeaderElection 方法的逻辑是这 4 个方法中最复杂的，我们就先从它开始学起。</p>
+<p>def offlinePartitionLeaderElection(assignment: Seq[Int],<br>
+isr: Seq[Int], liveReplicas: Set[Int],<br>
+uncleanLeaderElectionEnabled: Boolean, controllerContext: ControllerContext): Option[Int] = {<br>
+// 从当前分区副本列表中寻找首个处于存活状态的 ISR 副本<br>
+assignment.find(id =&gt; liveReplicas.contains(id) &amp;&amp; isr.contains(id)).orElse {<br>
+// 如果找不到满足条件的副本，查看是否允许 Unclean Leader 选举<br>
+// 即 Broker 端参数 unclean.leader.election.enable 是否等于 true<br>
+if (uncleanLeaderElectionEnabled) {<br>
+// 选择当前副本列表中的第一个存活副本作为 Leader<br>
+val leaderOpt = assignment.find(liveReplicas.contains)<br>
+if (leaderOpt.isDefined)<br>
+controllerContext.stats.uncleanLeaderElectionRate.mark()<br>
+leaderOpt<br>
+} else {<br>
+None // 如果不允许 Unclean Leader 选举，则返回 None 表示无法选举 Leader<br>
+}<br>
+}<br>
+}</p>
+<p>我再画一张流程图，帮助你理解它的代码逻辑：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/50bd37300784c3223249ec0137ece3f9.png" alt=""></p>
+<p>这个方法总共接收 5 个参数。除了你已经很熟悉的 ControllerContext 类，其他 4 个非常值得我们花一些时间去探究下。</p>
+<p><strong>1.assignments</strong></p>
+<p>这是分区的副本列表。该列表有个专属的名称，叫 Assigned Replicas，简称 AR。当我们创建主题之后，使用 kafka-topics 脚本查看主题时，应该可以看到名为 Replicas 的一列数据。这列数据显示的，就是主题下每个分区的 AR。assignments 参数类型是 Seq[Int]。<strong>这揭示了一个重要的事实：AR 是有顺序的，而且不一定和 ISR 的顺序相同！</strong></p>
+<p><strong>2.isr</strong></p>
+<p>ISR 在 Kafka 中很有名气，它保存了分区所有与 Leader 副本保持同步的副本列表。注意，Leader 副本自己也在 ISR 中。另外，作为 Seq[Int] 类型的变量，isr 自身也是有顺序的。</p>
+<p><strong>3.liveReplicas</strong></p>
+<p>从名字可以推断出，它保存了该分区下所有处于存活状态的副本。怎么判断副本是否存活呢？可以根据 Controller 元数据缓存中的数据来判定。简单来说，所有在运行中的 Broker 上的副本，都被认为是存活的。</p>
+<p><strong>4.uncleanLeaderElectionEnabled</strong></p>
+<p>在默认配置下，只要不是由 AdminClient 发起的 Leader 选举，这个参数的值一般是 false，即 Kafka 不允许执行 Unclean Leader 选举。所谓的 Unclean Leader 选举，是指在 ISR 列表为空的情况下，Kafka 选择一个非 ISR 副本作为新的 Leader。由于存在丢失数据的风险，目前，社区已经通过把 Broker 端参数 unclean.leader.election.enable 的默认值设置为 false 的方式，禁止 Unclean Leader 选举了。</p>
+<p>值得一提的是，社区于 2.4.0.0 版本正式支持在 AdminClient 端为给定分区选举 Leader。目前的设计是，如果 Leader 选举是由 AdminClient 端触发的，那就默认开启 Unclean Leader 选举。不过，在学习 offlinePartitionLeaderElection 方法时，你可以认为 uncleanLeaderElectionEnabled=false，这并不会影响你对该方法的理解。</p>
+<p>了解了这几个参数的含义，我们就可以研究具体的流程了。</p>
+<p>代码首先会顺序搜索 AR 列表，并把第一个同时满足以下两个条件的副本作为新的 Leader 返回：</p>
+<ol>
+<li>该副本是存活状态，即副本所在的 Broker 依然在运行中；</li>
+<li>该副本在 ISR 列表中。</li>
+</ol>
+<p>倘若无法找到这样的副本，代码会检查是否开启了 Unclean Leader 选举：如果开启了，则降低标准，只要满足上面第一个条件即可；如果未开启，则本次 Leader 选举失败，没有新 Leader 被选出。</p>
+<p>其他 3 个方法要简单得多，我们直接看代码：</p>
+<p>def reassignPartitionLeaderElection(reassignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int]): Option[Int] = {<br>
+reassignment.find(id =&gt; liveReplicas.contains(id) &amp;&amp; isr.contains(id))<br>
+}</p>
+<p>def preferredReplicaPartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int]): Option[Int] = {<br>
+assignment.headOption.filter(id =&gt; liveReplicas.contains(id) &amp;&amp; isr.contains(id))<br>
+}</p>
+<p>def controlledShutdownPartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int], shuttingDownBrokers: Set[Int]): Option[Int] = {<br>
+assignment.find(id =&gt; liveReplicas.contains(id) &amp;&amp; isr.contains(id) &amp;&amp; !shuttingDownBrokers.contains(id))<br>
+}</p>
+<p>可以看到，它们的逻辑几乎是相同的，大概的原理都是从 AR，或给定的副本列表中寻找存活状态的 ISR 副本。</p>
+<p>讲到这里，你应该已经知道 Kafka 为分区选举 Leader 的大体思路了。<strong>基本上就是，找出 AR 列表（或给定副本列表）中首个处于存活状态，且在 ISR 列表的副本，将其作为新 Leader。</strong></p>
+<h2 id="处理分区状态转换的方法">处理分区状态转换的方法</h2>
+<p>掌握了刚刚的这些知识之后，现在，我们正式来看 PartitionStateMachine 的工作原理。</p>
+<h3 id="handlestatechanges">handleStateChanges</h3>
+<p>前面我提到过，handleStateChanges 是入口方法，所以我们先看它的方法签名：</p>
+<p>def handleStateChanges(<br>
+partitions: Seq[TopicPartition],<br>
+targetState: PartitionState,<br>
+leaderElectionStrategy: Option[PartitionLeaderElectionStrategy]):<br>
+Map[TopicPartition, Either[Throwable, LeaderAndIsr]]</p>
+<p>如果用一句话概括 handleStateChanges 的作用，应该这样说：<strong>handleStateChanges 把 partitions 的状态设置为 targetState，同时，还可能需要用 leaderElectionStrategy 策略为 partitions 选举新的 Leader，最终将 partitions 的 Leader 信息返回。</strong></p>
+<p>其中，partitions 是待执行状态变更的目标分区列表，targetState 是目标状态，leaderElectionStrategy 是一个可选项，如果传入了，就表示要执行 Leader 选举。</p>
+<p>下面是 handleStateChanges 方法的完整代码，我以注释的方式给出了主要的功能说明：</p>
+<p>override def handleStateChanges(<br>
+partitions: Seq[TopicPartition],<br>
+targetState: PartitionState,<br>
+partitionLeaderElectionStrategyOpt: Option[PartitionLeaderElectionStrategy]<br>
+): Map[TopicPartition, Either[Throwable, LeaderAndIsr]] = {<br>
+if (partitions.nonEmpty) {<br>
+try {<br>
+// 清空 Controller 待发送请求集合，准备本次请求发送<br>
+controllerBrokerRequestBatch.newBatch()<br>
+// 调用 doHandleStateChanges 方法执行真正的状态变更逻辑<br>
+val result = doHandleStateChanges(<br>
+partitions,<br>
+targetState,<br>
+partitionLeaderElectionStrategyOpt<br>
+)<br>
+// Controller 给相关 Broker 发送请求通知状态变化<br>
+controllerBrokerRequestBatch.sendRequestsToBrokers(<br>
+controllerContext.epoch)<br>
+// 返回状态变更处理结果<br>
+result<br>
+} catch {<br>
+// 如果 Controller 易主，则记录错误日志，然后重新抛出异常<br>
+// 上层代码会捕获该异常并执行 maybeResign 方法执行卸任逻辑<br>
+case e: ControllerMovedException =&gt;<br>
+error(s&quot;Controller moved to another broker when moving some partitions to $targetState state&quot;, e)<br>
+throw e<br>
+// 如果是其他异常，记录错误日志，封装错误返回<br>
+case e: Throwable =&gt;<br>
+error(s&quot;Error while moving some partitions to $targetState state&quot;, e)<br>
+partitions.iterator.map(_ -&gt; Left(e)).toMap<br>
+}<br>
+} else { // 如果 partitions 为空，什么都不用做<br>
+Map.empty<br>
+}<br>
+}</p>
+<p>整个方法就两步：第 1 步是，调用 doHandleStateChanges 方法执行分区状态转换；第 2 步是，Controller 给相关 Broker 发送请求，告知它们这些分区的状态变更。至于哪些 Broker 属于相关 Broker，以及给 Broker 发送哪些请求，实际上是在第 1 步中被确认的。</p>
+<p>当然，这个方法的重点，就是第 1 步中调用的 doHandleStateChanges 方法。</p>
+<h3 id="dohandlestatechanges">doHandleStateChanges</h3>
+<p>先来看这个方法的实现：</p>
+<p>private def doHandleStateChanges(<br>
+partitions: Seq[TopicPartition],<br>
+targetState: PartitionState,<br>
+partitionLeaderElectionStrategyOpt: Option[PartitionLeaderElectionStrategy]<br>
+): Map[TopicPartition, Either[Throwable, LeaderAndIsr]] = {<br>
+val stateChangeLog = stateChangeLogger.withControllerEpoch(controllerContext.epoch)<br>
+val traceEnabled = stateChangeLog.isTraceEnabled<br>
+// 初始化新分区的状态为 NonExistentPartition<br>
+partitions.foreach(partition =&gt; controllerContext.putPartitionStateIfNotExists(partition, NonExistentPartition))<br>
+// 找出要执行非法状态转换的分区，记录错误日志<br>
+val (validPartitions, invalidPartitions) = controllerContext.checkValidPartitionStateChange(partitions, targetState)<br>
+invalidPartitions.foreach(partition =&gt; logInvalidTransition(partition, targetState))<br>
+// 根据 targetState 进入到不同的 case 分支<br>
+targetState match {<br>
+&hellip;&hellip;<br>
+}<br>
+}</p>
+<p>这个方法首先会做状态初始化的工作，具体来说就是，在方法调用时，不在元数据缓存中的所有分区的状态，会被初始化为 NonExistentPartition。</p>
+<p>接着，检查哪些分区执行的状态转换不合法，并为这些分区记录相应的错误日志。</p>
+<p>之后，代码携合法状态转换的分区列表进入到 case 分支。由于分区状态只有 4 个，因此，它的 case 分支代码远比 ReplicaStateMachine 中的简单，而且，只有 OnlinePartition 这一路的分支逻辑相对复杂，其他 3 路仅仅是将分区状态设置成目标状态而已，</p>
+<p>所以，我们来深入研究下目标状态是 OnlinePartition 的分支：</p>
+<p>case OnlinePartition =&gt;<br>
+// 获取未初始化分区列表，也就是 NewPartition 状态下的所有分区<br>
+val uninitializedPartitions = validPartitions.filter(<br>
+partition =&gt; partitionState(partition) == NewPartition)<br>
+// 获取具备 Leader 选举资格的分区列表<br>
+// 只能为 OnlinePartition 和 OfflinePartition 状态的分区选举 Leader<br>
+val partitionsToElectLeader = validPartitions.filter(<br>
+partition =&gt; partitionState(partition) == OfflinePartition ||<br>
+partitionState(partition) == OnlinePartition)<br>
+// 初始化 NewPartition 状态分区，在 ZooKeeper 中写入 Leader 和 ISR 数据<br>
+if (uninitializedPartitions.nonEmpty) {<br>
+val successfulInitializations = initializeLeaderAndIsrForPartitions(uninitializedPartitions)<br>
+successfulInitializations.foreach { partition =&gt;<br>
+stateChangeLog.info(s&quot;Changed partition $partition from ${partitionState(partition)} to $targetState with state &quot; +<br>
+s&quot;${controllerContext.partitionLeadershipInfo(partition).leaderAndIsr}&quot;)<br>
+controllerContext.putPartitionState(partition, OnlinePartition)<br>
+}<br>
+}<br>
+// 为具备 Leader 选举资格的分区推选 Leader<br>
+if (partitionsToElectLeader.nonEmpty) {<br>
+val electionResults = electLeaderForPartitions(<br>
+partitionsToElectLeader,<br>
+partitionLeaderElectionStrategyOpt.getOrElse(<br>
+throw new IllegalArgumentException(&ldquo;Election strategy is a required field when the target state is OnlinePartition&rdquo;)<br>
+)<br>
+)<br>
+electionResults.foreach {<br>
+case (partition, Right(leaderAndIsr)) =&gt;<br>
+stateChangeLog.info(<br>
+s&quot;Changed partition $partition from ${partitionState(partition)} to $targetState with state $leaderAndIsr&quot;<br>
+)<br>
+// 将成功选举 Leader 后的分区设置成 OnlinePartition 状态<br>
+controllerContext.putPartitionState(<br>
+partition, OnlinePartition)<br>
+case (<em>, Left(</em>)) =&gt; // 如果选举失败，忽略之<br>
+}<br>
+// 返回 Leader 选举结果<br>
+electionResults<br>
+} else {<br>
+Map.empty<br>
+}</p>
+<p>虽然代码有点长，但总的步骤就两步。</p>
+<p><strong>第 1 步</strong>是为 NewPartition 状态的分区做初始化操作，也就是在 ZooKeeper 中，创建并写入分区节点数据。节点的位置是<code>/brokers/topics/&lt;topic&gt;/partitions/&lt;partition&gt;</code>，每个节点都要包含分区的 Leader 和 ISR 等数据。而 <strong>Leader 和 ISR 的确定规则是：选择存活副本列表的第一个副本作为 Leader；选择存活副本列表作为 ISR</strong>。至于具体的代码，可以看下 initializeLeaderAndIsrForPartitions 方法代码片段的倒数第 5 行：</p>
+<p>private def initializeLeaderAndIsrForPartitions(partitions: Seq[TopicPartition]): Seq[TopicPartition] = {<br>
+&hellip;&hellip;<br>
+// 获取每个分区的副本列表<br>
+val replicasPerPartition = partitions.map(partition =&gt; partition -&gt; controllerContext.partitionReplicaAssignment(partition))<br>
+// 获取每个分区的所有存活副本<br>
+val liveReplicasPerPartition = replicasPerPartition.map { case (partition, replicas) =&gt;<br>
+val liveReplicasForPartition = replicas.filter(replica =&gt; controllerContext.isReplicaOnline(replica, partition))<br>
+partition -&gt; liveReplicasForPartition<br>
+}<br>
+// 按照有无存活副本对分区进行分组<br>
+// 分为两组：有存活副本的分区；无任何存活副本的分区<br>
+val (partitionsWithoutLiveReplicas, partitionsWithLiveReplicas) = liveReplicasPerPartition.partition { case (_, liveReplicas) =&gt; liveReplicas.isEmpty }<br>
+&hellip;&hellip;<br>
+// 为&quot;有存活副本的分区&quot;确定 Leader 和 ISR<br>
+// Leader 确认依据：存活副本列表的首个副本被认定为 Leader<br>
+// ISR 确认依据：存活副本列表被认定为 ISR<br>
+val leaderIsrAndControllerEpochs = partitionsWithLiveReplicas.map { case (partition, liveReplicas) =&gt;<br>
+val leaderAndIsr = LeaderAndIsr(liveReplicas.head, liveReplicas.toList)<br>
+&hellip;&hellip;<br>
+}.toMap<br>
+&hellip;&hellip;<br>
+}</p>
+<p><strong>第 2 步</strong>是为具备 Leader 选举资格的分区推选 Leader，代码调用 electLeaderForPartitions 方法实现。这个方法会不断尝试为多个分区选举 Leader，直到所有分区都成功选出 Leader。</p>
+<p>选举 Leader 的核心代码位于 doElectLeaderForPartitions 方法中，该方法主要有 3 步。</p>
+<p>代码很长，我先画一张图来展示它的主要步骤，然后再分步骤给你解释每一步的代码，以免你直接陷入冗长的源码行里面去。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/22eaee913c1d24b4c2abf7f10f738565.png" alt=""></p>
+<p>看着好像图也很长，别着急，我们来一步步拆解下。</p>
+<p>就像前面说的，这个方法大体分为 3 步。第 1 步是从 ZooKeeper 中获取给定分区的 Leader、ISR 信息，并将结果封装进名为 validLeaderAndIsrs 的容器中，代码如下：</p>
+<p>// doElectLeaderForPartitions 方法的第 1 部分<br>
+val getDataResponses = try {<br>
+// 批量获取 ZooKeeper 中给定分区的 znode 节点数据<br>
+zkClient.getTopicPartitionStatesRaw(partitions)<br>
+} catch {<br>
+case e: Exception =&gt;<br>
+return (partitions.iterator.map(_ -&gt; Left(e)).toMap, Seq.empty)<br>
+}<br>
+// 构建两个容器，分别保存可选举 Leader 分区列表和选举失败分区列表<br>
+val failedElections = mutable.Map.empty[TopicPartition, Either[Exception, LeaderAndIsr]]<br>
+val validLeaderAndIsrs = mutable.Buffer.empty[(TopicPartition, LeaderAndIsr)]<br>
+// 遍历每个分区的 znode 节点数据<br>
+getDataResponses.foreach { getDataResponse =&gt;<br>
+val partition = getDataResponse.ctx.get.asInstanceOf[TopicPartition]<br>
+val currState = partitionState(partition)<br>
+// 如果成功拿到 znode 节点数据<br>
+if (getDataResponse.resultCode == Code.OK) {<br>
+TopicPartitionStateZNode.decode(getDataResponse.data, getDataResponse.stat) match {<br>
+// 节点数据中含 Leader 和 ISR 信息<br>
+case Some(leaderIsrAndControllerEpoch) =&gt;<br>
+// 如果节点数据的 Controller Epoch 值大于当前 Controller Epoch 值<br>
+if (leaderIsrAndControllerEpoch.controllerEpoch &gt; controllerContext.epoch) {<br>
+val failMsg = s&quot;Aborted leader election for partition $partition since the LeaderAndIsr path was &quot; +<br>
+s&quot;already written by another controller. This probably means that the current controller $controllerId went through &quot; +<br>
+s&quot;a soft failure and another controller was elected with epoch ${leaderIsrAndControllerEpoch.controllerEpoch}.&quot;<br>
+// 将该分区加入到选举失败分区列表<br>
+failedElections.put(partition, Left(new StateChangeFailedException(failMsg)))<br>
+} else {<br>
+// 将该分区加入到可选举 Leader 分区列表<br>
+validLeaderAndIsrs += partition -&gt; leaderIsrAndControllerEpoch.leaderAndIsr<br>
+}<br>
+// 如果节点数据不含 Leader 和 ISR 信息<br>
+case None =&gt;<br>
+val exception = new StateChangeFailedException(s&quot;LeaderAndIsr information doesn&rsquo;t exist for partition $partition in $currState state&quot;)<br>
+// 将该分区加入到选举失败分区列表<br>
+failedElections.put(partition, Left(exception))<br>
+}<br>
+// 如果没有拿到 znode 节点数据，则将该分区加入到选举失败分区列表<br>
+} else if (getDataResponse.resultCode == Code.NONODE) {<br>
+val exception = new StateChangeFailedException(s&quot;LeaderAndIsr information doesn&rsquo;t exist for partition $partition in $currState state&quot;)<br>
+failedElections.put(partition, Left(exception))<br>
+} else {<br>
+failedElections.put(partition, Left(getDataResponse.resultException.get))<br>
+}<br>
+}</p>
+<p>if (validLeaderAndIsrs.isEmpty) {<br>
+return (failedElections.toMap, Seq.empty)<br>
+}</p>
+<p>首先，代码会批量读取 ZooKeeper 中给定分区的所有 Znode 数据。之后，会构建两个容器，分别保存可选举 Leader 分区列表和选举失败分区列表。接着，开始遍历每个分区的 Znode 节点数据，如果成功拿到 Znode 节点数据，节点数据包含 Leader 和 ISR 信息且节点数据的 Controller Epoch 值小于当前 Controller Epoch 值，那么，就将该分区加入到可选举 Leader 分区列表。倘若发现 Zookeeper 中保存的 Controller Epoch 值大于当前 Epoch 值，说明该分区已经被一个更新的 Controller 选举过 Leader 了，此时必须终止本次 Leader 选举，并将该分区放置到选举失败分区列表中。</p>
+<p>遍历完这些分区之后，代码要看下 validLeaderAndIsrs 容器中是否包含可选举 Leader 的分区。如果一个满足选举 Leader 的分区都没有，方法直接返回。至此，doElectLeaderForPartitions 方法的第一大步完成。</p>
+<p>下面，我们看下该方法的第 2 部分代码：</p>
+<p>// doElectLeaderForPartitions 方法的第 2 部分<br>
+// 开始选举 Leader，并根据有无 Leader 将分区进行分区<br>
+val (partitionsWithoutLeaders, partitionsWithLeaders) =<br>
+partitionLeaderElectionStrategy match {<br>
+case OfflinePartitionLeaderElectionStrategy(allowUnclean) =&gt;<br>
+val partitionsWithUncleanLeaderElectionState = collectUncleanLeaderElectionState(<br>
+validLeaderAndIsrs,<br>
+allowUnclean<br>
+)<br>
+// 为 OffinePartition 分区选举 Leader<br>
+leaderForOffline(controllerContext, partitionsWithUncleanLeaderElectionState).partition(<em>.leaderAndIsr.isEmpty)<br>
+case ReassignPartitionLeaderElectionStrategy =&gt;<br>
+// 为副本重分配的分区选举 Leader<br>
+leaderForReassign(controllerContext, validLeaderAndIsrs).partition(</em>.leaderAndIsr.isEmpty)<br>
+case PreferredReplicaPartitionLeaderElectionStrategy =&gt;<br>
+// 为分区执行 Preferred 副本 Leader 选举<br>
+leaderForPreferredReplica(controllerContext, validLeaderAndIsrs).partition(<em>.leaderAndIsr.isEmpty)<br>
+case ControlledShutdownPartitionLeaderElectionStrategy =&gt;<br>
+// 为因 Broker 正常关闭而受影响的分区选举 Leader<br>
+leaderForControlledShutdown(controllerContext, validLeaderAndIsrs).partition(</em>.leaderAndIsr.isEmpty)<br>
+}</p>
+<p>这一步是根据给定的 PartitionLeaderElectionStrategy，调用 PartitionLeaderElectionAlgorithms 的不同方法执行 Leader 选举，同时，区分出成功选举 Leader 和未选出 Leader 的分区。</p>
+<p>前面说过了，这 4 种不同的策略定义了 4 个专属的方法来进行 Leader 选举。其实，如果你打开这些方法的源码，就会发现它们大同小异。基本上，选择 Leader 的规则，就是选择副本集合中首个存活且处于 ISR 中的副本作为 Leader。</p>
+<p>现在，我们再来看这个方法的最后一部分代码，这一步主要是更新 ZooKeeper 节点数据，以及 Controller 端元数据缓存信息。</p>
+<p>// doElectLeaderForPartitions 方法的第 3 部分<br>
+// 将所有选举失败的分区全部加入到 Leader 选举失败分区列表<br>
+partitionsWithoutLeaders.foreach { electionResult =&gt;<br>
+val partition = electionResult.topicPartition<br>
+val failMsg = s&quot;Failed to elect leader for partition $partition under strategy $partitionLeaderElectionStrategy&quot;<br>
+failedElections.put(partition, Left(new StateChangeFailedException(failMsg)))<br>
+}<br>
+val recipientsPerPartition = partitionsWithLeaders.map(result =&gt; result.topicPartition -&gt; result.liveReplicas).toMap<br>
+val adjustedLeaderAndIsrs = partitionsWithLeaders.map(result =&gt; result.topicPartition -&gt; result.leaderAndIsr.get).toMap<br>
+// 使用新选举的 Leader 和 ISR 信息更新 ZooKeeper 上分区的 znode 节点数据<br>
+val UpdateLeaderAndIsrResult(finishedUpdates, updatesToRetry) = zkClient.updateLeaderAndIsr(<br>
+adjustedLeaderAndIsrs, controllerContext.epoch, controllerContext.epochZkVersion)<br>
+// 对于 ZooKeeper znode 节点数据更新成功的分区，封装对应的 Leader 和 ISR 信息<br>
+// 构建 LeaderAndIsr 请求，并将该请求加入到 Controller 待发送请求集合<br>
+// 等待后续统一发送<br>
+finishedUpdates.foreach { case (partition, result) =&gt;<br>
+result.foreach { leaderAndIsr =&gt;<br>
+val replicaAssignment = controllerContext.partitionFullReplicaAssignment(partition)<br>
+val leaderIsrAndControllerEpoch = LeaderIsrAndControllerEpoch(leaderAndIsr, controllerContext.epoch)<br>
+controllerContext.partitionLeadershipInfo.put(partition, leaderIsrAndControllerEpoch)<br>
+controllerBrokerRequestBatch.addLeaderAndIsrRequestForBrokers(recipientsPerPartition(partition), partition,<br>
+leaderIsrAndControllerEpoch, replicaAssignment, isNew = false)<br>
+}<br>
+}<br>
+// 返回选举结果，包括成功选举并更新 ZooKeeper 节点的分区、选举失败分区以及<br>
+// ZooKeeper 节点更新失败的分区<br>
+(finishedUpdates ++ failedElections, updatesToRetry)</p>
+<p>首先，将上一步中所有选举失败的分区，全部加入到 Leader 选举失败分区列表。</p>
+<p>然后，使用新选举的 Leader 和 ISR 信息，更新 ZooKeeper 上分区的 Znode 节点数据。对于 ZooKeeper Znode 节点数据更新成功的那些分区，源码会封装对应的 Leader 和 ISR 信息，构建 LeaderAndIsr 请求，并将该请求加入到 Controller 待发送请求集合，等待后续统一发送。</p>
+<p>最后，方法返回选举结果，包括成功选举并更新 ZooKeeper 节点的分区列表、选举失败分区列表，以及 ZooKeeper 节点更新失败的分区列表。</p>
+<p>这会儿，你还记得 handleStateChanges 方法的第 2 步是 Controller 给相关的 Broker 发送请求吗？那么，到底要给哪些 Broker 发送哪些请求呢？其实就是在上面这步完成的，即这行语句：</p>
+<p>controllerBrokerRequestBatch.addLeaderAndIsrRequestForBrokers(<br>
+recipientsPerPartition(partition), partition,<br>
+leaderIsrAndControllerEpoch, replicaAssignment, isNew = false)</p>
+<h2 id="总结">总结</h2>
+<p>今天，我们重点学习了 PartitionStateMachine.scala 文件的源码，主要是研究了 Kafka 分区状态机的构造原理和工作机制。</p>
+<p>学到这里，我们再来回答开篇面试官的问题，应该就不是什么难事了。现在我们知道了，Kafka 目前提供 4 种 Leader 选举策略，分别是分区下线后的 Leader 选举、分区执行副本重分配时的 Leader 选举、分区执行 Preferred 副本 Leader 选举，以及 Broker 下线时的分区 Leader 选举。</p>
+<p>这 4 类选举策略在选择 Leader 这件事情上有着类似的逻辑，那就是，它们几乎都是选择当前副本有序集合中的、首个处于 ISR 集合中的存活副本作为新的 Leader。当然，个别选举策略可能会有细小的差别，你可以结合我们今天学到的源码，课下再深入地研究一下每一类策略的源码。</p>
+<p>我们来回顾下这节课的重点。</p>
+<ol>
+<li>PartitionStateMachine 是 Kafka Controller 端定义的分区状态机，负责定义、维护和管理合法的分区状态转换。</li>
+<li>每个 Broker 启动时都会实例化一个分区状态机对象，但只有 Controller 所在的 Broker 才会启动它。</li>
+<li>Kafka 分区有 4 类状态，分别是 NewPartition、OnlinePartition、OfflinePartition 和 NonExistentPartition。其中 OnlinPartition 是分区正常工作时的状态。NewPartition 是未初始化状态，处于该状态下的分区尚不具备选举 Leader 的资格。</li>
+<li>Leader 选举有 4 类场景，分别是 Offline、Reassign、Preferrer Leader Election 和 ControlledShutdown。每类场景都对应于一种特定的 Leader 选举策略。</li>
+<li>handleStateChanges 方法是主要的入口方法，下面调用 doHandleStateChanges 私有方法实现实际的 Leader 选举功能。</li>
+</ol>
+<p>下个模块，我们将来到 Kafka 延迟操作代码的世界。在那里，你能了解 Kafka 是如何实现一个延迟请求的处理的。另外，一个 O(N) 时间复杂度的时间轮算法也等候在那里，到时候我们一起研究下它！</p>
+<h2 id="课后讨论">课后讨论</h2>
+<p>源码中有个 triggerOnlineStateChangeForPartitions 方法，请你分析下，它是做什么用的，以及它何时被调用？</p>
+<p>欢迎你在留言区畅所欲言，跟我交流讨论，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">Kafka核心源码解读</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/18__kafka%E4%B8%AD%E4%BD%8D%E7%A7%BB%E6%8F%90%E4%BA%A4%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">18__Kafka中位移提交那些事儿</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spring%E7%BC%96%E7%A8%8B%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF50%E4%BE%8B/18__spring_data_%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF/">
+            <span class="next-text nav-default">18__Spring_Data_常见错误</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>22__Catalyst物理计划：你的SQL语句是怎么被优化的（下）？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是吴磊。
+上一讲我们说了，Catalyst 优化器的逻辑优化过程包含两个环节：逻辑计划解析和逻辑计划优化。逻辑优化的最终目的就是要把 Unresolved Logical Plan 从次优的 Analyzed Logical Plan 最终变身为执行高效的 Optimized Logical Plan。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/22__catalyst%E7%89%A9%E7%90%86%E8%AE%A1%E5%88%92%E4%BD%A0%E7%9A%84sql%E8%AF%AD%E5%8F%A5%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/22__catalyst%E7%89%A9%E7%90%86%E8%AE%A1%E5%88%92%E4%BD%A0%E7%9A%84sql%E8%AF%AD%E5%8F%A5%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="22__Catalyst物理计划：你的SQL语句是怎么被优化的（下）？">
+  <meta property="og:description" content="你好，我是吴磊。
+上一讲我们说了，Catalyst 优化器的逻辑优化过程包含两个环节：逻辑计划解析和逻辑计划优化。逻辑优化的最终目的就是要把 Unresolved Logical Plan 从次优的 Analyzed Logical Plan 最终变身为执行高效的 Optimized Logical Plan。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Spark性能调优实战">
+
+  <meta itemprop="name" content="22__Catalyst物理计划：你的SQL语句是怎么被优化的（下）？">
+  <meta itemprop="description" content="你好，我是吴磊。
+上一讲我们说了，Catalyst 优化器的逻辑优化过程包含两个环节：逻辑计划解析和逻辑计划优化。逻辑优化的最终目的就是要把 Unresolved Logical Plan 从次优的 Analyzed Logical Plan 最终变身为执行高效的 Optimized Logical Plan。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4767">
+  <meta itemprop="keywords" content="Spark性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="22__Catalyst物理计划：你的SQL语句是怎么被优化的（下）？">
+  <meta name="twitter:description" content="你好，我是吴磊。
+上一讲我们说了，Catalyst 优化器的逻辑优化过程包含两个环节：逻辑计划解析和逻辑计划优化。逻辑优化的最终目的就是要把 Unresolved Logical Plan 从次优的 Analyzed Logical Plan 最终变身为执行高效的 Optimized Logical Plan。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">22__Catalyst物理计划：你的SQL语句是怎么被优化的（下）？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4767 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#优化-spark-plan">优化 Spark Plan</a>
+          <ul>
+            <li><a href="#catalyst-都有哪些-join-策略">Catalyst 都有哪些 Join 策略？</a></li>
+            <li><a href="#joinselection-如何决定选择哪一种-join-策略">JoinSelection 如何决定选择哪一种 Join 策略？</a></li>
+          </ul>
+        </li>
+        <li><a href="#生成-physical-plan">生成 Physical Plan</a>
+          <ul>
+            <li><a href="#ensurerequirements-规则">EnsureRequirements 规则</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#每日一练">每日一练</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是吴磊。</p>
+<p>上一讲我们说了，Catalyst 优化器的逻辑优化过程包含两个环节：逻辑计划解析和逻辑计划优化。逻辑优化的最终目的就是要把 Unresolved Logical Plan 从次优的 Analyzed Logical Plan 最终变身为执行高效的 Optimized Logical Plan。</p>
+<p>但是，逻辑优化的每一步仅仅是从逻辑上表明 Spark SQL 需要“做什么”，并没有从执行层面说明具体该“怎么做”。因此，为了把逻辑计划交付执行，Catalyst 还需要把 Optimized Logical Plan 转换为物理计划。物理计划比逻辑计划更具体，它明确交代了 Spark SQL 的每一步具体该怎么执行。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/853d5907daf6835ad81ffc506ca0ce23.png" alt=""></p>
+<p>物理计划阶段</p>
+<p>今天这一讲，我们继续追随小 Q 的脚步，看看它经过 Catalyst 的物理优化阶段之后，还会发生哪些变化。</p>
+<h2 id="优化-spark-plan">优化 Spark Plan</h2>
+<p>物理阶段的优化是从逻辑优化阶段输出的 Optimized Logical Plan 开始的，因此我们先来回顾一下小 Q 的原始查询和 Optimized Logical Plan。</p>
+<p>val userFile: String = _<br>
+val usersDf = spark.read.parquet(userFile)<br>
+usersDf.printSchema<br>
+/**<br>
+root<br>
+|&ndash; userId: integer (nullable = true)<br>
+|&ndash; name: string (nullable = true)<br>
+|&ndash; age: integer (nullable = true)<br>
+|&ndash; gender: string (nullable = true)<br>
+|&ndash; email: string (nullable = true)<br>
+*/<br>
+val users = usersDf<br>
+.select(&ldquo;name&rdquo;, &ldquo;age&rdquo;, &ldquo;userId&rdquo;)<br>
+.filter($&ldquo;age&rdquo; &lt; 30)<br>
+.filter($&ldquo;gender&rdquo;.isin(&ldquo;M&rdquo;))</p>
+<p>val txFile: String = _<br>
+val txDf = spark.read.parquet(txFile)<br>
+txDf.printSchema<br>
+/**<br>
+root<br>
+|&ndash; txId: integer (nullable = true)<br>
+|&ndash; userId: integer (nullable = true)<br>
+|&ndash; price: float (nullable = true)<br>
+|&ndash; volume: integer (nullable = true)<br>
+*/</p>
+<p>val result = txDF.select(&ldquo;price&rdquo;, &ldquo;volume&rdquo;, &ldquo;userId&rdquo;)<br>
+.join(users, Seq(&ldquo;userId&rdquo;), &ldquo;inner&rdquo;)<br>
+.groupBy(col(&ldquo;name&rdquo;), col(&ldquo;age&rdquo;)).agg(sum(col(&ldquo;price&rdquo;) * col(&ldquo;volume&rdquo;)).alias(&ldquo;revenue&rdquo;))</p>
+<p>result.write.parquet(&quot;_&quot;)</p>
+<p>两表关联的查询语句经过转换之后，得到的 Optimized Logical Plan 如下图所示。注意，在逻辑计划的根节点，出现了“Join Inner”字样，Catalyst 优化器明确了这一步需要做内关联。但是，怎么做内关联，使用哪种 Join 策略来进行关联，Catalyst 并没有交代清楚。因此，逻辑计划本身不具备可操作性。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/71e090b16606c7cb9ca3aefad1982848.png" alt=""></p>
+<p>小 Q 变身：Optimized Logical Plan</p>
+<p><strong>为了让查询计划（Query Plan）变得可操作、可执行，Catalyst 的物理优化阶段（Physical Planning）可以分为两个环节：优化 Spark Plan 和生成 Physical Plan。</strong></p>
+<ol>
+<li>在优化 Spark Plan 的过程中，Catalyst 基于既定的优化策略（Strategies），把逻辑计划中的关系操作符一一映射成物理操作符，生成 Spark Plan。</li>
+<li>在生成 Physical Plan 过程中，Catalyst 再基于事先定义的 Preparation Rules，对 Spark Plan 做进一步的完善、生成可执行的 Physical Plan。</li>
+</ol>
+<p>那么问题来了，在优化 Spark Plan 的过程中，Catalyst 都有哪些既定的优化策略呢？从数量上来说，Catalyst 有 14 类优化策略，其中有 6 类和流计算有关，剩下的 8 类适用于所有的计算场景，如批处理、数据分析、机器学习和图计算，当然也包括流计算。因此，我们只需了解这 8 类优化策略。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/b54b9b404693a531537d41fcad7021a8.png" alt=""></p>
+<p>Catalyst 物理优化阶段的 14 个优化策略</p>
+<p>所有优化策略在转换方式上都大同小异，都是使用基于模式匹配的偏函数（Partial Functions），把逻辑计划中的操作符平行映射为 Spark Plan 中的物理算子。比如，BasicOperators 策略直接把 Project、Filter、Sort 等逻辑操作符平行地映射为物理操作符。其他策略的优化过程也类似，因此，在优化 Spark Plan 这一环节，咱们只要抓住一个“典型”策略，掌握它的转换过程即可。</p>
+<p>那我们该抓谁做“典型”呢？我觉得，**这个“典型”至少要满足两个标准：一，它要在我们的应用场景中非常普遍；二，它的取舍对于执行性能的影响最为关键。**以这两个标准去遴选上面的 8 类策略，我们分分钟就能锁定 JoinSelection。接下来，我们就以 JoinSelection 为例，详细讲解这一环节的优化过程。</p>
+<p>如果用一句话来概括 JoinSelection 的优化过程，就是结合多方面的信息，来决定在物理优化阶段采用哪种 Join 策略。那么问题来了，Catalyst 都有哪些 Join 策略？</p>
+<h3 id="catalyst-都有哪些-join-策略">Catalyst 都有哪些 Join 策略？</h3>
+<p>结合 Joins 的实现机制和数据的分发方式，Catalyst 在运行时总共支持 5 种 Join 策略，分别是 Broadcast Hash Join（BHJ）、Shuffle Sort Merge Join（SMJ）、Shuffle Hash Join（SHJ）、Broadcast Nested Loop Join（BNLJ）和 Shuffle Cartesian Product Join（CPJ）。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/f84c062e7e94b31c40d05ef24fad6e27.png" alt=""></p>
+<p>5 种 Join 策略及其含义</p>
+<p>通过上表中 5 种 Join 策略的含义，我们知道，它们是来自 2 种数据分发方式（广播和 Shuffle）与 3 种 Join 实现机制（Hash Joins、Sort Merge Joins 和 Nested Loop Joins）的排列组合。那么，在 JoinSelection 的优化过程中，Catalyst 会基于什么逻辑，优先选择哪种 Join 策略呢？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/c5438cdaea454b9aa43f7d8540f83ecf.png" alt=""></p>
+<p>数据分发方式与 Join 实现机制的排列组合</p>
+<h3 id="joinselection-如何决定选择哪一种-join-策略">JoinSelection 如何决定选择哪一种 Join 策略？</h3>
+<p>逻辑其实很简单，**Catalyst 总会尝试优先选择执行效率最高的策略。**具体来说，在选择 join 策略的时候，JoinSelection 会先判断当前查询是否满足 BHJ 所要求的先决条件：如果满足就立即选中 BHJ；如果不满足，就继续判断当前查询是否满足 SMJ 的先决条件。以此类推，直到最终选无可选，用 CPJ 来兜底。</p>
+<p>那么问题来了，这 5 种 Join 策略都需要满足哪些先决条件呢？换句话说，JoinSelection 做决策时都要依赖哪些信息呢？</p>
+<p>总的来说，<strong>这些信息分为两大类，第一类是“条件型”信息，用来判决 5 大 Join 策略的先决条件。第二类是“指令型”信息，也就是开发者提供的 Join Hints。</strong></p>
+<p>我们先来说“条件型”信息，它包含两种。第一种是 Join 类型，也就是是否等值、连接形式等，这种信息的来源是查询语句本身。第二种是内表尺寸，这些信息的来源就比较广泛了，可以是 Hive 表之上的 ANALYZE TABLE 语句，也可以是 Spark 对于 Parquet、ORC、CSV 等源文件的尺寸预估，甚至是来自 AQE 的动态统计信息。</p>
+<p>5 大 Join 策略对于这些信息的要求，我都整理到了下面的表格里，你可以看一看。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/6de40a0f531d5a4d0c26ffbc58df3d61.png" alt=""></p>
+<p>5 种 Join 策略的先决条件</p>
+<p>指令型信息也就是 Join Hints，它的种类非常丰富，它允许我们把个人意志凌驾于 Spark SQL 之上。比如说，如果我们对小 Q 的查询语句做了如下的调整，JoinSelection 在做 Join 策略选择的时候就会优先尊重我们的意愿，跳过 SMJ 去选择排序更低的 SHJ。具体的代码示例如下：</p>
+<p>val result = txDF.select(&ldquo;price&rdquo;, &ldquo;volume&rdquo;, &ldquo;userId&rdquo;)<br>
+.join(users.hint(&ldquo;shuffle_hash&rdquo;), Seq(&ldquo;userId&rdquo;), &ldquo;inner&rdquo;)<br>
+.groupBy(col(&ldquo;name&rdquo;), col(&ldquo;age&rdquo;)).agg(sum(col(&ldquo;price&rdquo;) *<br>
+col(&ldquo;volume&rdquo;)).alias(&ldquo;revenue&rdquo;))</p>
+<p>熟悉了 JoinSelection 选择 Join 策略的逻辑之后，我们再来看小 Q 是怎么选择的。小 Q 是典型的星型查询，也就是事实表与维度表之间的数据关联，其中维表还带过滤条件。在决定采用哪种 Join 策略的时候，JoinSelection 优先尝试判断小 Q 是否满足 BHJ 的先决条件。</p>
+<p>显然，小 Q 是等值的 Inner Join，因此表格中 BHJ 那一行的前两个条件小 Q 都满足。但是，内表 users 尺寸较大，超出了广播阈值的默认值 10MB，不满足 BHJ 的第三个条件。因此，JoinSelection 不得不忍痛割爱、放弃 BHJ 策略，只好退而求其次，沿着表格继续向下，尝试判断小 Q 是否满足 SMJ 的先决条件。</p>
+<p>SMJ 的先决条件很宽松，查询语句只要是等值 Join 就可以。小 Q 自然是满足这个条件的，因此 JoinSelection 最终给小 Q 选定的 Join 策略就是 SMJ。下图是小 Q 优化过后的 Spark Plan，从中我们可以看到，查询计划的根节点正是 SMJ。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/dc356639983cf4c269d127a0b5e40bdf.png" alt=""></p>
+<p>小 Q 再变身：Spark Plan</p>
+<p>现在我们知道了 Catalyst 都有哪些 Join 策略，JoinSelection 如何对不同的 Join 策略做选择。小 Q 也从 Optimized Logical Plan 摇身一变，转换成了 Spark Plan，也明确了在运行时采用 SMJ 来做关联计算。不过，即使小 Q 在 Spark Plan 中已经明确了每一步该“怎么做”，但是，Spark 还是做不到把这样的查询计划转化成可执行的分布式任务，这又是为什么呢？</p>
+<h2 id="生成-physical-plan">生成 Physical Plan</h2>
+<p>原来，Shuffle Sort Merge Join 的计算需要两个先决条件：Shuffle 和排序。而 Spark Plan 中并没有明确指定以哪个字段为基准进行 Shuffle，以及按照哪个字段去做排序。</p>
+<p>因此，Catalyst 需要对 Spark Plan 做进一步的转换，生成可操作、可执行的 Physical Plan。具体怎么做呢？我们结合 Catalyst 物理优化阶段的流程图来详细讲讲。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/853d5907daf6835ad81ffc506ca0ce23.png" alt=""></p>
+<p>物理计划阶段</p>
+<p>从上图中我们可以看到，从 Spark Plan 到 Physical Plan 的转换，需要几组叫做 Preparation Rules 的规则。这些规则坚守最后一班岗，负责生成 Physical Plan。那么，这些规则都是什么，它们都做了哪些事情呢？我们一起来看一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/b3b95063e4c1c3a79c9bd999a4b66b51.png" alt=""></p>
+<p>Preparation Rules</p>
+<p>Preparation Rules 有 6 组规则，这些规则作用到 Spark Plan 之上就会生成 Physical Plan，而 Physical Plan 最终会由 Tungsten 转化为用于计算 RDD 的分布式任务。</p>
+<p>小 Q 的查询语句很典型，也很简单，并不涉及子查询，更不存在 Python UDF。因此，在小 Q 的例子中，我们并不会用到子查询、数据复用或是 Python UDF 之类的规则，只有 EnsureRequirements 和 CollapseCodegenStages 这两组规则会用到小 Q 的 Physical Plan 转化中。</p>
+<p>实际上，它们也是结构化查询中最常见、最常用的两组规则。今天，我们先来重点说说 EnsureRequirements 规则的含义和作用。至于 CollapseCodegenStages 规则，它实际上就是 Tungsten 的 WSCG 功能，我们下一讲再详细说。</p>
+<h3 id="ensurerequirements-规则">EnsureRequirements 规则</h3>
+<p>EnsureRequirements 翻译过来就是“确保满足前提条件”，这是什么意思呢？对于执行计划中的每一个操作符节点，都有 4 个属性用来分别描述数据输入和输出的分布状态。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/7ffd07ef5be4250f80a21208942b2712.png" alt=""></p>
+<p>描述输入、输出要求的 4 个属性</p>
+<p>EnsureRequirements 规则要求，子节点的输出数据要满足父节点的输入要求。这又怎么理解呢？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/82b1cd5550995d58784843fcf1a25a1e.png" alt=""></p>
+<p>Project 没有满足 SortMergeJoin 的 Requirements</p>
+<p>我们以小 Q 的 Spark Plan 树形结构图为例，可以看到：图中左右两个分支分别表示扫描和处理 users 表和 transactions 表。在树的最顶端，根节点 SortMergeJoin 有两个 Project 子节点，它们分别用来表示 users 表和 transactions 表上的投影数据。这两个 Project 的 outputPartitioning 属性和 outputOrdering 属性分别是 Unknow 和 None。因此，它们输出的数据没有按照任何列进行 Shuffle 或是排序。</p>
+<p>但是，SortMergeJoin 对于输入数据的要求很明确：按照 userId 分成 200 个分区且排好序，而这两个 Project 子节点的输出显然并没有满足父节点 SortMergeJoin 的要求。这个时候，<strong>EnsureRequirements 规则就要介入了，它通过添加必要的操作符，如 Shuffle 和排序，来保证 SortMergeJoin 节点对于输入数据的要求一定要得到满足</strong>，如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/712241227bb64038ad578b957a9f1631.png" alt=""></p>
+<p>EnsureRequirements 规则添加 Exchange 和 Sort 操作</p>
+<p>在两个 Project 节点之后，EnsureRequirements 规则分别添加了 Exchange 和 Sort 节点。其中 Exchange 节点代表 Shuffle 操作，用来满足 SortMergeJoin 对于数据分布的要求；Sort 表示排序，用于满足 SortMergeJoin 对于数据有序的要求。</p>
+<p>添加了必需的节点之后，小 Q 的 Physical Plan 已经相当具体了。这个时候，Spark 可以通过调用 Physical Plan 的 doExecute 方法，把结构化查询的计算结果，转换成 RDD[InternalRow]，这里的 InternalRow，就是 Tungsten 设计的定制化二进制数据结构，这个结构我们在内存视角（一）有过详细的讲解，你可以翻回去看看。通过调用 RDD[InternalRow] 之上的 Action 算子，Spark 就可以触发 Physical Plan 从头至尾依序执行。</p>
+<p>最后，我们再来看看小 Q 又发生了哪些变化。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/109a48391c7b496ee279814b5d1c3bbc.png" alt=""></p>
+<p>小 Q 再变身：Physical Plan</p>
+<p>首先，我们看到 EnsureRequirements 规则在两个分支的顶端分别添加了 Exchange 和 Sort 操作，来满足根节点 SortMergeJoin 的计算需要。其次，如果你仔细观察的话，会发现 Physical Plan 中多了很多星号“<code>*</code>”，这些星号的后面还带着括号和数字，如图中的“<code>*（3）</code>”、“<code>*（1）</code>”。这种星号“<code>*</code>”标记表示的就是 WSCG，后面的数字代表 Stage 编号。因此，括号中数字相同的操，最终都会被捏合成一份“手写代码”，也就是我们下一讲要说的 Tungsten 的 WSCG。</p>
+<p>至此，小 Q 从一个不考虑执行效率的“叛逆少年”，就成长为了一名执行高效的“专业人士”，Catalyst 这位人生导师在其中的作用功不可没。</p>
+<h2 id="小结">小结</h2>
+<p>为了把逻辑计划转换为可以交付执行的物理计划，Spark SQL 物理优化阶段包含两个环节：优化 Spark Plan 和生成 Physical Plan。</p>
+<p>在优化 Spark Plan 这个环节，Catalyst 基于既定的策略把逻辑计划平行映射为 Spark Plan。策略很多，我们重点掌握 JoinSelection 策略就可以，它被用来在运行时选择最佳的 Join 策略。JoinSelection 按照 BHJ &gt; SMJ &gt; SHJ &gt; BNLJ &gt; CPJ 的顺序，依次判断查询语句是否满足每一种 Join 策略的先决条件进行“择优录取”。</p>
+<p>如果开发者不满足于 JoinSelection 默认的选择顺序，也就是 BHJ &gt; SMJ &gt; SHJ &gt; BNLJ &gt; CPJ，还可以通过在 SQL 或是 DSL 语句中引入 Join hints，来明确地指定 Join 策略，从而把自己的意愿凌驾于 Catalyst 之上。不过，需要我们注意的是，要想让指定的 Join 策略在运行时生效，查询语句也必须要满足其先决条件才行。</p>
+<p>在生成 Physical Plan 这个环节，Catalyst 基于既定的几组 Preparation Rules，把优化过后的 Spark Plan 转换成可以交付执行的物理计划，也就是 Physical Plan。在这些既定的 Preparation Rules 当中，你需要重点掌握 EnsureRequirements 规则。</p>
+<p>EnsureRequirements 用来确保每一个操作符的输入条件都能够得到满足，在必要的时候，会把必需的操作符强行插入到 Physical Plan 中。比如对于 Shuffle Sort Merge Join 来说，这个操作符对于子节点的数据分布和顺序都是有明确要求的，因此，在子节点之上，EnsureRequirements 会引入新的操作符如 Exchange 和 Sort。</p>
+<h2 id="每日一练">每日一练</h2>
+<p>3 种 Join 实现方式和 2 种网络分发模式，明明应该有 6 种 Join 策略，为什么 Catalyst 没有支持 Broadcast Sort Merge Join 策略？</p>
+<p>期待在留言区看到你的思考和答案，我们下一讲见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Spark性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/22__%E8%A7%86%E9%A2%91%E4%BB%8E%E4%B8%80%E4%B8%AA%E5%AE%89%E5%85%A8%E6%BC%8F%E6%B4%9E%E8%AF%B4%E8%B5%B7%E6%8E%A2%E5%AF%BBapi%E6%80%A7%E8%83%BD%E5%92%8C%E5%AE%89%E5%85%A8%E7%9A%84%E5%B9%B3%E8%A1%A1/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">22__[视频]从一个安全漏洞说起，探寻API性能和安全的平衡</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B5%8F%E8%A7%88%E5%99%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/22__dom%E6%A0%91javascript%E6%98%AF%E5%A6%82%E4%BD%95%E5%BD%B1%E5%93%8Ddom%E6%A0%91%E6%9E%84%E5%BB%BA%E7%9A%84/">
+            <span class="next-text nav-default">22__DOM树：JavaScript是如何影响DOM树构建的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

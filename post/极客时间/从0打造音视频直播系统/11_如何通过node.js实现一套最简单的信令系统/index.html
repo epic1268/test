@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>11_如何通过Node.js实现一套最简单的信令系统？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="通过前面几篇文章的讲解，我想现在你应该已经对 WebRTC 有了一个清楚的认知了。接下来的章节咱们就使用 WebRTC 逐步实现一套真实可用的 1 对 1 实时直播系统吧。
+WebRTC 1.0 规范对 WebRTC 要实现的功能、API 等相关信息做了大量的约束，比如规范中定义了如何采集音视频数据、如何录制以及如何传输等。甚至更细的，还定义了都有哪些 API，以及这些 API 的作用是什么。但这些约束只针对于客户端，并没有对服务端做任何限制。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/11_%E5%A6%82%E4%BD%95%E9%80%9A%E8%BF%87node.js%E5%AE%9E%E7%8E%B0%E4%B8%80%E5%A5%97%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84%E4%BF%A1%E4%BB%A4%E7%B3%BB%E7%BB%9F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/11_%E5%A6%82%E4%BD%95%E9%80%9A%E8%BF%87node.js%E5%AE%9E%E7%8E%B0%E4%B8%80%E5%A5%97%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84%E4%BF%A1%E4%BB%A4%E7%B3%BB%E7%BB%9F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="11_如何通过Node.js实现一套最简单的信令系统？">
+  <meta property="og:description" content="通过前面几篇文章的讲解，我想现在你应该已经对 WebRTC 有了一个清楚的认知了。接下来的章节咱们就使用 WebRTC 逐步实现一套真实可用的 1 对 1 实时直播系统吧。
+WebRTC 1.0 规范对 WebRTC 要实现的功能、API 等相关信息做了大量的约束，比如规范中定义了如何采集音视频数据、如何录制以及如何传输等。甚至更细的，还定义了都有哪些 API，以及这些 API 的作用是什么。但这些约束只针对于客户端，并没有对服务端做任何限制。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="从0打造音视频直播系统">
+
+  <meta itemprop="name" content="11_如何通过Node.js实现一套最简单的信令系统？">
+  <meta itemprop="description" content="通过前面几篇文章的讲解，我想现在你应该已经对 WebRTC 有了一个清楚的认知了。接下来的章节咱们就使用 WebRTC 逐步实现一套真实可用的 1 对 1 实时直播系统吧。
+WebRTC 1.0 规范对 WebRTC 要实现的功能、API 等相关信息做了大量的约束，比如规范中定义了如何采集音视频数据、如何录制以及如何传输等。甚至更细的，还定义了都有哪些 API，以及这些 API 的作用是什么。但这些约束只针对于客户端，并没有对服务端做任何限制。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5414">
+  <meta itemprop="keywords" content="从0打造音视频直播系统">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="11_如何通过Node.js实现一套最简单的信令系统？">
+  <meta name="twitter:description" content="通过前面几篇文章的讲解，我想现在你应该已经对 WebRTC 有了一个清楚的认知了。接下来的章节咱们就使用 WebRTC 逐步实现一套真实可用的 1 对 1 实时直播系统吧。
+WebRTC 1.0 规范对 WebRTC 要实现的功能、API 等相关信息做了大量的约束，比如规范中定义了如何采集音视频数据、如何录制以及如何传输等。甚至更细的，还定义了都有哪些 API，以及这些 API 的作用是什么。但这些约束只针对于客户端，并没有对服务端做任何限制。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">11_如何通过Node.js实现一套最简单的信令系统？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5414 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#在-webrtc-处理过程中的位置">在 WebRTC 处理过程中的位置</a></li>
+        <li><a href="#webrtc-信令服务器的作用">WebRTC 信令服务器的作用</a></li>
+        <li><a href="#信令服务器的实现">信令服务器的实现</a>
+          <ul>
+            <li><a href="#1-为什么选择-nodejs">1. 为什么选择 Node.js？</a></li>
+            <li><a href="#2-nodejs-的基本工作原理">2. Node.js 的基本工作原理</a></li>
+            <li><a href="#3-安装与使用-nodejs">3. 安装与使用 Node.js</a></li>
+            <li><a href="#4-socketio-的使用">4. Socket.io 的使用</a></li>
+            <li><a href="#5-实现信令服务器">5. 实现信令服务器</a></li>
+          </ul>
+        </li>
+        <li><a href="#启动服务器并测试">启动服务器并测试</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考时间">思考时间</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>通过前面几篇文章的讲解，我想现在你应该已经对 WebRTC 有了一个清楚的认知了。接下来的章节咱们就使用 WebRTC 逐步实现一套真实可用的 1 对 1 实时直播系统吧。</p>
+<p>WebRTC 1.0 规范对 WebRTC 要实现的功能、API 等相关信息做了大量的约束，比如规范中定义了如何采集音视频数据、如何录制以及如何传输等。甚至更细的，还定义了都有哪些 API，以及这些 API 的作用是什么。但这些约束只针对于客户端，并没有对服务端做任何限制。</p>
+<p>那 WebRTC 规范中为什么不对服务器也做约束呢？其实，这样做有以下三点好处。</p>
+<ul>
+<li><strong>第一点，可以集中精力将 WebRTC 库做好</strong>。WebRTC 的愿景是使浏览器能够方便地处理音视频相关的应用，规范中不限制服务端的事儿，可以使它更聚焦。</li>
+<li><strong>第二点，让用户更好地对接业务</strong>。你也清楚，信令服务器一般都与公司的业务有着密切的关系，每家公司的业务都各有特色，让它们按照自已的业务去实现信令服务器会更符合它们的要求。</li>
+<li><strong>第三点，能得到更多公司的支持</strong>。WebRTC 扩展了浏览器的基础设施及能力，而不涉及到具体的业务或产品，这样会更容易得到像苹果、微软这种大公司的支持，否则这些大公司之间就会产生抗衡。</li>
+</ul>
+<p>当然，这样做也带来了一些坏处，最明显的一个就是增加了学习 WebRTC 的成本，因为你在学习 WebRTC 的时候，必须<strong>自己去实现信令服务器</strong>，否则你就没办法让 WebRTC 运转起来，这确实增加了不少学习成本。</p>
+<p>不过有了本专栏，你就不用再担心这个问题了。接下来，我就向你讲解一下，<strong>如何实现一套最简单的 WebRTC 信令服务系统</strong>。有了这套信令服务系统，WebRTC 就能运转起来，这样你就能真正地体验到 WebRTC 的强大之处了。</p>
+<h2 id="在-webrtc-处理过程中的位置">在 WebRTC 处理过程中的位置</h2>
+<p>在开始讲解 WebRTC 信令服务器之前，我们先来看一下本文在 WebRTC 处理过程中的位置。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/71bcd2babf8c99cdc1a85d455e15753b.png" alt=""></p>
+<p>WebRTC 处理过程图</p>
+<p>通过上面这幅图，你可以清楚地知道本文所讲的主要内容就是红色方框中的<strong>信令服务器</strong>部分。</p>
+<h2 id="webrtc-信令服务器的作用">WebRTC 信令服务器的作用</h2>
+<p>你若想要实现 WebRTC 信令服务器，首先就要知道它在 WebRTC 1 对 1 通信中所起的作用。实际上它的功能是蛮简单的，就是<strong>进行信令的交换，但作用却十分关键。在通信双方彼此连接、传输媒体数据之前，它们要通过信令服务器交换一些信息，如媒体协商</strong>。</p>
+<p>举个例子，假设 A 与 B 要进行音视频通信，那么 A 要知道 B 已经上线了，同样，B 也要知道 A 在等着与它通信呢。也就是说，<strong>只有双方都知道彼此存在，才能由一方向另一方发起音视频通信请求，并最终实现音视频通话</strong>。比如我们在<a href="./111675.md">《08 | 有话好商量，论媒体协商》</a>一文中讲的媒体信息协商的过程就是这样一个非常典型的案例，双方的 SDP 信息生成后，要通过信令服务器进行交换，从而达到媒体协商的目的。</p>
+<p>那在 WebRTC 信令服务器上要实现哪些功能，才能实现上述结果呢？我想至少要实现下面两个功能：</p>
+<ol>
+<li><strong>房间管理</strong>。即每个用户都要加入到一个具体的房间里，比如两个用户 A 与 B 要进行通话，那么它们必须加入到同一个房间里。</li>
+<li><strong>信令的交换</strong>。即在同一个房间里的用户之间可以相互发送信令。</li>
+</ol>
+<h2 id="信令服务器的实现">信令服务器的实现</h2>
+<p>了解了 WebRTC 信令服务器的作用，并且还知道了信令服务器要实现的功能，接下来我们就操练起来，看看如何实现信令服务器吧！我将从下面 5 个方面来向你逐步讲解如何实现一个信令服务器。</p>
+<h3 id="1-为什么选择-nodejs">1. 为什么选择 Node.js？</h3>
+<p>要实现信令服务器，你可以使用 C/C++、Java 等语言一行一行从头开始编写代码，也可以以现有的、成熟的服务器为基础，做二次开发。具体使用哪种方式来实现，关键看你的服务器要实现什么功能，以及使用什么传输协议等信息来决策。</p>
+<p>以我们要实现的信令服务器为例，因它只需要传输几个简单的信令，而这些信令既可以使用 TCP、HTTP/HTTPS 传输，也可以用 WebSocket/WSS 协议传输，所以根据它使用的传输协议，你就可以很容易地想到，通过 Web 服务器（如 Nginx、Node.js）来构建我们的信令服务器是最理想、最省时的、且是最优的方案。</p>
+<p>你可以根据自己的喜好选择不同的 Web 服务器（如 Apache、Nginx 或 Node.js）来实现，而今天我们选择的是 Node.js，所以接下来我们将要讲解的是<strong>如何使用 Node.js 来搭建信令服务器</strong>。</p>
+<p>实际上，Apache、Nginx 和 Node.js 都是非常优秀、且成熟的 Web 服务器，其中 Nginx 可以说是性能最好的 Web 服务器了，但<strong>从未来的发展角度来说，Node.js 则会更有优势</strong>。</p>
+<p><strong>Node.js 的最大优点是可以使用 JavaScript 语言开发服务器程序</strong>。这样使得大量的前端同学可以无缝转到服务器开发，甚至有可能前后端使用同一套代码实现。对于使用 JavaScript 语言实现全栈开发这一点来说，我想无论是对于个人还是对于企业都是极大的诱惑。更可贵的是 <strong>Node.js 的生态链非常完整</strong>，有各种各样的功能库，你可以根据自己的需要通过安装工具（如 NPM）快速将它们引入到你的项目中，这极大地提高了 JavaScript 研发同学的开发效率。</p>
+<p>Node.js 的核心是 V8（JavaScript）引擎，Node.js 通过它解析 JavaScript 脚本来达到控制服务器的目的。对于 JavaScript 同学来说，Node.js 的出现是革命性的，它不仅让 JavaScript 同学成为了全栈开发工程师，而且还让 JavaScript 开发同学的幸福指数飙升，真正地感受到了 JavaScript 无所不能的能力。对于我这样的开发“老鸟”来说，10 年前还不敢想象通过 JavaScript 来写服务器程序呢，现在它却已成为现实！</p>
+<p>当然，Node.js 不仅可以让你用 JavaScript 控制服务器，它还为你留了拓展接口，这些拓展接口甚至可以让你使用 C/C++ 为它编写模块，这样 Node.js 的功能就更加强大了。</p>
+<h3 id="2-nodejs-的基本工作原理">2. Node.js 的基本工作原理</h3>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/7a71bf49e74b61876074502f504f039f.png" alt=""></p>
+<p>Node.js 工作原理图</p>
+<p>Node.js 的工作原理如上图所示，其核心是 V8 引擎。通过该引擎，可以让 JavaScript 调用 C/C++ 方法或对象。反过来讲，通过它也可以让 C/C++ 访问 JavaScript 方法和变量。</p>
+<p>Node.js 首先将 JavaScript 写好的应用程序交给 V8 引擎进行解析，V8 理解应用程序的语义后，再调用 Node.js 底层的 C/C++ API 将服务启动起来。所以 <strong>Node.js 的强大就在于 JavaScript 与 C/C++ 可以相互调用，从而达到使其能力可以无限扩展的效果</strong>。</p>
+<p>我们以 Node.js 开发一个 HTTP 服务为例，Node.js 打开侦听的服务端口后，底层会调用 libuv 处理该端口的所有 HTTP 请求。其网络事件处理的过程就如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/b678ceeead6b63f7408cde3f9388face.png" alt=""></p>
+<p>Node.js 事件处理模型图</p>
+<p>当有网络请求过来时，首先会被插入到一个事件处理队列中。libuv 会监控该事件队列，当发现有事件时，先对请求做判断，如果是简单的请求，就直接返回响应了；如果是复杂请求，则从线程池中取一个线程进行异步处理。</p>
+<p>线程处理完后，有两种可能：一种是已经处理完成，则向用户发送响应；另一种情况是还需要进一步处理，则再生成一个事件插入到事件队列中等待处理。事件处理就这样循环往复下去，永不停歇。</p>
+<h3 id="3-安装与使用-nodejs">3. 安装与使用 Node.js</h3>
+<p>了解了 Node.js 的基本原理后，接下来我们还是要脚踏实地来看看具体如何安装、使用 Node.js。</p>
+<p><strong>（1）安装 Node.js</strong></p>
+<p>不同环境下安装 Node.js 的方法也不一样，不过都很简单。</p>
+<p>在 Ubuntu 系统下执行：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apt install nodejs
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>或在 Mac 系统下执行：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">brew install nodejs
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过以上步骤，Node.js 很快就安装好了（我这里安装的 Node.js 版本为：v8.10.0）。</p>
+<p><strong>（2）安装 NPM</strong></p>
+<p>除了安装 Node.js 之外，还要安装 NPM（Node Package Manager），也就是 Node.js 的包管理器，或叫包安装工具。它与 Ubuntu 下的 APT（Advanced Package Tool）命令或 Mac 系统下的 BREW 命令类似，是专门用来管理各种依赖库的。</p>
+<p>以 Linux 为例，在 APT 没有出现之前，在 Linux 上安装软件是件特别麻烦的事儿，比如要安装一个编辑器，其基本步骤有如下:</p>
+<ul>
+<li>先将这个工具（编辑器）的源码下载下来；</li>
+<li>执行./configure 生成 Makefile 文件；</li>
+<li>执行 make 命令对源码进行编译；</li>
+<li>如果编译成功，执行 <code>make install</code> 将其安装到指定目录下；</li>
+<li>如果编译过程中发现还需要其他库，则要对依赖库执行前面的 4 步，也就是先将依赖库安装好，然后再来安装该工具。</li>
+</ul>
+<p>由这你可以看出，以前在 Linux 下安装个程序或工具是多么麻烦。</p>
+<p>不过 Linux 有了 APT 工具后，一切都变得简单了。你只要执行<code>apt install xxx</code>一条命令就好了，它会帮你完成上面的一堆操作。</p>
+<p>对于 Node.js 的安装包也是如此，<strong>NPM 就是相当于 Linux 下的 APT 工具，它的出现大大提高了 JavaScript 开发人员的工作效率</strong>。</p>
+<p>下面我们就来看一下如何安装 NPM 工具，实际上，NPM 的安装就像前面安装 Node.js 一样简单。</p>
+<p>在 Ubuntu 下执行：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apt install npm
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>或在 Mac 下执行：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">brew install npm
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="4-socketio-的使用">4. Socket.io 的使用</h3>
+<p>除了 Node.js 外，我们最终还要借助 Socket.io 来实现 WebRTC 信令服务器。Socket.io 特别适合用来开发 WebRTC 的信令服务器，通过它来构建信令服务器大大简化了信令服务器的实现复杂度，这主要是因为它内置了<strong>房间</strong>的概念。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/73880b5b5bbe7abf4b5870135b0c8cf5.png" alt=""></p>
+<p>Socket.io 与 Node.js 关系图</p>
+<p>上图是 Socket.io 与 Node.js 配合使用的逻辑关系图，其逻辑非常简单。Socket.io 分为服务端和客户端两部分。服务端由 Node.js 加载后侦听某个服务端口，客户端要想与服务端相连，首先要加载 Socket.io 的客户端库，然后调用 <code>io.connect();</code>即可与服务端连接上。</p>
+<p>这里需要特别强调的是 Socket.io 消息的发送与接收。Socket.io 有很多种发送消息的方式，其中最常见的有下面几种，也是你必须要掌握的。</p>
+<ul>
+<li>给本次连接发消息</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	socket.emit()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>给某个房间内所有人发消息</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	io.in(room).emit()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>除本连接外，给某个房间内所有人发消息</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	socket.to(room).emit()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>除本连接外，给所有人发消息</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	socket.broadcast.emit()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你也可以看看下面的例子，其中 S 表示服务器，C 表示客户端，它们是发送消息与接收消息的比对。</p>
+<ul>
+<li>发送 command 命令</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	S: socket.emit(&#39;cmd’);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	C: socket.on(&#39;cmd&#39;,function(){...});
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>发送了一个 command 命令，带 data 数据</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	S: socket.emit(&#39;action&#39;, data);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	C: socket.on(&#39;action&#39;,function(data){...});
+</span></span></code></pre></td></tr></table>
+</div>
+</div><ul>
+<li>发送了 command 命令，还有两个数据</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	S: socket.emit(action,arg1,arg2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	C: socket.on(&#39;action&#39;,function(arg1,arg2){...});
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>有了以上这些知识，你就可以实现信令数据通讯了。</p>
+<h3 id="5-实现信令服务器">5. 实现信令服务器</h3>
+<p>接下来我们来看一下，如何通过 Node.js 下的 Socket.io 来构建一个服务器。</p>
+<p><strong>首先是客户端代码，也就是在浏览器里执行的代码</strong>。以下是 index.html 代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">&lt;!DOCTYPE html&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">&lt;html&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;head&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &lt;title&gt;WebRTC client&lt;/title&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;/head&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;body&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &lt;script src=&#39;/socket.io/socket.io.js&#39;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &lt;script src=&#39;js/client.js&#39;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;/body&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">&lt;/html&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该代码十分简单，就是在 body 里引入了两段 JavaScript 代码。其中，socket.io.js 是用来与服务端建立 Socket 连接的；client.js 的作用是做一些业务逻辑，并最终通过 Socket 与服务端通讯。</p>
+<p>下面是 client.js 的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">isInitiator</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">room</span> <span class="o">=</span> <span class="n">prompt</span><span class="p">(</span><span class="s1">&#39;Enter room name:&#39;</span><span class="p">);</span> <span class="o">//</span> <span class="err">弹出一个输入窗口</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">socket</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">connect</span><span class="p">();</span> <span class="o">//</span> <span class="err">与服务端建立</span> <span class="n">socket</span> <span class="err">连接</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="p">(</span><span class="n">room</span> <span class="o">!==</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="p">{</span> <span class="o">//</span> <span class="err">如果房间不空，则发送</span> <span class="s2">&#34;create or join&#34;</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Joining room &#39;</span> <span class="o">+</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;create or join&#39;</span><span class="p">,</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;full&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">room</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> <span class="o">//</span> <span class="err">如果从服务端收到</span> <span class="s2">&#34;full&#34;</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Room &#39;</span> <span class="o">+</span> <span class="n">room</span> <span class="o">+</span> <span class="s1">&#39; is full&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;empty&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">room</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> <span class="o">//</span> <span class="err">如果从服务端收到</span> <span class="s2">&#34;empty&#34;</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">isInitiator</span> <span class="o">=</span> <span class="bp">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Room &#39;</span> <span class="o">+</span> <span class="n">room</span> <span class="o">+</span> <span class="s1">&#39; is empty&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;join&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">room</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> <span class="o">//</span> <span class="err">如果从服务端收到</span> <span class="err">“</span><span class="n">join</span><span class="s2">&#34; 消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Making request to join room &#39;</span> <span class="o">+</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;You are the initiator!&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">array</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">});</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在该代码中，首先弹出一个输入框，要求用户写入要加入的房间；然后，通过 io.connect() 建立与服务端的连接；最后再根据 socket 返回的消息做不同的处理，比如收到房间满或空的消息等。</p>
+<p><strong>以上是客户端（也就是在浏览器）中执行的代码。下面我们来看一下服务端的处理逻辑。</strong></p>
+<p>服务器端代码，server.js 是这样的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="k">static</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;node-static&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">http</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">file</span> <span class="o">=</span> <span class="n">new</span><span class="p">(</span><span class="k">static</span><span class="o">.</span><span class="n">Server</span><span class="p">)();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">app</span> <span class="o">=</span> <span class="n">http</span><span class="o">.</span><span class="n">createServer</span><span class="p">(</span><span class="n">function</span> <span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">res</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">file</span><span class="o">.</span><span class="n">serve</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">res</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">})</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">2013</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">io</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;socket.io&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">app</span><span class="p">);</span> <span class="o">//</span> <span class="err">侦听</span> <span class="mi">2013</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">io</span><span class="o">.</span><span class="n">sockets</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;connection&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">socket</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   <span class="o">//</span> <span class="n">convenience</span> <span class="n">function</span> <span class="n">to</span> <span class="nb">log</span> <span class="n">server</span> <span class="n">messages</span> <span class="n">to</span> <span class="n">the</span> <span class="n">client</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">function</span> <span class="nb">log</span><span class="p">(){</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">array</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&gt;&gt;&gt; Message from server: &#39;</span><span class="p">];</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">for</span> <span class="p">(</span><span class="k">var</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">arguments</span><span class="o">.</span><span class="n">length</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">array</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">arguments</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">,</span> <span class="n">array</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> <span class="o">//</span> <span class="err">收到</span> <span class="n">message</span> <span class="err">时，进行广播</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="nb">log</span><span class="p">(</span><span class="s1">&#39;Got message:&#39;</span><span class="p">,</span> <span class="n">message</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="k">for</span> <span class="n">a</span> <span class="n">real</span> <span class="n">app</span><span class="p">,</span> <span class="n">would</span> <span class="n">be</span> <span class="n">room</span> <span class="n">only</span> <span class="p">(</span><span class="ow">not</span> <span class="n">broadcast</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">socket</span><span class="o">.</span><span class="n">broadcast</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="n">message</span><span class="p">);</span> <span class="o">//</span> <span class="err">在真实的应用中，应该只在房间内广播</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   <span class="n">socket</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s1">&#39;create or join&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">room</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span> <span class="o">//</span> <span class="err">收到</span> <span class="err">“</span><span class="n">create</span> <span class="ow">or</span> <span class="n">join</span><span class="err">”</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	<span class="k">var</span> <span class="n">clientsInRoom</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">sockets</span><span class="o">.</span><span class="n">adapter</span><span class="o">.</span><span class="n">rooms</span><span class="p">[</span><span class="n">room</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">var</span> <span class="n">numClients</span> <span class="o">=</span> <span class="n">clientsInRoom</span> <span class="err">?</span> <span class="ne">Object</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">clientsInRoom</span><span class="o">.</span><span class="n">sockets</span><span class="p">)</span><span class="o">.</span><span class="n">length</span> <span class="p">:</span> <span class="mi">0</span><span class="p">;</span> <span class="o">//</span> <span class="err">房间里的人数</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="nb">log</span><span class="p">(</span><span class="s1">&#39;Room &#39;</span> <span class="o">+</span> <span class="n">room</span> <span class="o">+</span> <span class="s1">&#39; has &#39;</span> <span class="o">+</span> <span class="n">numClients</span> <span class="o">+</span> <span class="s1">&#39; client(s)&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="nb">log</span><span class="p">(</span><span class="s1">&#39;Request to create or join room &#39;</span> <span class="o">+</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="p">(</span><span class="n">numClients</span> <span class="o">===</span> <span class="mi">0</span><span class="p">){</span> <span class="o">//</span> <span class="err">如果房间里没人</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;created&#39;</span><span class="p">,</span> <span class="n">room</span><span class="p">);</span> <span class="o">//</span> <span class="err">发送</span> <span class="s2">&#34;created&#34;</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">numClients</span> <span class="o">===</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="o">//</span> <span class="err">如果房间里有一个人</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	  <span class="n">io</span><span class="o">.</span><span class="n">sockets</span><span class="o">.</span><span class="ow">in</span><span class="p">(</span><span class="n">room</span><span class="p">)</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;join&#39;</span><span class="p">,</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;joined&#39;</span><span class="p">,</span> <span class="n">room</span><span class="p">);</span> <span class="o">//</span> <span class="err">发送</span> <span class="err">“</span><span class="n">joined</span><span class="err">”消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="o">//</span> <span class="nb">max</span> <span class="n">two</span> <span class="n">clients</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;full&#39;</span><span class="p">,</span> <span class="n">room</span><span class="p">);</span> <span class="o">//</span> <span class="err">发送</span> <span class="s2">&#34;full&#34;</span> <span class="err">消息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">socket</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;emit(): client &#39;</span> <span class="o">+</span> <span class="n">socket</span><span class="o">.</span><span class="n">id</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="s1">&#39; joined room &#39;</span> <span class="o">+</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">socket</span><span class="o">.</span><span class="n">broadcast</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;broadcast(): client &#39;</span> <span class="o">+</span> <span class="n">socket</span><span class="o">.</span><span class="n">id</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="s1">&#39; joined room &#39;</span> <span class="o">+</span> <span class="n">room</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   <span class="p">});</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="p">});</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该段代码中，在服务端引入了 node-static 库，使服务器具有发布静态文件的功能。服务器具有此功能后，当客户端（浏览器）向服务端发起请求时，服务器通过该模块获得客户端（浏览器）运行的代码，也就是上面我们讲到的 index.html 和 client.js，下发给客户端（浏览器）。</p>
+<p>服务端侦听 2013 这个端口，对不同的消息做相应的处理：</p>
+<ul>
+<li>服务器收到 message 消息时，它会直接进行广播，这样所有连接到该服务器的客户端都会收到广播的消息。</li>
+<li>服务端收到“create or join”消息时，它会对房间里的人数进行统计，如果房间里没有人，则发送“created”消息；如果房间里有一个人，发送“join”消息和“joined”消息；如果超过两个人，则发送“full”消息。</li>
+</ul>
+<p>要运行该程序，需要使用 NPM 安装 socket.io 和<a href="./node-static.md">node-static</a>，安装方法如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">npm install socket.io
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">npm install node-static
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="启动服务器并测试">启动服务器并测试</h2>
+<p>通过上面的步骤，你就使用“Socket.io + Node.js”实现了一个信令服务器。现在你还可以通过下面的命令将服务启动起来了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">node server.js
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果你是在本机上搭建的服务，则可以在浏览器中输入“localhost:2013”，然后在浏览器中新建一个 tab，在里边再次输入“localhost:2013”。这时，你就可以通过浏览器的控制台去看看发生了什么吧！</p>
+<p>最后，再说一个快捷键小技巧吧，在 Chrome 下，你可以使用 Command-Option-J 或 Ctrl-Shift-J 的 DevTools 快速访问控制台。</p>
+<h2 id="小结">小结</h2>
+<p>在本文中，我们介绍了 Node.js 的工作原理、Node.js 的安装与布署，以及如何使用“Sokcet.io + Node.js”实现 WebRTC 信令消息服务器。Socket.io 由于有房间的概念，所以与 WebRTC 非常匹配，因此，用它开发 WebRTC 信令服务器就会大大地减少工作量。</p>
+<p>另外，本文中的例子虽说很简单，但在后面的文章中我会以这个例子为基础，在其上面不断增加一些功能，这样最终你就会看到一个完整的 Demo 程序。所以你现在还是要学习好这每一个知识点，打好基础，积跬步才能至千里。</p>
+<h2 id="思考时间">思考时间</h2>
+<p>文中所讲的 JavaScript 代码需要运行在两个不同的 V8 引擎上，你知道它们的对应关系吗？</p>
+<p>欢迎在留言区与我分享你的想法，也欢迎你在留言区记录你的思考过程。感谢阅读，如果你觉得这篇文章对你有帮助的话，也欢迎把它分享给更多的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/b76671e85154bd22630b3e9c53a64d98.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/">从0打造音视频直播系统</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%88%90%E4%B8%BAai%E4%BA%A7%E5%93%81%E7%BB%8F%E7%90%86/11_%E9%80%BB%E8%BE%91%E5%9B%9E%E5%BD%92%E5%A6%82%E4%BD%95%E9%A2%84%E6%B5%8B%E7%94%A8%E6%88%B7%E6%98%AF%E5%90%A6%E4%BC%9A%E8%B4%AD%E4%B9%B0%E5%95%86%E5%93%81/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">11_逻辑回归：如何预测用户是否会购买商品？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A8%8B%E5%BA%8F%E5%91%98%E8%BF%9B%E9%98%B6%E6%94%BB%E7%95%A5/11_%E4%B8%89%E9%98%B6%E6%AE%B5%E8%BF%9B%E5%8C%96%E8%B0%83%E8%AF%95%E7%BC%96%E5%86%99%E4%B8%8E%E8%BF%90%E8%A1%8C%E4%BB%A3%E7%A0%81/">
+            <span class="next-text nav-default">11_三阶段进化：调试，编写与运行代码</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

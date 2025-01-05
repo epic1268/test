@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>第33讲_如何判断心跳包是否离线？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在初学网络，编写过阻塞和非阻塞网络代码的时候，有一个问题，那就是在非阻塞的情况下，不知道对方的网络何时断开。
+因为在非阻塞的情况下，如果没有接收到消息，recv 的数值一直会是 0。如果以这个来判断，显然是错误的。而在阻塞情况下，只要对方一断开，接收到 0 就说明断开了，那么我们怎么才能在非阻塞的情况下确定连接是断开还是没断开呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/%E7%AC%AC33%E8%AE%B2_%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E5%BF%83%E8%B7%B3%E5%8C%85%E6%98%AF%E5%90%A6%E7%A6%BB%E7%BA%BF/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/%E7%AC%AC33%E8%AE%B2_%E5%A6%82%E4%BD%95%E5%88%A4%E6%96%AD%E5%BF%83%E8%B7%B3%E5%8C%85%E6%98%AF%E5%90%A6%E7%A6%BB%E7%BA%BF/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="第33讲_如何判断心跳包是否离线？">
+  <meta property="og:description" content="在初学网络，编写过阻塞和非阻塞网络代码的时候，有一个问题，那就是在非阻塞的情况下，不知道对方的网络何时断开。
+因为在非阻塞的情况下，如果没有接收到消息，recv 的数值一直会是 0。如果以这个来判断，显然是错误的。而在阻塞情况下，只要对方一断开，接收到 0 就说明断开了，那么我们怎么才能在非阻塞的情况下确定连接是断开还是没断开呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="从0开始学游戏开发">
+
+  <meta itemprop="name" content="第33讲_如何判断心跳包是否离线？">
+  <meta itemprop="description" content="在初学网络，编写过阻塞和非阻塞网络代码的时候，有一个问题，那就是在非阻塞的情况下，不知道对方的网络何时断开。
+因为在非阻塞的情况下，如果没有接收到消息，recv 的数值一直会是 0。如果以这个来判断，显然是错误的。而在阻塞情况下，只要对方一断开，接收到 0 就说明断开了，那么我们怎么才能在非阻塞的情况下确定连接是断开还是没断开呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2887">
+  <meta itemprop="keywords" content="从0开始学游戏开发">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="第33讲_如何判断心跳包是否离线？">
+  <meta name="twitter:description" content="在初学网络，编写过阻塞和非阻塞网络代码的时候，有一个问题，那就是在非阻塞的情况下，不知道对方的网络何时断开。
+因为在非阻塞的情况下，如果没有接收到消息，recv 的数值一直会是 0。如果以这个来判断，显然是错误的。而在阻塞情况下，只要对方一断开，接收到 0 就说明断开了，那么我们怎么才能在非阻塞的情况下确定连接是断开还是没断开呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">第33讲_如何判断心跳包是否离线？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2887 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#小结">小结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在初学网络，编写过阻塞和非阻塞网络代码的时候，有一个问题，那就是在非阻塞的情况下，不知道对方的网络何时断开。</p>
+<p>因为在非阻塞的情况下，如果没有接收到消息，recv 的数值一直会是 0。如果以这个来判断，显然是错误的。而在阻塞情况下，只要对方一断开，接收到 0 就说明断开了，那么我们怎么才能在非阻塞的情况下确定连接是断开还是没断开呢？</p>
+<p>我们可以采用离线超时的方案来判断对方连接是否断开。那什么是离线超时呢？</p>
+<p>我们都知道，人累了就要休息。你在休息的时候，有没有注意过这么一个现象，那就是你在快要睡着的时候，忽然脚会蹬一下，或者人会抽一下，这是为什么呢？</p>
+<p>有一种说法流传很广，说，其实大脑是在不停地检测人有没有“死”，所以发送神经信号给手和腿。抽动一下，检验其是否死亡。这个就有点儿像我们检测超时，看看有没有反应。</p>
+<p>现在我们先看一段 Python 代码，让它运行起来。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">import socket
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">import time
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> def server_run():
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   clients = []
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server.bind((&#34;&#34;, 1024))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server.listen(256)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server.setblocking(False)   
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这是我节选的一部分代码。其中，在函数 server_run 里面，我们先定义了一个 clients，这是一个列表，用于后面保存客户端连接用。my_server 获得 socket 句柄，并且将之设置为 TCP 模式，随后我们绑定地址为本地（bind 函数），端口号为 1024，并且开始侦听，随后我们看到 setblocking 函数，将之设置为非阻塞模式。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">while True:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      time.sleep(1)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      try:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         client, addr = my_server.accept()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         print client
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         client.setblocking(False)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         clients.append(client)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      except Exception as e:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         print &#34;no client incoming&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      for cli in clients:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         try:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            data = cli.recv(1024)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if data:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               print data
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            else:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               cli.close()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               clients.remove(cli ) 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         except Exception as e:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            print &#34;no data from &#34;, cli
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   my_server.close()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在一个大循环内，我们做了如下几件事情：第一个是 accept，只要有客户端进来，我们就 accept，如果没有客户端进来，一直等待状态下，就打印 no client incoming 字符串，如果有客户端进入的话，就直接将新客户端放入列表。</p>
+<p>我们在启动函数的时候，如果没有客户端连接，就会出现这样的字样：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/10c663961c40fd449d14fcd6e0901d91.png" alt=""></p>
+<p>然后我们使用 Windows 下的 telnet 命令来模拟客户端。输入 telnet 127.0.0.1 1024，服务器端代码会出现这样的字符串：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/41e43d26a194a3f5b02406f5a4ab9038.png" alt=""></p>
+<p>我们打印新的客户端连接的对象地址，并且将新的客户端连接句柄放入列表里面。随后，循环进入到了取出新客户端列表，并且做出判断，每次接收 1024 字节。如果没有，则显示 no data from &lt;xxxx 地址 &gt;；如果有，那就显示输入的字符串。</p>
+<p>好了，现在我们打开 Windows 任务管理器，找到拥有 telnet 的程序，并且“杀死”它。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/fd9bcd835941be735df7c898cbc1449b.png" alt=""></p>
+<p>随后，我们会发现，命令行提示符出现了如下内容的字符串：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/29b8e432d8e6b45389370b73f1873488.png" alt=""></p>
+<p>按照道理，服务器不是应该断开连接了吗？它应该能知道客户端断开了不是吗？</p>
+<p>错，服务器端根本不知道对方已经被“杀死”了，所以它的状态仍然在接收中。由于是 TCP 握手，除非你正常将 telnet 程序关闭，才会让服务器端正常接收到客户端关闭的消息，否则，你永远不知道对方已经退出连接了。</p>
+<p>所以<strong>心跳包的作用</strong>就在这里，心跳包<strong>允许你每隔多少毫秒发送数据给服务器端，告诉服务器我还活着，否则服务器就当它已经死了，确认超时，并且退出</strong>。</p>
+<p>事实上，在 TCP/IP 的协议层中，本身是存在心跳包的设计的，就是 TCP 协议中的 SO_KEEPALIVE。</p>
+<p>系统默认是设置 2 小时的心跳频率。需要用 setsockopt 选项将 SOL_SOCKET.SO_KEEPALIVE 设置为 1，打开，并且可以设置三个参数 tcp_keepalive_time，tcp_keepalive_probes，tcp_keepalive_intvl，分别表示连接闲置多久开始发 keepalive 的 ACK 包、发几个 ACK 包不回复就当连接端“死”了。</p>
+<p>这种心跳检测包是属于 TCP 协议底层的检测机制，上层软件只是解析显示网口的有用数据包，收到心跳包报文属于 TCP 协议层的数据，一般软件不会将它直接在应用层显示出来，所以用户是看不到的。以太网中的心跳包可以通过以太网抓包软件分析 TCP/IP 协议层的数据流看到。报文名称是 TCP Keep-Alive。</p>
+<p>当然，我们也可以做应用层的心跳包检测，我们在编写游戏服务器的时候，就可以自定义心跳服务，TCP 层的心跳服务是为了保持存活的，但是应用层的心跳，则是拥有更明确或者其他的目的（比如对方是否还活着）。</p>
+<p>我们专门独立一台服务器做心跳服务器，连接客户端和真正的游戏逻辑服务器，那么我们希望逻辑服务器的同步率和心跳服务器统一，也就是说，<strong>心跳服务器负责的就是发送心跳包和客户端数据给逻辑服务器</strong>，逻辑服务器每一次获取数据，也是从心跳服务器获得的，那么心跳服务器能做的事情就会变得很多。</p>
+<p>为了调试方便，我们可以利用心跳服务器，将客户端传送过去的数据包存储在本地磁盘上。如果应用或者游戏在测试的时候，就可以看到那些发送的内容，甚至可以回滚任意时段的数据内容，这样调试起来就相对方便，而不需要客户端大费周章地不停演练重现出现的错误。代码看起来是这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> def SendToServer(is_save = 0):
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      package = socket.recv(recv_len)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      ticktock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      if is_save:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          SaveToDisk(package)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      server_socket.send(package)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在逻辑服务器内部，每一次接收数据，都根据心跳服务包的心跳来接收，这样做的好处就是，可以随时调整心跳的频率，而不需要调整逻辑服务器的代码。</p>
+<p>在应用层的心跳模式下，我们会有两种策略需要进行选择。</p>
+<p>我们假定把逻辑运算设为 A，心跳时间（比如代码的 Sleep 或者挂起）设为 B。</p>
+<p>第一种是运算时间 A 和心跳时间 B 相对固定。也就是说，不管 A 运算多久，B 一定是固定挂起多久。</p>
+<p>第二种策略是运算时间 A 和心跳时间 B 是实时调整。A 运算时间长，挂起时间就短，如果 A 运算时间加上 B 挂起时间超过约定心跳总时间，那 B 就不挂起，直接进行另一个 A 运算。这两种策略究竟哪种好呢？</p>
+<p>在 CPU 负载并不是那么严重的情况下，策略二是比较好的选择。</p>
+<p>假设心跳 Sleep 时间是 1000ms，运行时间规定为 2000ms。如果运行时间小于等于 2000ms 的话，Sleep 时间不变；如果运行时间超过 2000ms 的话，那么 Sleep 时间就等于 Sleep 时间 - (运行时间 - 2000ms)。</p>
+<p>这样一来，平均心跳有了保障，但是在运算量加大的时候，Sleep 时间已经完全被运行时间所占据，那么心跳 Sleep 时间就会减少到最少甚至不存在，CPU 的负载就会变得很高，这种时候就需要用到策略一。</p>
+<p>你可以这么理解。策略一是说，不管我们的运行时间多久，Sleep 时间始终是一致的 1000ms，这种方式保证了服务器一定会进行心跳，而不会导致负载过高等情况。</p>
+<p>当然这只是一种简单的模型，在进行大规模运算，或者有多台服务器的时候，我们可以将两种方式合并起来进行策略交互。任务不繁重的时候采用策略二，当服务器发现任务一直很多且超过 Sleep 时间几次，就切换到策略一，这样可以保证心跳时间基本一致。</p>
+<p>我们可以将心跳服务和逻辑服务分开运行，而是否放在同一台物理机并不是首要的问题，这样心跳服务器只提供心跳包，而逻辑服务通过心跳包自动判断并且调整运行频率。</p>
+<h2 id="小结">小结</h2>
+<p>好了，我给今天的内容做一个总结。</p>
+<ul>
+<li>判断非阻塞模型的网络是否断开，可以使用心跳包和计算超时的方式进行断开操作，比如 30 秒没收到心跳包，则可以强制关闭 Socket 句柄断开。</li>
+<li>心跳包是一种服务器之间交互的方法，也可以用作服务器数据调试和回滚的策略方案。心跳包有两种策略，第一种就是运算时间 A 和心跳时间 B 相对固定，第二种策略是运算时间 A 和心跳时间 B 是实时调整。CPU 的负载很高的时候用策略一，CPU 负载并不是那么严重的情况下，策略二是比较好的选择。</li>
+</ul>
+<p>最后，给你留一个思考题吧。</p>
+<p>如果编写的是阻塞方式的服务器代码，心跳包还有存在的意义吗？</p>
+<p>欢迎留言说出你的看法。我在下一节的挑战中等你！</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/687aa95b3803eb0079b384dbad39d165.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91/">从0开始学游戏开发</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8A%80%E6%9C%AF%E9%A2%86%E5%AF%BC%E5%8A%9B300%E8%AE%B2/%E7%AC%AC33%E8%AE%B2__%E9%80%89%E5%AF%B9%E7%9A%84%E4%BA%BA%E5%81%9A%E6%AD%A3%E7%A1%AE%E7%9A%84%E4%BA%8B%E6%83%85/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">第33讲__选对的人，做正确的事情</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E6%88%9845%E8%AE%B2/%E7%AC%AC33%E8%AE%B2%E4%B8%8D%E6%AD%A2%E4%B8%9A%E5%8A%A1%E7%BC%93%E5%AD%98%E5%88%86%E5%B8%83%E5%BC%8F%E7%B3%BB%E7%BB%9F%E4%B8%AD%E8%BF%98%E6%9C%89%E5%93%AA%E4%BA%9B%E7%BC%93%E5%AD%98/">
+            <span class="next-text nav-default">第33讲：不止业务缓存，分布式系统中还有哪些缓存？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>03｜Mutex：4种易错场景大盘点 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是鸟窝。
+上一讲，我带你一起领略了 Mutex 的架构演进之美，现在我们已经清楚 Mutex 的实现细节了。当前 Mutex 的实现貌似非常复杂，其实主要还是针对饥饿模式和公平性问题，做了一些额外处理。但是，我们在第一讲中已经体验过了，Mutex 使用起来还是非常简单的，毕竟，它只有 Lock 和 Unlock 两个方法，使用起来还能复杂到哪里去？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/03mutex4%E7%A7%8D%E6%98%93%E9%94%99%E5%9C%BA%E6%99%AF%E5%A4%A7%E7%9B%98%E7%82%B9/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/03mutex4%E7%A7%8D%E6%98%93%E9%94%99%E5%9C%BA%E6%99%AF%E5%A4%A7%E7%9B%98%E7%82%B9/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="03｜Mutex：4种易错场景大盘点">
+  <meta property="og:description" content="你好，我是鸟窝。
+上一讲，我带你一起领略了 Mutex 的架构演进之美，现在我们已经清楚 Mutex 的实现细节了。当前 Mutex 的实现貌似非常复杂，其实主要还是针对饥饿模式和公平性问题，做了一些额外处理。但是，我们在第一讲中已经体验过了，Mutex 使用起来还是非常简单的，毕竟，它只有 Lock 和 Unlock 两个方法，使用起来还能复杂到哪里去？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go并发编程实战课">
+
+  <meta itemprop="name" content="03｜Mutex：4种易错场景大盘点">
+  <meta itemprop="description" content="你好，我是鸟窝。
+上一讲，我带你一起领略了 Mutex 的架构演进之美，现在我们已经清楚 Mutex 的实现细节了。当前 Mutex 的实现貌似非常复杂，其实主要还是针对饥饿模式和公平性问题，做了一些额外处理。但是，我们在第一讲中已经体验过了，Mutex 使用起来还是非常简单的，毕竟，它只有 Lock 和 Unlock 两个方法，使用起来还能复杂到哪里去？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6950">
+  <meta itemprop="keywords" content="Go并发编程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="03｜Mutex：4种易错场景大盘点">
+  <meta name="twitter:description" content="你好，我是鸟窝。
+上一讲，我带你一起领略了 Mutex 的架构演进之美，现在我们已经清楚 Mutex 的实现细节了。当前 Mutex 的实现貌似非常复杂，其实主要还是针对饥饿模式和公平性问题，做了一些额外处理。但是，我们在第一讲中已经体验过了，Mutex 使用起来还是非常简单的，毕竟，它只有 Lock 和 Unlock 两个方法，使用起来还能复杂到哪里去？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">03｜Mutex：4种易错场景大盘点</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6950 字 </span>
+          <span class="more-meta"> 预计阅读 14 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#常见的-4-种错误场景">常见的 4 种错误场景</a>
+      <ul>
+        <li><a href="#lockunlock-不是成对出现">Lock/Unlock 不是成对出现</a></li>
+        <li><a href="#copy-已使用的-mutex">Copy 已使用的 Mutex</a></li>
+        <li><a href="#重入">重入</a></li>
+        <li><a href="#死锁">死锁</a></li>
+      </ul>
+    </li>
+    <li><a href="#流行的-go-开发项目踩坑记">流行的 Go 开发项目踩坑记</a>
+      <ul>
+        <li><a href="#docker">Docker</a>
+          <ul>
+            <li><a href="#issue-36114">issue 36114</a></li>
+            <li><a href="#issue-34881">issue 34881</a></li>
+          </ul>
+        </li>
+        <li><a href="#kubernetes">Kubernetes</a>
+          <ul>
+            <li><a href="#issue-72361">issue 72361</a></li>
+            <li><a href="#issue-45192">issue 45192</a></li>
+          </ul>
+        </li>
+        <li><a href="#grpc"><strong>gRPC</strong></a>
+          <ul>
+            <li><a href="#issue-795">issue 795</a></li>
+          </ul>
+        </li>
+        <li><a href="#etcd">etcd</a></li>
+        <li><a href="#issue-10419">issue 10419</a></li>
+      </ul>
+    </li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#思考题">思考题</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是鸟窝。</p>
+<p>上一讲，我带你一起领略了 Mutex 的架构演进之美，现在我们已经清楚 Mutex 的实现细节了。当前 Mutex 的实现貌似非常复杂，其实主要还是针对饥饿模式和公平性问题，做了一些额外处理。但是，我们在第一讲中已经体验过了，Mutex 使用起来还是非常简单的，毕竟，它只有 Lock 和 Unlock 两个方法，使用起来还能复杂到哪里去？</p>
+<p>正常使用 Mutex 时，确实是这样的，很简单，基本不会有什么错误，即使出现错误，也是在一些复杂的场景中，比如跨函数调用 Mutex 或者是在重构或者修补 Bug 时误操作。但是，我们使用 Mutex 时，确实会出现一些 Bug，比如说忘记释放锁、重入锁、复制已使用了的 Mutex 等情况。那在这一讲中，我们就一起来看看使用 Mutex 常犯的几个错误，做到“Bug 提前知，后面早防范”。</p>
+<h1 id="常见的-4-种错误场景">常见的 4 种错误场景</h1>
+<p>我总结了一下，使用 Mutex 常见的错误场景有 4 类，分别是 Lock/Unlock 不是成对出现、Copy 已使用的 Mutex、重入和死锁。下面我们一一来看。</p>
+<h2 id="lockunlock-不是成对出现">Lock/Unlock 不是成对出现</h2>
+<p>Lock/Unlock 没有成对出现，就意味着会出现死锁的情况，或者是因为 Unlock 一个未加锁的 Mutex 而导致 panic。</p>
+<p>我们先来看看缺少 Unlock 的场景，常见的有三种情况：</p>
+<ol>
+<li>代码中有太多的 if-else 分支，可能在某个分支中漏写了 Unlock；</li>
+<li>在重构的时候把 Unlock 给删除了；</li>
+<li>Unlock 误写成了 Lock。</li>
+</ol>
+<p>在这种情况下，锁被获取之后，就不会被释放了，这也就意味着，其它的 goroutine 永远都没机会获取到锁。</p>
+<p>我们再来看缺少 Lock 的场景，这就很简单了，一般来说就是误操作删除了 Lock。比如先前使用 Mutex 都是正常的，结果后来其他人重构代码的时候，由于对代码不熟悉，或者由于开发者的马虎，把 Lock 调用给删除了，或者注释掉了。比如下面的代码，mu.Lock() 一行代码被删除了，直接 Unlock 一个未加锁的 Mutex 会 panic：</p>
+<p>func foo() {<br>
+var mu sync.Mutex<br>
+defer mu.Unlock()<br>
+fmt.Println(&ldquo;hello world!&rdquo;)<br>
+}</p>
+<p>运行的时候 panic：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/1055f2ef64a6cd75eb4b96a6c10f4f68.png" alt=""></p>
+<h2 id="copy-已使用的-mutex">Copy 已使用的 Mutex</h2>
+<p>第二种误用是 Copy 已使用的 Mutex。在正式分析这个错误之前，我先交代一个小知识点，那就是 Package sync 的同步原语在使用后是不能复制的。我们知道 Mutex 是最常用的一个同步原语，那它也是不能复制的。为什么呢？</p>
+<p>原因在于，Mutex 是一个有状态的对象，它的 state 字段记录这个锁的状态。如果你要复制一个已经加锁的 Mutex 给一个新的变量，那么新的刚初始化的变量居然被加锁了，这显然不符合你的期望，因为你期望的是一个零值的 Mutex。关键是在并发环境下，你根本不知道要复制的 Mutex 状态是什么，因为要复制的 Mutex 是由其它 goroutine 并发访问的，状态可能总是在变化。</p>
+<p>当然，你可能说，你说的我都懂，你的警告我都记下了，但是实际在使用的时候，一不小心就踩了这个坑，我们来看一个例子。</p>
+<p>type Counter struct {<br>
+sync.Mutex<br>
+Count int<br>
+}</p>
+<p>func main() {<br>
+var c Counter<br>
+c.Lock()<br>
+defer c.Unlock()<br>
+c.Count++<br>
+foo(c) // 复制锁<br>
+}</p>
+<p>// 这里 Counter 的参数是通过复制的方式传入的<br>
+func foo(c Counter) {<br>
+c.Lock()<br>
+defer c.Unlock()<br>
+fmt.Println(&ldquo;in foo&rdquo;)<br>
+}</p>
+<p>第 12 行在调用 foo 函数的时候，调用者会复制 Mutex 变量 c 作为 foo 函数的参数，不幸的是，复制之前已经使用了这个锁，这就导致，复制的 Counter 是一个带状态 Counter。</p>
+<p>怎么办呢？Go 在运行时，有<strong>死锁的检查机制</strong>（checkdead() 方法），它能够发现死锁的 goroutine。这个例子中因为复制了一个使用了的 Mutex，导致锁无法使用，程序处于死锁的状态。程序运行的时候，死锁检查机制能够发现这种死锁情况并输出错误信息，如下图中错误信息以及错误堆栈：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/26c5fec4c57c9dbe7c916dc2e4be8af4.png" alt=""></p>
+<p>你肯定不想运行的时候才发现这个因为复制 Mutex 导致的死锁问题，那么你怎么能够及时发现问题呢？可以使用 <strong>vet 工具</strong>，把检查写在 Makefile 文件中，在持续集成的时候跑一跑，这样可以及时发现问题，及时修复。我们可以使用 go vet 检查这个 Go 文件：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/8755b5179ba235abc1f027aa2b2fdeb9.png" alt=""></p>
+<p>你看，使用这个工具就可以发现 Mutex 复制的问题，错误信息显示得很清楚，是在调用 foo 函数的时候发生了 lock value 复制的情况，还告诉我们出问题的代码行数以及 copy lock 导致的错误。</p>
+<p>那么，vet 工具是怎么发现 Mutex 复制使用问题的呢？我带你简单分析一下。</p>
+<p>检查是通过copylock分析器静态分析实现的。这个分析器会分析函数调用、range 遍历、复制、声明、函数返回值等位置，有没有锁的值 copy 的情景，以此来判断有没有问题。可以说，只要是实现了 Locker 接口，就会被分析。我们看到，下面的代码就是确定什么类型会被分析，其实就是实现了 Lock/Unlock 两个方法的 Locker 接口：</p>
+<p>var lockerType *types.Interface</p>
+<p>// Construct a sync.Locker interface type.<br>
+func init() {<br>
+nullary := types.NewSignature(nil, nil, nil, false) // func()<br>
+methods := []*types.Func{<br>
+types.NewFunc(token.NoPos, nil, &ldquo;Lock&rdquo;, nullary),<br>
+types.NewFunc(token.NoPos, nil, &ldquo;Unlock&rdquo;, nullary),<br>
+}<br>
+lockerType = types.NewInterface(methods, nil).Complete()<br>
+}</p>
+<p>其实，有些没有实现 Locker 接口的同步原语（比如 WaitGroup），也能被分析。我先卖个关子，后面我们会介绍这种情况是怎么实现的。</p>
+<h2 id="重入">重入</h2>
+<p>接下来，我们来讨论“重入”这个问题。在说这个问题前，我先解释一下个概念，叫“可重入锁”。</p>
+<p>如果你学过 Java，可能会很熟悉 ReentrantLock，就是可重入锁，这是 Java 并发包中非常常用的一个同步原语。它的基本行为和互斥锁相同，但是加了一些扩展功能。</p>
+<p>如果你没接触过 Java，也没关系，这里只是提一下，帮助会 Java 的同学对比来学。那下面我来具体讲解可重入锁是咋回事儿。</p>
+<p>当一个线程获取锁时，如果没有其它线程拥有这个锁，那么，这个线程就成功获取到这个锁。之后，如果其它线程再请求这个锁，就会处于阻塞等待的状态。但是，如果拥有这把锁的线程再请求这把锁的话，不会阻塞，而是成功返回，所以叫可重入锁（有时候也叫做递归锁）。只要你拥有这把锁，你可以可着劲儿地调用，比如通过递归实现一些算法，调用者不会阻塞或者死锁。</p>
+<p>了解了可重入锁的概念，那我们来看 Mutex 使用的错误场景。划重点了：<strong>Mutex 不是可重入的锁。</strong></p>
+<p>想想也不奇怪，因为 Mutex 的实现中没有记录哪个 goroutine 拥有这把锁。理论上，任何 goroutine 都可以随意地 Unlock 这把锁，所以没办法计算重入条件，毕竟，“臣妾做不到啊”！</p>
+<p>所以，一旦误用 Mutex 的重入，就会导致报错。下面是一个误用 Mutex 的重入例子：</p>
+<p>func foo(l sync.Locker) {<br>
+fmt.Println(&ldquo;in foo&rdquo;)<br>
+l.Lock()<br>
+bar(l)<br>
+l.Unlock()<br>
+}</p>
+<p>func bar(l sync.Locker) {<br>
+l.Lock()<br>
+fmt.Println(&ldquo;in bar&rdquo;)<br>
+l.Unlock()<br>
+}</p>
+<p>func main() {<br>
+l := &amp;sync.Mutex{}<br>
+foo(l)<br>
+}</p>
+<p>写完这个 Mutex 重入的例子后，运行一下，你会发现类似下面的错误。程序一直在请求锁，但是一直没有办法获取到锁，结果就是 Go 运行时发现死锁了，没有其它地方能够释放锁让程序运行下去，你通过下面的错误堆栈信息就能定位到哪一行阻塞请求锁：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/b1d757af65406e95f39d47c57a71e056.png" alt=""></p>
+<p>学到这里，你可能要问了，虽然标准库 Mutex 不是可重入锁，但是如果我就是想要实现一个可重入锁，可以吗？</p>
+<p>可以，那我们就自己实现一个。这里的关键就是，实现的锁要能记住当前是哪个 goroutine 持有这个锁。我来提供两个方案。</p>
+<ol>
+<li>方案一：通过 hacker 的方式获取到 goroutine id，记录下获取锁的 goroutine id，它可以实现 Locker 接口。</li>
+<li>方案二：调用 Lock/Unlock 方法时，由 goroutine 提供一个 token，用来标识它自己，而不是我们通过 hacker 的方式获取到 goroutine id，但是，这样一来，就不满足 Locker 接口了。</li>
+</ol>
+<p>可重入锁（递归锁）解决了代码重入或者递归调用带来的死锁问题，同时它也带来了另一个好处，就是我们可以要求，只有持有锁的 goroutine 才能 unlock 这个锁。这也很容易实现，因为在上面这两个方案中，都已经记录了是哪一个 goroutine 持有这个锁。</p>
+<p>下面我们具体来看这两个方案怎么实现。</p>
+<p><strong>方案一</strong>：<strong>goroutine id</strong></p>
+<p>这个方案的关键第一步是获取 goroutine id，方式有两种，分别是简单方式和 hacker 方式。</p>
+<p>简单方式，就是通过 runtime.Stack 方法获取栈帧信息，栈帧信息里包含 goroutine id。你可以看看上面 panic 时候的贴图，goroutine id 明明白白地显示在那里。runtime.Stack 方法可以获取当前的 goroutine 信息，第二个参数为 true 会输出所有的 goroutine 信息，信息的格式如下：</p>
+<p>goroutine 1 [running]:<br>
+main.main()<br>
+&hellip;&hellip;/main.go:19 +0xb1</p>
+<p>第一行格式为 goroutine xxx，其中 xxx 就是 goroutine id，你只要解析出这个 id 即可。解析的方法可以采用下面的代码：</p>
+<p>func GoID() int {<br>
+var buf [64]byte<br>
+n := runtime.Stack(buf[:], false)<br>
+// 得到 id 字符串<br>
+idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), &ldquo;goroutine &ldquo;))[0]<br>
+id, err := strconv.Atoi(idField)<br>
+if err != nil {<br>
+panic(fmt.Sprintf(&ldquo;cannot get goroutine id: %v&rdquo;, err))<br>
+}<br>
+return id<br>
+}</p>
+<p>了解了简单方式，接下来我们来看 hacker 的方式，这也是我们方案一采取的方式。</p>
+<p>首先，我们获取运行时的 g 指针，反解出对应的 g 的结构。每个运行的 goroutine 结构的 g 指针保存在当前 goroutine 的一个叫做 TLS 对象中。</p>
+<p>第一步：我们先获取到 TLS 对象；</p>
+<p>第二步：再从 TLS 中获取 goroutine 结构的 g 指针；</p>
+<p>第三步：再从 g 指针中取出 goroutine id。</p>
+<p>需要注意的是，不同 Go 版本的 goroutine 的结构可能不同，所以需要根据 Go 的不同版本进行调整。当然了，如果想要搞清楚各个版本的 goroutine 结构差异，所涉及的内容又过于底层而且复杂，学习成本太高。怎么办呢？我们可以重点关注一些库。我们没有必要重复发明轮子，直接使用第三方的库来获取 goroutine id 就可以了。</p>
+<p>好消息是现在已经有很多成熟的方法了，可以支持多个 Go 版本的 goroutine id，给你推荐一个常用的库：petermattis/goid。</p>
+<p>知道了如何获取 goroutine id，接下来就是最后的关键一步了，我们实现一个可以使用的可重入锁：</p>
+<p>// RecursiveMutex 包装一个 Mutex，实现可重入<br>
+type RecursiveMutex struct {<br>
+sync.Mutex<br>
+owner     int64 // 当前持有锁的 goroutine id<br>
+recursion int32 // 这个 goroutine 重入的次数<br>
+}</p>
+<p>func (m *RecursiveMutex) Lock() {<br>
+gid := goid.Get()<br>
+// 如果当前持有锁的 goroutine 就是这次调用的 goroutine，说明是重入<br>
+if atomic.LoadInt64(&amp;m.owner) == gid {<br>
+m.recursion++<br>
+return<br>
+}<br>
+m.Mutex.Lock()<br>
+// 获得锁的 goroutine 第一次调用，记录下它的 goroutine id，调用次数加 1<br>
+atomic.StoreInt64(&amp;m.owner, gid)<br>
+m.recursion = 1<br>
+}</p>
+<p>func (m *RecursiveMutex) Unlock() {<br>
+gid := goid.Get()<br>
+// 非持有锁的 goroutine 尝试释放锁，错误的使用<br>
+if atomic.LoadInt64(&amp;m.owner) != gid {<br>
+panic(fmt.Sprintf(&ldquo;wrong the owner(%d): %d!&rdquo;, m.owner, gid))<br>
+}<br>
+// 调用次数减 1<br>
+m.recursion&ndash;<br>
+if m.recursion != 0 { // 如果这个 goroutine 还没有完全释放，则直接返回<br>
+return<br>
+}<br>
+// 此 goroutine 最后一次调用，需要释放锁<br>
+atomic.StoreInt64(&amp;m.owner, -1)<br>
+m.Mutex.Unlock()<br>
+}</p>
+<p>上面这段代码你可以拿来即用。我们一起来看下这个实现，真是非常巧妙，它相当于给 Mutex 打一个补丁，解决了记录锁的持有者的问题。可以看到，我们用 owner 字段，记录当前锁的拥有者 goroutine 的 id；recursion 是辅助字段，用于记录重入的次数。</p>
+<p>有一点，我要提醒你一句，尽管拥有者可以多次调用 Lock，但是也必须调用相同次数的 Unlock，这样才能把锁释放掉。这是一个合理的设计，可以保证 Lock 和 Unlock 一一对应。</p>
+<p><strong>方案二</strong>：<strong>token</strong></p>
+<p>方案一是用 goroutine id 做 goroutine 的标识，我们也可以让 goroutine 自己来提供标识。不管怎么说，Go 开发者不期望你利用 goroutine id 做一些不确定的东西，所以，他们没有暴露获取 goroutine id 的方法。</p>
+<p>下面的代码是第二种方案。调用者自己提供一个 token，获取锁的时候把这个 token 传入，释放锁的时候也需要把这个 token 传入。通过用户传入的 token 替换方案一中 goroutine id，其它逻辑和方案一一致。</p>
+<p>// Token 方式的递归锁<br>
+type TokenRecursiveMutex struct {<br>
+sync.Mutex<br>
+token     int64<br>
+recursion int32<br>
+}</p>
+<p>// 请求锁，需要传入 token<br>
+func (m *TokenRecursiveMutex) Lock(token int64) {<br>
+if atomic.LoadInt64(&amp;m.token) == token { //如果传入的 token 和持有锁的 token 一致，说明是递归调用<br>
+m.recursion++<br>
+return<br>
+}<br>
+m.Mutex.Lock() // 传入的 token 不一致，说明不是递归调用<br>
+// 抢到锁之后记录这个 token<br>
+atomic.StoreInt64(&amp;m.token, token)<br>
+m.recursion = 1<br>
+}</p>
+<p>// 释放锁<br>
+func (m *TokenRecursiveMutex) Unlock(token int64) {<br>
+if atomic.LoadInt64(&amp;m.token) != token { // 释放其它 token 持有的锁<br>
+panic(fmt.Sprintf(&ldquo;wrong the owner(%d): %d!&rdquo;, m.token, token))<br>
+}<br>
+m.recursion&ndash; // 当前持有这个锁的 token 释放锁<br>
+if m.recursion != 0 { // 还没有回退到最初的递归调用<br>
+return<br>
+}<br>
+atomic.StoreInt64(&amp;m.token, 0) // 没有递归调用了，释放锁<br>
+m.Mutex.Unlock()<br>
+}</p>
+<h2 id="死锁">死锁</h2>
+<p>接下来，我们来看第四种错误场景：死锁。</p>
+<p>我先解释下什么是死锁。两个或两个以上的进程（或线程，goroutine）在执行过程中，因争夺共享资源而处于一种互相等待的状态，如果没有外部干涉，它们都将无法推进下去，此时，我们称系统处于死锁状态或系统产生了死锁。</p>
+<p>我们来分析一下死锁产生的必要条件。如果你想避免死锁，只要破坏这四个条件中的一个或者几个，就可以了。</p>
+<ol>
+<li><strong>互斥</strong>：至少一个资源是被排他性独享的，其他线程必须处于等待状态，直到资源被释放。</li>
+<li><strong>持有和等待</strong>：goroutine 持有一个资源，并且还在请求其它 goroutine 持有的资源，也就是咱们常说的“吃着碗里，看着锅里”的意思。</li>
+<li><strong>不可剥夺</strong>：资源只能由持有它的 goroutine 来释放。</li>
+<li><strong>环路等待</strong>：一般来说，存在一组等待进程，P={P1，P2，…，PN}，P1 等待 P2 持有的资源，P2 等待 P3 持有的资源，依此类推，最后是 PN 等待 P1 持有的资源，这就形成了一个环路等待的死结。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/49c560f01cd3186b534c91107eb51a6d.png" alt=""></p>
+<p>你看，死锁问题还真是挺有意思的，所以有很多人研究这个事儿。一个经典的死锁问题就是哲学家就餐问题，我不做介绍了，你可以点击链接进一步了解。其实，死锁问题在现实生活中也比比皆是。</p>
+<p>举个例子。有一次我去派出所开证明，派出所要求物业先证明我是本物业的业主，但是，物业要我提供派出所的证明，才能给我开物业证明，结果就陷入了死锁状态。你可以把派出所和物业看成两个 goroutine，派出所证明和物业证明是两个资源，双方都持有自己的资源而要求对方的资源，而且自己的资源自己持有，不可剥夺。</p>
+<p>这是一个最简单的只有两个 goroutine 相互等待的死锁的例子，转化成代码如下：</p>
+<p>package main</p>
+<p>import (<br>
+&ldquo;fmt&rdquo;<br>
+&ldquo;sync&rdquo;<br>
+&ldquo;time&rdquo;<br>
+)</p>
+<p>func main() {<br>
+// 派出所证明<br>
+var psCertificate sync.Mutex<br>
+// 物业证明<br>
+var propertyCertificate sync.Mutex</p>
+<pre><code>var wg sync.WaitGroup  
+wg.Add(2) // 需要派出所和物业都处理  
+
+
+// 派出所处理 goroutine  
+go func() {  
+    defer wg.Done() // 派出所处理完成  
+
+
+    psCertificate.Lock()  
+    defer psCertificate.Unlock()  
+
+
+    // 检查材料  
+    time.Sleep(5 * time.Second)  
+    // 请求物业的证明  
+    propertyCertificate.Lock()  
+    propertyCertificate.Unlock()  
+}()  
+
+
+// 物业处理 goroutine  
+go func() {  
+    defer wg.Done() // 物业处理完成  
+
+
+    propertyCertificate.Lock()  
+    defer propertyCertificate.Unlock()  
+
+
+    // 检查材料  
+    time.Sleep(5 * time.Second)  
+    // 请求派出所的证明  
+    psCertificate.Lock()  
+    psCertificate.Unlock()  
+}()  
+
+
+wg.Wait()  
+fmt.Println(&quot;成功完成&quot;)  
+</code></pre>
+<p>}</p>
+<p>这个程序没有办法运行成功，因为派出所的处理和物业的处理是一个环路等待的死结。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/0172f54e55437cc51096ece95defa520.png" alt=""></p>
+<p>Go 运行时，有死锁探测的功能，能够检查出是否出现了死锁的情况，如果出现了，这个时候你就需要调整策略来处理了。</p>
+<p>你可以引入一个第三方的锁，大家都依赖这个锁进行业务处理，比如现在政府推行的一站式政务服务中心。或者是解决持有等待问题，物业不需要看到派出所的证明才给开物业证明，等等。</p>
+<p>好了，到这里，我给你讲了使用 Mutex 常见的 4 类问题。你是不是觉得，哎呀，这几类问题也太不应该了吧，真的会有人犯这么基础的错误吗？</p>
+<p>还真是有。虽然 Mutex 使用起来很简单，但是，仍然可能出现使用错误的问题。而且，就连一些经验丰富的开发人员，也会出现一些 Mutex 使用的问题。接下来，我就带你围观几个非常流行的 Go 开发项目，看看这些错误是怎么产生和修复的。</p>
+<h1 id="流行的-go-开发项目踩坑记">流行的 Go 开发项目踩坑记</h1>
+<h2 id="docker">Docker</h2>
+<p>Docker 容器是一个开源的应用容器引擎，开发者可以以统一的方式，把他们的应用和依赖包打包到一个可移植的容器中，然后发布到任何安装了 docker 引擎的服务器上。</p>
+<p>Docker 是使用 Go 开发的，也算是 Go 的一个杀手级产品了，它的 Mutex 相关的 Bug 也不少，我们来看几个典型的 Bug。</p>
+<h3 id="issue-36114">issue 36114</h3>
+<p>Docker 的issue 36114 是一个死锁问题。</p>
+<p>原因在于，hotAddVHDsAtStart 方法执行的时候，执行了加锁 svm 操作。但是，在其中调用 hotRemoveVHDsAtStart 方法时，这个 hotRemoveVHDsAtStart 方法也是要加锁 svm 的。很不幸，Go 标准库中的 Mutex 是不可重入的，所以，代码执行到这里，就出现了死锁的现象。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/204700b83a09b348c0ac147c8e5c8391.png" alt=""></p>
+<p>针对这个问题，解决办法就是，再提供一个不需要锁的 hotRemoveVHDsNoLock 方法，避免 Mutex 的重入。</p>
+<h3 id="issue-34881">issue 34881</h3>
+<p>issue 34881本来是修复 Docker 的一个简单问题，如果节点在初始化的时候，发现自己不是一个 swarm mananger，就快速返回，这个修复就几行代码，你看出问题来了吗？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/5a944cd5ecf91ec0618a7585e7337f2b.png" alt=""></p>
+<p>在第 34 行，节点发现不满足条件就返回了，但是，c.mu 这个锁没有释放！为什么会出现这个问题呢？其实，这是在重构或者添加新功能的时候经常犯的一个错误，因为不太了解上下文，或者是没有仔细看函数的逻辑，从而导致锁没有被释放。现在的 Docker 当然已经没有这个问题了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/38114afce4cfbc975065599ff2d84faf.png" alt=""></p>
+<p>这样的 issue 还有很多，我就不一一列举了。我给你推荐几个关于 Mutex 的 issue 或者 pull request，你可以关注一下，分别是 36840、37583、35517、35482、33305、32826、30696、29554、29191、28912、26507 等。</p>
+<h2 id="kubernetes">Kubernetes</h2>
+<h3 id="issue-72361">issue 72361</h3>
+<p>issue 72361 增加 Mutex 为了保护资源。这是为了解决 data race 问题而做的一个修复，修复方法也很简单，使用互斥锁即可，这也是我们解决 data race 时常用的方法。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/258d6fe378561c7532ec48385f5c248e.png" alt=""></p>
+<h3 id="issue-45192">issue 45192</h3>
+<p>issue 45192也是一个返回时忘记 Unlock 的典型例子，和 docker issue 34881 犯的错误都是一样的。</p>
+<p>两大知名项目的开发者都犯了这个错误，所以，你就可以知道，引入这个 Bug 是多么容易，记住晁老师这句话：<strong>保证 Lock/Unlock 成对出现，尽可能采用 defer mutex.Unlock 的方式，把它们成对、紧凑地写在一起</strong>。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/2175abbe60af327a8b886614b7264dbd.png" alt=""></p>
+<p>除了这些，我也建议你关注一下其它的 Mutex 相关的 issue，比如 71617、70605 等。</p>
+<h2 id="grpc"><strong>gRPC</strong></h2>
+<p>gRPC 是 Google 发起的一个开源远程过程调用（Remote procedure call）系统。该系统基于 HTTP/2 协议传输，使用 Protocol Buffers 作为接口描述语言。它提供 Go 语言的实现。</p>
+<p>即使是 Google 官方出品的系统，也有一些 Mutex 的 issue。</p>
+<h3 id="issue-795">issue 795</h3>
+<p>issue 795是一个你可能想不到的 bug，那就是将 Unlock 误写成了 Lock。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/09800c44988ed3f516a08d3f2f50a91a.png" alt=""></p>
+<p>关于这个项目，还有一些其他的为了保护共享资源而添加 Mutex 的 issue，比如 1318、2074、2542 等。</p>
+<h2 id="etcd">etcd</h2>
+<p>etcd 是一个非常知名的分布式一致性的 key-value 存储技术，被用来做配置共享和服务发现。</p>
+<h2 id="issue-10419">issue 10419</h2>
+<p>issue 10419是一个锁重入导致的问题。Store 方法内对请求了锁，而调用的 Compact 的方法内又请求了锁，这个时候，会导致死锁，一直等待，解决办法就是提供不需要加锁的 Compact 方法。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/412b7c7ea9d492e146768350972956ac.png" alt=""></p>
+<h1 id="总结">总结</h1>
+<p>这节课，我们学习了 Mutex 的一些易错场景，而且，我们还分析了流行的 Go 开源项目的错误，我也给你分享了我自己在开发中的经验总结。需要强调的是，<strong>手误和重入导致的死锁，是最常见的使用 Mutex 的 Bug</strong>。</p>
+<p>Go 死锁探测工具只能探测整个程序是否因为死锁而冻结了，不能检测出一组 goroutine 死锁导致的某一块业务冻结的情况。你还可以通过 Go 运行时自带的死锁检测工具，或者是第三方的工具（比如go-deadlock、go-tools）进行检查，这样可以尽早发现一些死锁的问题。不过，有些时候，死锁在某些特定情况下才会被触发，所以，如果你的测试或者短时间的运行没问题，不代表程序一定不会有死锁问题。</p>
+<p>并发程序最难跟踪调试的就是很难重现，因为并发问题不是按照我们指定的顺序执行的，由于计算机调度的问题和事件触发的时机不同，死锁的 Bug 可能会在极端的情况下出现。通过搜索日志、查看日志，我们能够知道程序有异常了，比如某个流程一直没有结束。这个时候，可以通过 Go pprof 工具分析，它提供了一个 block profiler 监控阻塞的 goroutine。除此之外，我们还可以查看全部的 goroutine 的堆栈信息，通过它，你可以查看阻塞的 groutine 究竟阻塞在哪一行哪一个对象上了。</p>
+<h1 id="思考题">思考题</h1>
+<p>查找知名的数据库系统 TiDB 的 issue，看看有没有 Mutex 相关的 issue，看看它们都是哪些相关的 Bug。</p>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得有所收获，也欢迎你把今天的内容分享给你的朋友或同事。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">Go并发编程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%9E%B6%E6%9E%84/03-%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%9E%B6%E6%9E%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">03-从0开始学架构</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spring%E7%BC%96%E7%A8%8B%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF50%E4%BE%8B/03spring_bean_%E4%BE%9D%E8%B5%96%E6%B3%A8%E5%85%A5%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF%E4%B8%8B/">
+            <span class="next-text nav-default">03｜Spring_Bean_依赖注入常见错误（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

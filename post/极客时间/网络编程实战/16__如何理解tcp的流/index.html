@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16__如何理解TCP的“流”？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 16 讲，欢迎回来。
+上一讲我们讲到了使用 SO_REUSEADDR 套接字选项，可以让服务器满足快速重启的需求。在这一讲里，我们回到数据的收发这个主题，谈一谈如何理解 TCP 的数据流特性。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/16__%E5%A6%82%E4%BD%95%E7%90%86%E8%A7%A3tcp%E7%9A%84%E6%B5%81/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/16__%E5%A6%82%E4%BD%95%E7%90%86%E8%A7%A3tcp%E7%9A%84%E6%B5%81/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16__如何理解TCP的“流”？">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 16 讲，欢迎回来。
+上一讲我们讲到了使用 SO_REUSEADDR 套接字选项，可以让服务器满足快速重启的需求。在这一讲里，我们回到数据的收发这个主题，谈一谈如何理解 TCP 的数据流特性。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="16__如何理解TCP的“流”？">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 16 讲，欢迎回来。
+上一讲我们讲到了使用 SO_REUSEADDR 套接字选项，可以让服务器满足快速重启的需求。在这一讲里，我们回到数据的收发这个主题，谈一谈如何理解 TCP 的数据流特性。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4552">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16__如何理解TCP的“流”？">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 16 讲，欢迎回来。
+上一讲我们讲到了使用 SO_REUSEADDR 套接字选项，可以让服务器满足快速重启的需求。在这一讲里，我们回到数据的收发这个主题，谈一谈如何理解 TCP 的数据流特性。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16__如何理解TCP的“流”？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4552 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#tcp-是一种流式协议">TCP 是一种流式协议</a></li>
+        <li><a href="#网络字节排序">网络字节排序</a></li>
+        <li><a href="#报文读取和解析">报文读取和解析</a></li>
+        <li><a href="#显式编码报文长度">显式编码报文长度</a>
+          <ul>
+            <li><a href="#报文格式">报文格式</a></li>
+            <li><a href="#发送报文">发送报文</a></li>
+            <li><a href="#解析报文程序">解析报文：程序</a></li>
+            <li><a href="#解析报文readn-函数">解析报文：readn 函数</a></li>
+            <li><a href="#解析报文read_message-函数">解析报文：read_message 函数</a></li>
+            <li><a href="#实验">实验</a></li>
+          </ul>
+        </li>
+        <li><a href="#特殊字符作为边界">特殊字符作为边界</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 16 讲，欢迎回来。</p>
+<p>上一讲我们讲到了使用 SO_REUSEADDR 套接字选项，可以让服务器满足快速重启的需求。在这一讲里，我们回到数据的收发这个主题，谈一谈如何理解 TCP 的数据流特性。</p>
+<h2 id="tcp-是一种流式协议">TCP 是一种流式协议</h2>
+<p>在前面的章节中，我们讲的都是单个客户端 - 服务器的例子，可能会给你造成一种错觉，好像 TCP 是一种应答形式的数据传输过程，比如发送端一次发送 network 和 program 这样的报文，在前面的例子中，我们看到的结果基本是这样的：</p>
+<p>发送端：network &mdash;-&gt; 接收端回应：Hi, network</p>
+<p>发送端：program &mdash;&ndash;&gt; 接收端回应：Hi, program</p>
+<p>这其实是一个假象，之所以会这样，是因为网络条件比较好，而且发送的数据也比较少。</p>
+<p>为了让大家理解 TCP 数据是流式的这个特性，我们分别从发送端和接收端来阐述。</p>
+<p>我们知道，在发送端，当我们调用 send 函数完成数据“发送”以后，数据并没有被真正从网络上发送出去，只是从应用程序拷贝到了操作系统内核协议栈中，至于什么时候真正被发送，取决于发送窗口、拥塞窗口以及当前发送缓冲区的大小等条件。也就是说，我们不能假设每次 send 调用发送的数据，都会作为一个整体完整地被发送出去。</p>
+<p>如果我们考虑实际网络传输过程中的各种影响，假设发送端陆续调用 send 函数先后发送 network 和 program 报文，那么实际的发送很有可能是这个样子的。</p>
+<p>第一种情况，一次性将 network 和 program 在一个 TCP 分组中发送出去，像这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...xxxnetworkprogramxxx...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二种情况，program 的部分随 network 在一个 TCP 分组中发送出去，像这样：</p>
+<p>TCP 分组 1：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...xxxxxnetworkpro
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>TCP 分组 2：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">gramxxxxxxxxxx...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第三种情况，network 的一部分随 TCP 分组被发送出去，另一部分和 program 一起随另一个 TCP 分组发送出去，像这样。</p>
+<p>TCP 分组 1：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...xxxxxxxxxxxnet
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>TCP 分组 2：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">workprogramxxx...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>实际上类似的组合可以枚举出无数种。不管是哪一种，核心的问题就是，我们不知道 network 和 program 这两个报文是如何进行 TCP 分组传输的。换言之，我们在发送数据的时候，不应该假设“数据流和 TCP 分组是一种映射关系”。就好像在前面，我们似乎觉得 network 这个报文一定对应一个 TCP 分组，这是完全不正确的。</p>
+<p>如果我们再来看客户端，数据流的特征更明显。</p>
+<p>我们知道，接收端缓冲区保留了没有被取走的数据，随着应用程序不断从接收端缓冲区读出数据，接收端缓冲区就可以容纳更多新的数据。如果我们使用 recv 从接收端缓冲区读取数据，发送端缓冲区的数据是以字节流的方式存在的，无论发送端如何构造 TCP 分组，接收端最终受到的字节流总是像下面这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">xxxxxxxxxxxxxxxxxnetworkprogramxxxxxxxxxxxx
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>关于接收端字节流，有两点需要注意：</p>
+<p>第一，这里 netwrok 和 program 的顺序肯定是会保持的，也就是说，先调用 send 函数发送的字节，总在后调用 send 函数发送字节的前面，这个是由 TCP 严格保证的；</p>
+<p>第二，如果发送过程中有 TCP 分组丢失，但是其后续分组陆续到达，那么 TCP 协议栈会缓存后续分组，直到前面丢失的分组到达，最终，形成可以被应用程序读取的数据流。</p>
+<h2 id="网络字节排序">网络字节排序</h2>
+<p>我们知道计算机最终保存和传输，用的都是 0101 这样的二进制数据，字节流在网络上的传输，也是通过二进制来完成的。</p>
+<p>从二进制到字节是通过编码完成的，比如著名的 ASCII 编码，通过一个字节 8 个比特对常用的西方字母进行了编码。</p>
+<p>这里有一个有趣的问题，如果需要传输数字，比如 0x0201，对应的二进制为 00000010000000001，那么两个字节的数据到底是先传 0x01，还是相反？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/ca336ee15e936ff353e91ba10a8f9590.png" alt=""><br>
+在计算机发展的历史上，对于如何存储这个数据没有形成标准。比如这里讲到的问题，不同的系统就会有两种存法，一种是将 0x02 高字节存放在起始地址，这个叫做<strong>大端字节序</strong>（Big-Endian）。另一种相反，将 0x01 低字节存放在起始地址，这个叫做<strong>小端字节序</strong>（Little-Endian）。</p>
+<p>但是在网络传输中，必须保证双方都用同一种标准来表达，这就好比我们打电话时说的是同一种语言，否则双方不能顺畅地沟通。这个标准就涉及到了网络字节序的选择问题，对于网络字节序，必须二选一。我们可以看到网络协议使用的是大端字节序，我个人觉得大端字节序比较符合人类的思维习惯，你可以想象手写一个多位数字，从开始往小位写，自然会先写大位，比如写 12, 1234，这个样子。</p>
+<p>为了保证网络字节序一致，POSIX 标准提供了如下的转换函数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">uint16_t htons (uint16_t hostshort)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">uint16_t ntohs (uint16_t netshort)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">uint32_t htonl (uint32_t hostlong)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">uint32_t ntohl (uint32_t netlong)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里函数中的 n 代表的就是 network，h 代表的是 host，s 表示的是 short，l 表示的是 long，分别表示 16 位和 32 位的整数。</p>
+<p>这些函数可以帮助我们在主机（host）和网络（network）的格式间灵活转换。当使用这些函数时，我们并不需要关心主机到底是什么样的字节顺序，只要使用函数给定值进行网络字节序和主机字节序的转换就可以了。</p>
+<p>你可以想象，如果碰巧我们的系统本身是大端字节序，和网络字节序一样，那么使用上述所有的函数进行转换的时候，结果都仅仅是一个空实现，直接返回。</p>
+<p>比如这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># if __BYTE_ORDER == __BIG_ENDIAN
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/* The host byte order is the same as network byte order,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   so these functions are all just identity.  */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># define ntohl(x) (x)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># define ntohs(x) (x)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># define htonl(x) (x)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># define htons(x) (x)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="报文读取和解析">报文读取和解析</h2>
+<p>应该看到，报文是以字节流的形式呈现给应用程序的，那么随之而来的一个问题就是，应用程序如何解读字节流呢？</p>
+<p>这就要说到报文格式和解析了。报文格式实际上定义了字节的组织形式，发送端和接收端都按照统一的报文格式进行数据传输和解析，这样就可以保证彼此能够完成交流。</p>
+<p>只有知道了报文格式，接收端才能针对性地进行报文读取和解析工作。</p>
+<p>报文格式最重要的是如何确定报文的边界。常见的报文格式有两种方法，一种是发送端把要发送的报文长度预先通过报文告知给接收端；另一种是通过一些特殊的字符来进行边界的划分。</p>
+<h2 id="显式编码报文长度">显式编码报文长度</h2>
+<h3 id="报文格式">报文格式</h3>
+<p>下面我们来看一个例子，这个例子是把要发送的报文长度预先通过报文告知接收端，你可以看到文章中有这样一张图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/4b1a726295f05ab95b4b267b2a01b6a3.png" alt=""><br>
+由图可以看出，这个报文的格式很简单，首先 4 个字节大小的消息长度，其目的是将真正发送的字节流的大小显式通过报文告知接收端，接下来是 4 个字节大小的消息类型，而真正需要发送的数据则紧随其后。</p>
+<h3 id="发送报文">发送报文</h3>
+<p>发送端的程序如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int main(int argc, char **argv) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (argc != 2) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        error(1, 0, &#34;usage: tcpclient &lt;IPaddress&gt;&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     int socket_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     struct sockaddr_in server_addr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    bzero(&amp;server_addr, sizeof(server_addr));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    server_addr.sin_family = AF_INET;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    server_addr.sin_port = htons(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    inet_pton(AF_INET, argv[1], &amp;server_addr.sin_addr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     socklen_t server_len = sizeof(server_addr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int connect_rt = connect(socket_fd, (struct sockaddr *) &amp;server_addr, server_len);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (connect_rt &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        error(1, errno, &#34;connect failed &#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     struct {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        u_int32_t message_length;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        u_int32_t message_type;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        char buf[128];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } message;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     int n;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while (fgets(message.buf, sizeof(message.buf), stdin) != NULL) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        n = strlen(message.buf);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        message.message_length = htonl(n);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        message.message_type = 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (send(socket_fd, (char *) &amp;message, sizeof(message.message_length) + sizeof(message.message_type) + n, 0) &lt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;send failure&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    exit(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>程序的 1-20 行是常规的创建套接字和地址，建立连接的过程。我们重点往下看，21-25 行就是图示的报文格式转化为结构体，29-37 行从标准输入读入数据，分别对消息长度、类型进行了初始化，注意这里使用了 htonl 函数将字节大小转化为了网络字节顺序，这一点很重要。最后我们看到 23 行实际发送的字节流大小为消息长度 4 字节，加上消息类型 4 字节，以及标准输入的字符串大小。</p>
+<h3 id="解析报文程序">解析报文：程序</h3>
+<p>下面给出的是服务器端的程序，和客户端不一样的是，服务器端需要对报文进行解析。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span><span class="lnt">85
+</span><span class="lnt">86
+</span><span class="lnt">87
+</span><span class="lnt">88
+</span><span class="lnt">89
+</span><span class="lnt">90
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">count</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">static</span> <span class="n">void</span> <span class="n">sig_int</span><span class="p">(</span><span class="ne">int</span> <span class="n">signo</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;</span><span class="se">\n</span><span class="s2">received </span><span class="si">%d</span><span class="s2"> datagrams</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="ne">int</span> <span class="n">main</span><span class="p">(</span><span class="ne">int</span> <span class="n">argc</span><span class="p">,</span> <span class="n">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">listenfd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">listenfd</span> <span class="o">=</span> <span class="n">socket</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">struct</span> <span class="n">sockaddr_in</span> <span class="n">server_addr</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">bzero</span><span class="p">(</span><span class="o">&amp;</span><span class="n">server_addr</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">server_addr</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">server_addr</span><span class="o">.</span><span class="n">sin_family</span> <span class="o">=</span> <span class="n">AF_INET</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">server_addr</span><span class="o">.</span><span class="n">sin_addr</span><span class="o">.</span><span class="n">s_addr</span> <span class="o">=</span> <span class="n">htonl</span><span class="p">(</span><span class="n">INADDR_ANY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">server_addr</span><span class="o">.</span><span class="n">sin_port</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="n">SERV_PORT</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="ne">int</span> <span class="n">on</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">setsockopt</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">on</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">on</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="ne">int</span> <span class="n">rt1</span> <span class="o">=</span> <span class="n">bind</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">server_addr</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">server_addr</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">rt1</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">errno</span><span class="p">,</span> <span class="s2">&#34;bind failed &#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="ne">int</span> <span class="n">rt2</span> <span class="o">=</span> <span class="n">listen</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="n">LISTENQ</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">rt2</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">errno</span><span class="p">,</span> <span class="s2">&#34;listen failed &#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">signal</span><span class="p">(</span><span class="n">SIGPIPE</span><span class="p">,</span> <span class="n">SIG_IGN</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="ne">int</span> <span class="n">connfd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">struct</span> <span class="n">sockaddr_in</span> <span class="n">client_addr</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">socklen_t</span> <span class="n">client_len</span> <span class="o">=</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">client_addr</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="p">((</span><span class="n">connfd</span> <span class="o">=</span> <span class="n">accept</span><span class="p">(</span><span class="n">listenfd</span><span class="p">,</span> <span class="p">(</span><span class="n">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="p">)</span> <span class="o">&amp;</span><span class="n">client_addr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">client_len</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">errno</span><span class="p">,</span> <span class="s2">&#34;bind failed &#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">char</span> <span class="n">buf</span><span class="p">[</span><span class="mi">128</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="ne">int</span> <span class="n">n</span> <span class="o">=</span> <span class="n">read_message</span><span class="p">(</span><span class="n">connfd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">errno</span><span class="p">,</span> <span class="s2">&#34;error read message&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&#34;client closed </span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">buf</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;received </span><span class="si">%d</span><span class="s2"> bytes: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">count</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个程序 1-41 行创建套接字，等待连接建立部分和前面基本一致。我们重点看 42-55 行的部分。45-55 行循环处理字节流，调用 read_message 函数进行报文解析工作，并把报文的主体通过标准输出打印出来。</p>
+<h3 id="解析报文readn-函数">解析报文：readn 函数</h3>
+<p>在了解 read_message 工作原理之前，我们先来看第 5 讲就引入的一个函数：readn。这里一定要强调的是 readn 函数的语义，<strong>读取报文预设大小的字节</strong>，readn 调用会一直循环，尝试读取预设大小的字节，如果接收缓冲区数据空，readn 函数会阻塞在那里，直到有数据到达。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">size_t readn(int fd, void *buffer, size_t length) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    size_t count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ssize_t nread;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char *ptr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     ptr = buffer;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    count = length;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (count &gt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        nread = read(fd, ptr, count);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (nread &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (errno == EINTR)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                return (-1);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } else if (nread == 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;                /* EOF */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         count -= nread;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ptr += nread;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return (length - count);        /* return &gt;= 0 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>readn 函数中使用 count 来表示还需要读取的字符数，如果 count 一直大于 0，说明还没有满足预设的字符大小，循环就会继续。第 9 行通过 read 函数来服务最多 count 个字符。11-17 行针对返回值进行出错判断，其中返回值为 0 的情形是 EOF，表示对方连接终止。19-20 行要读取的字符数减去这次读到的字符数，同时移动缓冲区指针，这样做的目的是为了确认字符数是否已经读取完毕。</p>
+<h3 id="解析报文read_message-函数">解析报文：read_message 函数</h3>
+<p>有了 readn 函数作为基础，我们再看一下 read_message 对报文的解析处理：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">size_t read_message(int fd, char *buffer, size_t length) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    u_int32_t msg_length;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    u_int32_t msg_type;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int rc;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     rc = readn(fd, (char *) &amp;msg_length, sizeof(u_int32_t));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (rc != sizeof(u_int32_t))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return rc &lt; 0 ? -1 : 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    msg_length = ntohl(msg_length);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     rc = readn(fd, (char *) &amp;msg_type, sizeof(msg_type));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (rc != sizeof(u_int32_t))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return rc &lt; 0 ? -1 : 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     if (msg_length &gt; length) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     rc = readn(fd, buffer, msg_length);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (rc != msg_length)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return rc &lt; 0 ? -1 : 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return rc;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这个函数中，第 6 行通过调用 readn 函数获取 4 个字节的消息长度数据，紧接着，第 11 行通过调用 readn 函数获取 4 个字节的消息类型数据。第 15 行判断消息的长度是不是太大，如果大到本地缓冲区不能容纳，则直接返回错误；第 19 行调用 readn 一次性读取已知长度的消息体。</p>
+<h3 id="实验">实验</h3>
+<p>我们依次启动作为报文解析的服务器一端，以及作为报文发送的客户端。我们看到，每次客户端发送的报文都可以被服务器端解析出来，在标准输出上的结果验证了这一点。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./streamserver
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">received 8 bytes: network
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">received 5 bytes: good
+</span></span></code></pre></td></tr></table>
+</div>
+</div><div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./streamclient
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">network
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">good
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="特殊字符作为边界">特殊字符作为边界</h2>
+<p>前面我提到了两种报文格式，另外一种报文格式就是通过设置特殊字符作为报文边界。HTTP 是一个非常好的例子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/83d00a2694acc1fed03ff10194a974b4.png" alt=""><br>
+HTTP 通过设置回车符、换行符做为 HTTP 报文协议的边界。</p>
+<p>下面的 read_line 函数就是在尝试读取一行数据，也就是读到回车符<code>\r</code>，或者读到回车换行符<code>\r\n</code>为止。这个函数每次尝试读取一个字节，第 9 行如果读到了回车符<code>\r</code>，接下来在 11 行的“观察”下看有没有换行符，如果有就在第 12 行读取这个换行符；如果没有读到回车符，就在第 16-17 行将字符放到缓冲区，并移动指针。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int read_line(int fd, char *buf, int size) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int i = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char c = &#39;\0&#39;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int n;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while ((i &lt; size - 1) &amp;&amp; (c != &#39;\n&#39;)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        n = recv(fd, &amp;c, 1, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (n &gt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (c == &#39;\r&#39;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                n = recv(fd, &amp;c, 1, MSG_PEEK);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if ((n &gt; 0) &amp;&amp; (c == &#39;\n&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    recv(fd, &amp;c, 1, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    c = &#39;\n&#39;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            buf[i] = c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            i++;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            c = &#39;\n&#39;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    buf[i] = &#39;\0&#39;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return (i);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结">总结</h2>
+<p>和我们预想的不太一样，TCP 数据流特性决定了字节流本身是没有边界的，一般我们通过显式编码报文长度的方式，以及选取特殊字符区分报文边界的方式来进行报文格式的设计。而对报文解析的工作就是要在知道报文格式的情况下，有效地对报文信息进行还原。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，这里给你留两道思考题，供你消化今天的内容。</p>
+<p>第一道题关于 HTTP 的报文格式，我们看到，既要处理只有回车的情景，也要处理同时有回车和换行的情景，你知道造成这种情况的原因是什么吗？</p>
+<p>第二道题是，我们这里讲到的报文格式，和 TCP 分组的报文格式，有什么区别和联系吗？</p>
+<p>欢迎你在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，与他们一起交流一下这两个问题吧。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%94%A8%E6%88%B7%E4%BD%93%E9%AA%8C%E8%AE%BE%E8%AE%A1%E5%AE%9E%E6%88%98%E8%AF%BE/16__%E5%A6%82%E4%BD%95%E5%80%9F%E5%8A%A9%E4%BD%93%E9%AA%8C%E5%9C%B0%E5%9B%BE%E4%B8%BA%E7%94%A8%E6%88%B7%E6%89%93%E9%80%A0%E6%B2%89%E6%B5%B8%E4%BD%93%E9%AA%8C/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16__如何借助体验地图为用户打造沉浸体验？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/16__%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA_webassembly_%E5%9C%A8%E7%BA%BF%E5%A4%9A%E5%AA%92%E4%BD%93%E5%A4%84%E7%90%86%E5%BA%94%E7%94%A8%E4%BA%8C/">
+            <span class="next-text nav-default">16__如何实现一个_WebAssembly_在线多媒体处理应用（二）？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>21_JavaScript编译器（二）：V8的解释器和优化编译器 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是宫文学。通过前一讲的学习，我们已经了解了 V8 的整个编译过程，并重点探讨了一个问题，就是 V8 的编译速度为什么那么快。
+V8 把解析过程做了重点的优化，解析完毕以后就可以马上通过 Ignition 解释执行了。这就让 JavaScript 可以快速运行起来。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/21_javascript%E7%BC%96%E8%AF%91%E5%99%A8%E4%BA%8Cv8%E7%9A%84%E8%A7%A3%E9%87%8A%E5%99%A8%E5%92%8C%E4%BC%98%E5%8C%96%E7%BC%96%E8%AF%91%E5%99%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/21_javascript%E7%BC%96%E8%AF%91%E5%99%A8%E4%BA%8Cv8%E7%9A%84%E8%A7%A3%E9%87%8A%E5%99%A8%E5%92%8C%E4%BC%98%E5%8C%96%E7%BC%96%E8%AF%91%E5%99%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="21_JavaScript编译器（二）：V8的解释器和优化编译器">
+  <meta property="og:description" content="你好，我是宫文学。通过前一讲的学习，我们已经了解了 V8 的整个编译过程，并重点探讨了一个问题，就是 V8 的编译速度为什么那么快。
+V8 把解析过程做了重点的优化，解析完毕以后就可以马上通过 Ignition 解释执行了。这就让 JavaScript 可以快速运行起来。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="编译原理实战课">
+
+  <meta itemprop="name" content="21_JavaScript编译器（二）：V8的解释器和优化编译器">
+  <meta itemprop="description" content="你好，我是宫文学。通过前一讲的学习，我们已经了解了 V8 的整个编译过程，并重点探讨了一个问题，就是 V8 的编译速度为什么那么快。
+V8 把解析过程做了重点的优化，解析完毕以后就可以马上通过 Ignition 解释执行了。这就让 JavaScript 可以快速运行起来。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7113">
+  <meta itemprop="keywords" content="编译原理实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="21_JavaScript编译器（二）：V8的解释器和优化编译器">
+  <meta name="twitter:description" content="你好，我是宫文学。通过前一讲的学习，我们已经了解了 V8 的整个编译过程，并重点探讨了一个问题，就是 V8 的编译速度为什么那么快。
+V8 把解析过程做了重点的优化，解析完毕以后就可以马上通过 Ignition 解释执行了。这就让 JavaScript 可以快速运行起来。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">21_JavaScript编译器（二）：V8的解释器和优化编译器</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7113 字 </span>
+          <span class="more-meta"> 预计阅读 15 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#turbofan-的优化编译技术">TurboFan 的优化编译技术</a>
+          <ul>
+            <li><a href="#基于推理的优化speculative-optimazition">基于推理的优化（Speculative Optimazition）</a></li>
+            <li><a href="#ir-和优化算法">IR 和优化算法</a></li>
+            <li><a href="#隐藏类shapes和内联缓存inline-caching">隐藏类（Shapes）和内联缓存（Inline Caching）</a></li>
+          </ul>
+        </li>
+        <li><a href="#提升-ignition-的速度">提升 Ignition 的速度</a></li>
+        <li><a href="#课程小结">课程小结</a></li>
+        <li><a href="#一课一思">一课一思</a></li>
+        <li><a href="#参考资料">参考资料</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是宫文学。通过前一讲的学习，我们已经了解了 V8 的整个编译过程，并重点探讨了一个问题，就是 <strong>V8 的编译速度为什么那么快</strong>。</p>
+<p>V8 把解析过程做了重点的优化，解析完毕以后就可以马上通过 Ignition 解释执行了。这就让 JavaScript 可以快速运行起来。</p>
+<p>今天这一讲呢，我们重点来讨论一下，<strong>V8 的运行速度为什么也这么快</strong>，一起来看看 V8 所采用的优化技术。</p>
+<p>上一讲我也提及过，V8 在 2008 年刚推出的时候，它提供了一个快速编译成机器码的编译器，虽然没做太多优化，但性能已经是当时其他 JavaScript 引擎的 10 倍了。而现在，V8 的速度又是 2008 年刚发布时候的 10 倍。那么，是什么技术造成了这么大的性能优化的呢？</p>
+<p>这其中，**一方面原因，是 TurboFan 这个优化编译器，采用了很多的优化技术。**那么，它采用了什么优化算法？采用了什么 IR？其优化思路跟 Java 的 JIT 编译器有什么相同点和不同点？</p>
+<p>**另一方面，最新的 Ignition 解释器，虽然只是做解释执行的功能，但竟然也比一个基础的编译器生成的代码慢不了多少。**这又是什么原因呢？</p>
+<p>所以今天，我们就一起把这些问题都搞清楚，这样你就能全面了解 V8 所采用的编译技术的特点了，你对动态类型语言的编译，也就能有更深入的了解，并且这也有助于你编写更高效的 JavaScript 程序。</p>
+<p>好，首先，我们来了解一下 TurboFan 的优化编译技术。</p>
+<h2 id="turbofan-的优化编译技术">TurboFan 的优化编译技术</h2>
+<p>TurboFan 是一个优化编译器。不过它跟 Java 的优化编译器要完成的任务是不太相同的。因为 JavaScript 是动态类型的语言，所以如果它能够推断出准确的类型再来做优化，就会带来巨大的性能提升。</p>
+<p>同时，TurboFan 也会像 Java 的 JIT 编译器那样，基于 IR 来运行各种优化算法，以及在后端做指令选择、寄存器分配等优化。所有的这些因素加起来，才使得 TurboFan 能达到很高的性能。</p>
+<p>我们先来看看 V8 最特别的优化，也就是通过对类型的推理所做的优化。</p>
+<h3 id="基于推理的优化speculative-optimazition">基于推理的优化（Speculative Optimazition）</h3>
+<p>对于基于推理的优化，我们其实并不陌生。在研究Java 的 JIT 编译器时，你就发现了 Graal 会针对解释器收集的一些信息，对于代码做一些推断，从而做一些激进的优化，比如说会跳过一些不必要的程序分支。</p>
+<p>而 JavaScript 是动态类型的语言，所以对于 V8 来说，最重要的优化，就是能够在运行时正确地做出类型推断。举个例子来说，假设示例函数中的 add 函数，在解释器里多次执行的时候，接受的参数都是整型，那么 TurboFan 就处理整型加法运算的代码就行了。这也就是上一讲中我们生成的汇编代码。</p>
+<p>function add(a,b){<br>
+return a+b;<br>
+}</p>
+<p>for (i = 0; i&lt;100000; i++){<br>
+if (i%1000==0)<br>
+console.log(i);</p>
+<pre><code>add(i, i+1);  
+</code></pre>
+<p>}</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/a07ff77ec90df55640b563742e8b6b5c.png" alt=""></p>
+<p>但是，<strong>如果不在解释器里执行，直接要求 TurboFan 做编译，会生成什么样的汇编代码呢？</strong></p>
+<p>你可以在运行 d8 的时候，加上“–always-opt”参数，这样 V8 在第一次遇到 add 函数的时候，就会编译成机器码。</p>
+<p>./d8 &ndash;trace-opt-verbose \<br>
+&ndash;trace-turbo \<br>
+&ndash;turbo-filter=add \<br>
+&ndash;print-code \<br>
+&ndash;print-opt-code \<br>
+&ndash;code-comments \<br>
+&ndash;always-opt \<br>
+add.js</p>
+<p>这一次生成的汇编代码，跟上一讲生成的就不一样了。由于编译器不知道 add 函数的参数是什么类型的，所以实际上，编译器是去调用实现 Add 指令的内置函数，来生成了汇编代码。</p>
+<p>这个内置函数当然支持所有加法操作的语义，但是它也就无法启动基于推理的优化机制了。这样的代码，跟解释器直接解释执行，性能上没太大的差别，因为它们本质上都是调用一个全功能的内置函数。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/af4aca9e000561f906cd5de5c9b09c3c.png" alt=""></p>
+<p>而推理式优化的版本则不同，它直接生成了针对整型数字进行处理的汇编代码：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/500bbfda838b7d7db5cf578d379e193d.png" alt=""></p>
+<p>我来给你解释一下这几行指令的意思：</p>
+<ol>
+<li>第 1 行和第 3 行，是把参数 1 和参数 2 分别拷贝到 r8 和 r9 寄存器。<strong>注意</strong>，这里是从物理寄存器里取值，而不是像前一个版本一样，在栈里取值。前一个版本遵循的是更加保守和安全的调用约定。</li>
+<li>第 2 行和第 4 行，是把 r8 和 r9 寄存器的值向右移 1 位。</li>
+<li>第 5 行，是把 r8 和 r9 相加。</li>
+</ol>
+<p>看到这里，你可能就发现了一个问题：**只是做个简单的加法而已，为什么要做移位操作呢？**实际上，如果你熟悉汇编语言的话，要想实现上面的功能，其实只需要下面这两行代码就可以了：</p>
+<p>movq rax, rdi   #把参数 1 拷贝到 rax 寄存器<br>
+addq rax, rcx   #把参数 2 加到 rax 寄存器上，作为返回值</p>
+<p>那么，多出来的移位操作是干什么的呢？</p>
+<p>这就涉及到了 V8 的<strong>内存管理机制</strong>。原来，V8 对象都保存在堆中。在栈帧中保存的数值，都是指向堆的指针。垃圾收集器可以通过这些指针，知道哪些内存对象是不再被使用的，从而把它们释放掉。我们前面学过，Java 的虚拟机和 Python 对于对象引用，本质上也是这么处理的。</p>
+<p>但是，这种机制对于基础数据类型，比如整型，就不太合适了。因为你没有必要为一个简单的整型数据在堆中申请内存，这样既浪费内存，又降低了访问效率，V8 需要访问两次内存才能读到一个整型变量的值（第一次读到地址，第二次根据该地址到堆里读到值）。你记得，Python 就是这么访问基础数据的。</p>
+<p>V8 显然不能忍受这种低效的方式。它采用的优化机制，是一种被广泛采用的技术，叫做<strong>标记指针</strong>（Tagged Pointer）或者<strong>标记值</strong>（Tagged Value）。《Pointer Compression in V8》这篇文章，就介绍了 V8 中采用 Tagged Pointer 技术的细节。</p>
+<p>比如说，对于一个 32 位的指针值，它的最低位是标记位。当标记位是 0 的时候，前 31 位是一个短整数（简写为 Smi）；而当标记位是 1 的时候，那么前 31 位是一个地址。这样，V8 就可以用指针来直接保存一个整数值，用于计算，从而降低了内存占用，并提高了运行效率。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/001ca31453738c8ed8b546c192d810c8.png" alt=""></p>
+<p>图 1：用标记指针技术来表示一个整数</p>
+<p>好了，现在你已经理解了 V8 的推理式编译的机制。那么，还有什么手段能提升代码的性能呢？</p>
+<p>当然，还有基于 IR 的各种优化算法。</p>
+<h3 id="ir-和优化算法">IR 和优化算法</h3>
+<p>在讲Java 的 JIT 编译器时我就提过，V8 做优化编译时采用的 IR，也是基于 Sea of Nodes 的。</p>
+<p>你可以回忆一下 Sea of Nodes 的特点：合并了数据流图与控制流图；是 SSA 形式；没有把语句划分成基本块。</p>
+<p>它的重要优点，就是优化算法可以自由调整语句的顺序，只要不破坏数据流图中的依赖关系。在 Sea of Nodes 中，没有变量（有时也叫做寄存器）的概念，只有一个个数据节点，所以对于死代码删除等优化方法来说，它也具备天然的优势。</p>
+<p><strong>说了这么多，那么要如何查看 TurboFan 的 IR 呢？</strong> <strong>一个好消息是，V8 也像 GraalVm 一样，提供了一个图形化的工具，来查看 TurboFan 的 IR。这个工具是</strong> <strong>turbolizer</strong>，它位于 V8 源代码的 tools/turbolizer 目录下。你可以按照该目录下的 README.md 文档，构建一下该工具，并运行它。</p>
+<p>python -m SimpleHTTPServer 8000</p>
+<p>它实际启动了一个简单的 Web 服务。你可以在浏览器中输入“0.0.0.0:8000”，打开 turbolizer 的界面。</p>
+<p>在运行 d8 的时候，如果带上参数“–trace-turbo”，就会在当前目录下输出一个.json 文件，打开这个文件就能显示出 TurboFan 的 IR 来。比如，上一讲的示例程序 add.js，所显示出的 add 函数的 IR：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/c86bc6fe71d28a286a0ac8ca6acbabde.png" alt=""></p>
+<p>图 2：在 turbolizer 中显示 add 函数的 IR</p>
+<p>界面中最左边一栏是源代码，中间一栏是 IR，最右边一栏是生成的汇编代码。</p>
+<p>上图中的 IR 只显示了控制节点。你可以在工具栏中找到一个按钮，把所有节点都呈现出来。在左侧的 Info 标签页中，还有一些命令的快捷键，你最好熟悉一下它们，以便于控制 IR 都显示哪些节点。这对于一个大的 IR 图来说很重要，否则你会看得眼花缭乱：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/9645c63c3608ed9ab33b5e560c699a2e.png" alt=""></p>
+<p>图 3：完整展开的 add 函数的 IR</p>
+<p>在这个图中，不同类型的节点用了不同的颜色来区分：</p>
+<ol>
+<li>黄色：控制流的节点，比如 Start、End 和 Return；</li>
+<li>淡蓝色：代表一个值的节点；</li>
+<li>红色：JavaScript 层级的操作，比如 JSEqual、JSToBoolean 等；</li>
+<li>深蓝色：代表一种中间层次的操作，介于 JavaScript 层和机器层级中间；</li>
+<li>绿色：机器级别的语言，代表一些比较低层级的操作。</li>
+</ol>
+<p>在 turbolizer 的界面上，还有一个下拉菜单，里面有多个优化步骤。你可以挨个点击，看看经过不同的优化步骤以后，IR 的变化是什么样子的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/0564850ad7e08b0779a66323d58663ef.png" alt=""></p>
+<p>图 4：TurboFan 对 IR 的处理步骤</p>
+<p>你可以看到，在第一步“v8.TFBytecodeGraphBuilder”阶段显示的 IR 中，它显示的节点还是有点儿多。我们先隐藏掉与计算功能无关的节点，得到了下面的主干。<strong>你要注意其中的绿色节点</strong>，这里已经进行了类型推测，因此它采用了一个整型计算节点：SpeculativeSafeIntegerAdd。</p>
+<p>这个节点的功能是：当两个参数都是整数的时候，那就符合类型推断，做整数加法操作；如果不符合类型推断，那么就执行逆优化。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/f5d6288e6bd9a79920c2ae7f0b6dba43.png" alt=""></p>
+<p>图 5：v8.TFBytecodeGraphBuilder”阶段的 IR</p>
+<p>你可以再去点击其他的优化步骤，看看图形会有什么变化。</p>
+<p><strong>在 v8.TFGenericLowering 阶段</strong>，我们得到了如下所示的 IR 图，这个图只保留了计算过程的主干。里面增加了两个绿色节点，这两个节点就是把标记指针转换成整数的；还增加了一个深蓝色的节点，这个节点是在函数返回之前，把整数再转换成标记指针。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/946bdf9886c7dd447c1b9295ce1fdcfe.png" alt=""></p>
+<p>图 6：v8.TFGenericLowering 阶段的 IR</p>
+<p><strong>在 v8.TFLateGraphTrimming 阶段</strong>，图中的节点增加了更多的细节，它更接近于具体 CPU 架构的汇编代码。比如，我们把前面图 6 中的标记指针，转换成 32 位整数的操作，就变成了两个节点：</p>
+<ol>
+<li>TruncateInt64ToInt32：把 64 位整型截短为 32 位整型；</li>
+<li>Word32Sar：32 位整数的移位运算，用于把标记指针转换为整数。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/a47c4f1d6cc5175be4a5db825d33514f.png" alt=""></p>
+<p>图 7：v8.TFLateGraphTrimming 阶段的 IR</p>
+<p>这三个阶段就形象地展示出了 TurboFan 的 IR 是如何 Lower 的，从比较抽象的、机器无关的节点，逐步变成了与具体架构相关的操作。</p>
+<p>所以，基本上 IR 的节点可以分为四类：顶层代表复杂操作的 JavaScript 节点、底层代表简单操作的机器节点、处于二者之间做了一定简化的节点，以及可以被各个层次共享的节点。</p>
+<p>刚才我们对 V8 做优化编译时，所采用的 IR 的分析，只关注了与加法计算有关的主干节点。你还可以用同样的方法，来看看其他的节点。这些节点主要是针对异常情况的处理。比如，如果发现参数类型不是整型，那么就要去执行逆优化。</p>
+<p>在做完了所有的优化之后，编译器就会进入指令排序、寄存器分配等步骤，最后生成机器码。</p>
+<p>现在，你就了解了 TurboFan 是如何借助 Sea of Nodes 来做优化和 Lower 的了。但我们还没有涉及具体的优化算法。<strong>那么，什么优化算法会帮助 V8 提升性能呢？</strong></p>
+<p>前面在研究Java 的 JIT 编译器的时候，我们重点关注了内联和逃逸分析的优化算法。那么，对于 JavaScript 来说，这两种优化也同样非常重要，一样能带来巨大的优化效果。</p>
+<p>我们先来看看<strong>内联优化</strong>。对于之前的示例程序，由于我们使用了“–turbo-filter=add”选项来运行代码，因此 TurboFan 只会编译 add 方法，这就避免了顶层函数把 add 函数给内联进去。而如果你去掉了这个选项，就会发现 TurboFan 在编译完毕以后，程序后面的运行速度会大大加快，一闪而过。这是因为整个顶层函数都被优化编译了，并且在这个过程中，把 add 函数给内联进去了。</p>
+<p>然后再说说<strong>逃逸分析</strong>。V8 运用逃逸分析算法，也可以像 Java 的编译器一样，把从堆中申请的内存优化为从栈中申请（甚至使用寄存器），从而提升性能，并避免垃圾收集带来的消耗。</p>
+<p>不过，JavaScript 和 Java 的对象体系设计毕竟是不一样的。在 Java 的类里，每个成员变量相对于对象指针的偏移量都是固定的；而 JavaScript 则在内部用了<strong>隐藏类</strong>来表示对象的内存布局。这也引出 V8 的另一个有特色的优化主题：<strong>内联缓存</strong>。</p>
+<p>那接下来，我就带你详细了解一下 V8 的隐藏类和内联缓存机制。</p>
+<h3 id="隐藏类shapes和内联缓存inline-caching">隐藏类（Shapes）和内联缓存（Inline Caching）</h3>
+<p>隐藏类，学术上一般叫做 Hidden Class，但不同的编译器的叫法也不一样，比如 Shapes、Maps，等等。</p>
+<p>**隐藏类有什么用呢？**你应该知道，在 JavaScript 中，你不需要先声明一个类，才能创建一个对象。你可以随时创建对象，比如下面的示例程序中，就创建了几个表示坐标点的对象：</p>
+<p>point1 = {x:2, y:3};<br>
+point2 = {x:4, y:5};<br>
+point3 = {y:7, x:6};<br>
+point4 = {x:8, y:9, z:10};</p>
+<p>那么，V8 在内部是怎么来存储 x 和 y 这些对象属性的呢？</p>
+<p>如果按照 Java 的内存布局方案，一定是在对象头后面依次存放 x 和 y 的值；而如果按照 Python 的方案，那就需要用一个字典来保存不同属性的值。但显然用类似 Java 的方案更加节省内存，访问速度也更快。</p>
+<p>所以，V8 内部就采用了隐藏类的设计。如果两个对象，有着相同的属性，并且顺序也相同，那么它们就对应相同的隐藏类。</p>
+<p>在上面的程序中，point1 和 point2 就对应着同一个隐藏类；而 point3 和 point4 要么是属性的顺序不同，要么是属性的数量不同，对应着另外的隐藏类。</p>
+<p>所以在这里，你就会得到一个<strong>编写高性能程序的要点</strong>：对于相同类型的对象，一定要保证它们的属性数量和顺序完全一致，这样才会被 V8 当作相同的类型，从而那些基于类型推断的优化才会发挥作用。</p>
+<p>此外，V8 还用到了一种叫做<strong>内联缓存</strong>的技术，来<strong>加快对象属性的访问时间</strong>。它的原理是这样的：当 V8 第一次访问某个隐藏类的属性的时候，它要到隐藏类里，去查找某个属性的地址相对于对象指针的偏移量。但 V8 会把这个偏移量缓存下来，这样下一次遇到同样的 shape 的时候，直接使用这个缓存的偏移量就行了。</p>
+<p>比如下面的示例代码，如果对象 o 是上面的 point1 或 point2，属性 x 的地址偏移量就是相同的，因为它们对应的隐藏类是一样的：</p>
+<p>function getX(o){<br>
+return o.x;<br>
+}</p>
+<p>有了内联优化技术，那么 V8 只有在第一次访问某个隐藏类的属性时，速度会慢一点，之后的访问效率就跟 Java 的差不多了。因为 Java 这样的静态类型的代码，在编译期就可以确定每个属性相对于对象地址的偏移量。</p>
+<p>好，现在你已经了解了 TurboFan 做优化的一些关键思路。接下来，我们再返回来，重新探讨一下 Ignition 的运行速度问题。</p>
+<h2 id="提升-ignition-的速度">提升 Ignition 的速度</h2>
+<p>最新版本的 V8 已经不需要多级的编译器了，只需要一个解释器（Ignition）和一个优化编译器（TurboFan）就行。在公开的测试数据中，Ignition 的运行速度，已经接近一个基线编译器生成的机器码的速度了，也就是那种没有做太多优化的机器码。</p>
+<p>这听上去似乎不符合常理，毕竟，解释执行怎么能赶得上运行机器码呢？所以，这里一定有一些值得探究的技术原理。</p>
+<p>让我们再来看看 Ignition 解释执行的原理吧。</p>
+<p>在上一讲中你已经了解到，V8 的字节码是很精简的。比如，对于各种加法操作，它只有一个 Add 指令。</p>
+<p>但是我们知道，Add 指令的语义是很复杂的，比如在 ECMAScript 标准中，就对加法的语义有很多的规定，如数字相加该怎么做、字符串连接该怎么做，等等。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/62a5ba42fa6512ea3b54bd673c207fe7.png" alt=""></p>
+<p>图 8：ECMAScript 标准中加法操作的语义规则</p>
+<p>这样的话，<strong>V8 在解释执行 Add 指令的时候，就要跳到一个内置的函数去执行，其他指令也是如此。这些内置函数的实现质量，就会大大影响解释器的运行速度。</strong></p>
+<p>那么如果换做你，你会怎么实现这些内置函数呢？</p>
+<p><strong>选择 1：用汇编语言去实现</strong>。这样，我们可以针对每种情况写出最优化的代码。但问题是，这样做的工作量很大。因为 V8 现在已经支持了 9 种架构的 CPU，而要为每种架构编写这些内置功能，都需要敲几万行的汇编代码。</p>
+<p><strong>选择 2：用 C++ 去实现</strong>。这是一个不错的选择，因为 C++ 代码最后编译的结果也是很优化的。不过这里也有一个问题：C++ 有它自己的调用约定，跟 V8 中 JavaScript 的调用约定是不同的。</p>
+<p>比如，在调用 C++ 的内置函数之前，解释器要把自己所使用的物理寄存器保护起来，避免被 C++ 程序破坏，在调用完毕以后还要恢复。这使得从解释器到内置函数，以及从内置函数回到解释器，都要做不少的转换工作。你还要写专门的代码，来对标记指针进行转换。而如果要使用 V8 的对象，那要处理的事情就更多了，比如它要去隐藏类中查找信息，以及能否通过优化实现栈上内存分配，等等。</p>
+<p><strong>那么，我们还有别的选择吗？</strong></p>
+<p>有的。你看，V8 已经有了一个不错的优化编译器 TurboFan。**既然它能产生很高效的代码，那么我们为什么不直接用 TurboFan 来生成机器码呢？**这个思路其实是可行的。这可以看做是 V8 编译器的一种自举能力，用自己的编译器，来生成自己内部要使用的内置函数的目标代码。</p>
+<p>毕竟，TurboFan 本来就是要处理标记指针、JavaScript 对象的内存表示等这些问题。这个方案还省去了做调用约定的转换的工作，因为本来 V8 执行的过程中，就要不断在解释执行和运行机器码之间切换，V8 内部对栈桢和调用约定的设计，就是要确保这种切换的代价最低。</p>
+<p>在具体实现的时候，编写这些内置函数是用 JavaScript 调用 TurboFan 提供的一些宏。这些宏可以转化为 TurboFan 的 IR 节点，从而跟 TurboFan 的优化编译功能无缝衔接。</p>
+<p>好了，分析到这里，你就知道为什么 Ignition 的运行速度会这么快了：**它采用了高度优化过的内置函数的实现，并且没有调用约定转换的负担。**而一个基线编译器生成的机器码，因为没有经过充分的优化，反倒并没有那么大的优势。</p>
+<p>再补充一点，V8 对字节码也提供了一些优化算法。比如，通过优化，可以减少对临时变量的使用，使得代码可以更多地让累加器起到临时变量的作用，从而减少内存访问次数，提高运行效率。如果你有兴趣在这个话题上去做深入研究，可以参考我在文末链接中给出的一篇论文。</p>
+<h2 id="课程小结">课程小结</h2>
+<p>本讲，我围绕运行速度这个主题，给你讲解了 V8 在 TurboFan 和 Ignition 上所采用的优化技术。你需要记住以下几个要点：</p>
+<ol>
+<li>第一，由于 JavaScript 是动态类型的语言，所以优化的要点，就是推断出函数参数的类型，并形成有针对性的优化代码。</li>
+<li>第二，同 Graal 一样，V8 也使用了 Sea of Nodes 的 IR，而且对 V8 来说，内联和逃逸优化算法仍然非常重要。我在解析 Graal 编译器的时候已经给你介绍过了，所以这一讲并没有详细展开，你可以自己去回顾复习一下。</li>
+<li>第三，V8 所采用的内联缓存技术，能够在运行期提高对象属性访问的性能。另外你要注意的是，在编写代码的时候，一定要避免对于相同的对象生成不同的隐藏类。</li>
+<li>第四，Ignition 采用了 TurboFan 来编译内置函数，这种技术非常聪明，既省了工作量，又简化了系统的结构。实际上，在 Graal 编译器里也有类似的技术，它叫做 Snippet，也是用自身的中后端功能来编译内置函数。所以，你会再次发现，多个编译器之间所采用的编译技术，是可以互相印证的。</li>
+</ol>
+<p>这节课的思维导图我同样帮你整理出来了，供你参考和复习：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/f1e384d7a8cc859610af87a00bb0cab8.png" alt=""></p>
+<h2 id="一课一思">一课一思</h2>
+<p>我们已经学了两种动态类型的语言的编译技术：Python 和 JavaScript。那我现在问一个开脑洞的问题：如果你要给 Python 加一个 JIT 编译器，那么你可以从 JavaScript 这里借鉴哪些技术呢？在哪些方面，编译器会得到巨大的性能提升？</p>
+<h2 id="参考资料">参考资料</h2>
+<ol>
+<li>V8 的指针压缩技术：Pointer Compression in V8</li>
+<li>介绍 V8 基于推理的优化机制：An Introduction to Speculative Optimization in V8</li>
+<li>对 Ignition 字节码做优化的论文：Register equivalence optimization，我在 GitHub 上也放了一份拷贝</li>
+</ol>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/">编译原理实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/21_ids%E5%BD%93%E9%BB%91%E5%AE%A2%E7%BB%95%E8%BF%87%E4%BA%86%E9%98%B2%E7%81%AB%E5%A2%99%E4%BD%A0%E8%AF%A5%E5%A6%82%E4%BD%95%E5%8F%91%E7%8E%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">21_IDS：当黑客绕过了防火墙，你该如何发现？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%81%9A%E5%A2%9E%E9%95%BF/21_%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90%E5%AE%9A%E4%B9%89%E5%85%B3%E9%94%AE%E5%A2%9E%E9%95%BF%E6%8C%87%E6%A0%87/">
+            <span class="next-text nav-default">21_案例解析：定义关键增长指标</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

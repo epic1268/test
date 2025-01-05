@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>11资源节点树：通过Sentinel无侵入实现流量链生成规则 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="前两个课时，我们重点围绕 SkyWalking 进行了原理解析。讲完了 SkyWalking，接下来我们就进入 Sentinel。
+这一讲开始，我将用两个课时围绕 Sentinel 的技术骨架展开，来带你学习它的原理。今天我们先学习 APM 系统的无侵入实现的通用设计，以及 Sentinel 的资源节点树实现原理。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/11%E8%B5%84%E6%BA%90%E8%8A%82%E7%82%B9%E6%A0%91%E9%80%9A%E8%BF%87sentinel%E6%97%A0%E4%BE%B5%E5%85%A5%E5%AE%9E%E7%8E%B0%E6%B5%81%E9%87%8F%E9%93%BE%E7%94%9F%E6%88%90%E8%A7%84%E5%88%99/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/11%E8%B5%84%E6%BA%90%E8%8A%82%E7%82%B9%E6%A0%91%E9%80%9A%E8%BF%87sentinel%E6%97%A0%E4%BE%B5%E5%85%A5%E5%AE%9E%E7%8E%B0%E6%B5%81%E9%87%8F%E9%93%BE%E7%94%9F%E6%88%90%E8%A7%84%E5%88%99/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="11资源节点树：通过Sentinel无侵入实现流量链生成规则">
+  <meta property="og:description" content="前两个课时，我们重点围绕 SkyWalking 进行了原理解析。讲完了 SkyWalking，接下来我们就进入 Sentinel。
+这一讲开始，我将用两个课时围绕 Sentinel 的技术骨架展开，来带你学习它的原理。今天我们先学习 APM 系统的无侵入实现的通用设计，以及 Sentinel 的资源节点树实现原理。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="应用性能分析实战">
+
+  <meta itemprop="name" content="11资源节点树：通过Sentinel无侵入实现流量链生成规则">
+  <meta itemprop="description" content="前两个课时，我们重点围绕 SkyWalking 进行了原理解析。讲完了 SkyWalking，接下来我们就进入 Sentinel。
+这一讲开始，我将用两个课时围绕 Sentinel 的技术骨架展开，来带你学习它的原理。今天我们先学习 APM 系统的无侵入实现的通用设计，以及 Sentinel 的资源节点树实现原理。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3785">
+  <meta itemprop="keywords" content="应用性能分析实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="11资源节点树：通过Sentinel无侵入实现流量链生成规则">
+  <meta name="twitter:description" content="前两个课时，我们重点围绕 SkyWalking 进行了原理解析。讲完了 SkyWalking，接下来我们就进入 Sentinel。
+这一讲开始，我将用两个课时围绕 Sentinel 的技术骨架展开，来带你学习它的原理。今天我们先学习 APM 系统的无侵入实现的通用设计，以及 Sentinel 的资源节点树实现原理。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">11资源节点树：通过Sentinel无侵入实现流量链生成规则</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3785 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>前两个课时，我们重点围绕 SkyWalking 进行了原理解析。讲完了 SkyWalking，接下来我们就进入 Sentinel。</p>
+<p>这一讲开始，我将用两个课时围绕 Sentinel 的技术骨架展开，来带你学习它的原理。今天我们先学习 APM 系统的无侵入实现的通用设计，以及 Sentinel 的资源节点树实现原理。</p>
+<p>什么叫“侵入”？什么叫“无侵入”？</p>
+<p>在学习 Sentinel，讨论无侵入监控时，你可能会问：Sentinel 不是“无侵入”的啊，接入 Sentinel 是需要引入客户端 jar 包的？</p>
+<p>其实 Sentinel 是体感“无侵入”，而代码“侵入”的，其原因我慢慢解答。</p>
+<p>目前很多说法是：像 SkyWalking 这种 APM 工具，通过探针实现字节码增强的方式才叫作“无侵入”，这样的理解是错误的。</p>
+<p>通过《09 | Opentracing 解密：Dapper 说它是树，SkyWalking 说它是图》，我们知道 APM 工具的实现方案有两种：一种是黑盒方案，另一种是标记方案。当今开源的 APM 工具都是使用标记方案实现，所以对应用服务是有侵入的。</p>
+<p>而“侵入”的意思是：APM 客户端工具会向应用服务内部织入监控代码，这一点我们可以通过对应用服务进行远程调试，或是对 Class 文件进行反解析来证实。</p>
+<p>那之所以有同学会有“只有 SkyWalking 这类通过探针实现的 APM 工具才是无侵入”的错觉，归根结底是使用 APM 产品时的不同“体感”所致。</p>
+<p>再结合前面课程，我们可以将侵入度按照不同“体感”，划分为以下两种。</p>
+<p>第一种以 SkyWalking 为代表的零接入“体感”的 APM 工具。它们使用探针实现字节码增强技术，解决了织入监控代码难的问题（对比其他工具，它可以在不实现监控框架暴露的拦截器或过滤器的情况下，在任意地方织入监控代码）。通过面向切面的思想，使用线程本地变量在任务线程的生命周期中完成监控标记的无侵入传递。</p>
+<p>第二种以 Sentinel 为代表的低侵入“体感”的 APM 工具。由于无法使用字节码增强技术，所以织入代码只能通过框架暴露的拦截器或过滤器实现监控代码的织入。但这种方式依然可以使用与第一种方式一样的通过面向切面的思想，使用线程本地变量在任务线程的生命周期中完成监控标记无侵入传递。接入监控时，显式地引入客户端 jar 包，即可完成接入。</p>
+<p>零接入“体感”</p>
+<p>低侵入“体感”</p>
+<p>代表工具</p>
+<p>SkyWalking</p>
+<p>Sentinel</p>
+<p>侵入度比较</p>
+<p>相比更低</p>
+<p>相比较高</p>
+<p>如何实现监控代码织入</p>
+<p>使用探针字节码技术（直接解决织入监控代码难题）</p>
+<p>（由于没有字节码增强技术）只能通过框架暴露的拦截器或过滤器实现监控代码的织入</p>
+<p>通用度</p>
+<p>较不通用</p>
+<p>更通用</p>
+<p>核心思想</p>
+<p>通过 AOP 面向切面思想，使用线程本地变量在任务线程的生命周期中，完成监控标记无侵入传递</p>
+<p>对比两种方式，虽然第二种在接入效率上有些欠缺，但它是变通的。它将企业内部所有服务接入统一的脚手架，通过脚手架基建绕过一线开发来引入 APM 工具的客户端，从而降低侵入“体感”。这与 SRE 通过在应用服务的启动命令中，增加探针参数来绕过一线开发管理 APM 客户端思想是一致的。</p>
+<p>具体的实践方案可以参考阿里云 Java 脚手架，在依赖组件中添加 Sentinel，即可在新项目的脚手架基建中增加 Sentinel 的流量管控。</p>
+<p>再回看 APM 有关侵入的问题，我们可以清晰地将其总结为两句话：</p>
+<p>APM 工具都会侵入应用服务，只不过织入监控代码的技术方案有所不同；</p>
+<p>通过 AOP 思想，使用线程本地变量实现监控任务线程的生命周期，这种方式就是释放一线开发人员编写监控代码的无侵入方案。</p>
+<p>Sentinel 也是“无侵入”的 APM 工具这个问题就解开了。那根据上面总结的第一句话，你是不是又对 APM 工具织入的监控代码产生兴趣了呢？接下来，我就以“织入监控代码是如何构建资源树结构”为主题，与你详解通用框架监控方案。</p>
+<p>监控示例：Sentinel 资源树构建的基本原理</p>
+<p>正式开讲前，我们先来熟悉下聚合搜索工具的示例项目。聚合搜索工具的核心伪代码，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">class Controller{
+</span></span><span class="line"><span class="cl">  public Response mergeSearch(String param){
+</span></span><span class="line"><span class="cl">    baidu = search(&#34;https://www.baidu.com/s?wd=&#34; + param);
+</span></span><span class="line"><span class="cl">    google = search(&#34;https://www.google.com/search?q=&#34; + param);
+</span></span><span class="line"><span class="cl">    return baidu + google;
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private Response search(String param){
+</span></span><span class="line"><span class="cl">    return OkHttpClient.get(param);
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>聚合搜索服务可以同时将多个搜索引擎的搜索数据聚合起来。比如，用户对聚合搜索服务输入关键词 APM，那聚合搜索服务会将 baidu 和 google 搜索出来的结果，聚合返回给用户。</p>
+<p>1.接入 SkyWalking</p>
+<p>通过在启动命令中，增加 SkyWalking 探针参数，将聚合搜索服务接入 SkyWalking 后，我们可以观测到如下两张拓扑图和追踪链路图。</p>
+<p>通过如下的拓扑图，我们可以清晰看到用户通过聚合搜索服务，访问量 baidu 和 google 站点。</p>
+<p>通过 SkyWalking 的链路图，我们可以清晰看到聚合搜索的调用顺序。</p>
+<p>2.接入 Sentinel</p>
+<p>通过在 pom 文件中，引入并配置 Sentinel 的 webmvc 和 okhttp 适配器的客户端 jar 包，将聚合服务接入 Sentinel 后，我们会得到如下的簇点链路图：</p>
+<p>综上可以看到，两个 APM 产品虽然接入方式不同，但一线开发人员都不需要编写任何监控代码，且两个 APM 工具的链路形态基本一致。</p>
+<p>它们织入的监控的流程，如图中红色标识所示：</p>
+<p>Sentinel 的监控流程与 Spring AOP 思想一致，通过 Spring MVC 和 OkHttp 框架暴露出的拦截器，对流量进行面向切面监控。只不过在监控过程中，使用了线程本地变量存储了监控信息，当请求再次被拦截时，识别线程本地变量存储的监控信息，构建出资源树。</p>
+<p>这就是 Sentinel 资源树构建的基本原理，总的来说，还是很好理解的。</p>
+<p>Sentinel 技术骨架</p>
+<p>学习基本原理入门后，我们再回来学习 Sentinel 的技术骨架，Sentinel 对流量的管控是通过责任链设计模式实现的。</p>
+<p>责任链设计模式是：将定义规则的对象根据指定顺序连成一条链，实现定义规则对象间的解耦，请求按照指定顺序被处理，直到有规则被匹配到为止。</p>
+<p>Sentinel 就是使用责任链设计模式实现了功能插槽链（Slot chain），如下图所示：</p>
+<p>每个被管控的资源，都会创建一系列的功能插槽链，每个功能插槽都有自己的职责，官方提供了 7 个不同职责的插槽链。今天的课程只讲解第一个功能插槽 NodeSelectorSlot，它的职责是构建资源节点树。</p>
+<p>关于 Sentinel 的技术骨架的更多内容，你可回顾《04 | 流量卫士：Alibaba Sentinel 时刻守卫流量健康》，深入了解更多设计原理。</p>
+<p>NodeSelectorSlot 示例</p>
+<p>NodeSelectorSlot 是负责收集请求所关联的资源节点的路径，将这些节点资源的调用路径，以树状结构存储起来。</p>
+<p>我们先看下官方的接入示例代码，学习下 Sentinel 的几个核心对象，接入示例代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">  ContextUtil.enter(&#34;entrance1&#34;, &#34;appA&#34;);
+</span></span><span class="line"><span class="cl">  Entry nodeA = SphU.entry(&#34;nodeA&#34;);
+</span></span><span class="line"><span class="cl">  if (nodeA != null) {
+</span></span><span class="line"><span class="cl">    nodeA.exit();
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">  ContextUtil.exit();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中，ContextUtil.enter 会在线程本地变量中创建一个名为“entrance 1”的上下文（Context）。上下文对象维护着当前调用链的元数据，其重要的属性如下。</p>
+<p>name：用于标识上下文的名称，如接入示例代码中的 entrance 1。</p>
+<p>entranceNode：当前调用链路的入口节点。节点有 4 种类型，它们有着继承关系。</p>
+<p>EntranceNode 继承 DefaultNode：表示一棵资源节点树的入口节点，通过此节点可以获取所有子节点。</p>
+<p>DefaultNode 继承 StatisticNode：节点中，存储着指定上下文相关的统计信息，当一个上下文对象被多次调用 SphU.entry 方法时，该节点就会关联多个叶子节点。</p>
+<p>ClusterNode 继承 StatisticNode：节点中，存储着资源总体运行的是统计信息，包括响应时间、线程数等，相同资源贡献一个 ClusterNode 节点。</p>
+<p>curEntry：当前调用链路的当前资源节点。</p>
+<p>origin：当前调用链路的调用源名称。</p>
+<p>接入示例的第一行代码中的“appA”就是调用源标识；紧接着通过 SphU.entry 请求一个 token，如果此时方法执行成功，就代表当前流量未达到被限制的阈值，可以被放行去执行之后的业务代码；在执行完业务代码后，调用 nodeA.exit 和 ContextUtil.exit 方法去告诉 Sentinel 当前监控点可以退出。</p>
+<p>上述示例代码会在内存中，生成如下树形结构：</p>
+<p>默认的机器节点关联着 EntranceNode 节点 Entrance 1，Entrance 1 节点关联着 DefaultNode 节点 nodeA。</p>
+<p>当示例代码中追加了 entrance 2 上下文时，代码如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">ContextUtil.enter(&#34;entrance2&#34;, &#34;appA&#34;);
+</span></span><span class="line"><span class="cl">  nodeA = SphU.entry(&#34;nodeA&#34;);
+</span></span><span class="line"><span class="cl">  if (nodeA != null) {
+</span></span><span class="line"><span class="cl">    nodeA.exit();
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">  ContextUtil.exit();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>内存中的树形结构就会变成：</p>
+<p>默认的机器节点关联着两个 EntranceNode 节点：Entrance 1 和 Entrance 2，Entrance 1 和 Entrance 2 节点又分别关联着自己的 DefaultNode 节点 nodeA。需要注意的是，DefaultNode 由资源 ID 和输入的名称来决定唯一性。</p>
+<p>现在回到我们课程示例的聚合搜索的节点树构建过程。</p>
+<p>当监控搜索工具接收到用户发来的请求时，在 Spring-MVC 适配器中通过 ContextUtil.enter 和 SphU.entry 方法，在内存中生成上下文对象，如下：</p>
+<p>上下文存储的当前节点，关联的节点树只有一个搜索入口方法的节点，且当前节点的父节点和子节点都是空。</p>
+<p>当请求流量在聚合搜索工具项目中准备搜索 baidu 资源时，在 OkHttp 拦截器会执行 SphU.entry 方法，此时在内存中生上下文对象，如下：</p>
+<p>当接收到 baidu 搜索的响应后，请求流量在聚合搜索工具项目中准备搜索 google 资源时，在 OkHttp 拦截器会同样执行 SphU.entry 方法，此时在内存中生上下文对象，如下：</p>
+<p>构造出来的资源节点树，由父节点 Spring-MVC 适配器生成，两个子节点由 OkHttp 适配器生成。在任务线程的生命周期中，开发人员不需要编写任何监控代码，Sentinel 在任务线程的生命周期，通过使用线程本地变量完成资源节点树的构建。</p>
+<p>小结与思考</p>
+<p>本节课，我首先带你学习了有关 APM 的工具的通用监控方案。</p>
+<p>关于如何织入监控代码，一种方式是实现监控框架的拦截器类织入，另一种方式是通过探针字节码技术实现织入。前者较为通用，后者侵入度较低。但无论使用哪种方式，其核心思想都是借鉴 AOP 思想，通过在线程本地变量中记录监控标记，无侵入实现监控任务线程的生命周期。</p>
+<p>接下来，又我通过聚合搜索工具项目，以及伪代码和流程图，讲述了监控代码的织入位置。最后又回到了 Sentinel 技术骨架，Sentinel 技术骨架使用责任链设计模式实现。本节课讲述了功能插槽 NodeSelectorSlot使用线程本地变量，将流量构建资源节点树的过程。</p>
+<p>不难发现，线程本地变量在监控场景中是必定会用到的技术，但是在业务需求开发中，我们使用线程本地变量的情况却少之又少。那么你知道为什么吗？欢迎在评论区写下你的思考，期待与你讨论。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/">应用性能分析实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/24%E8%AE%B2%E5%90%83%E9%80%8F%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%93/11%E4%BA%8B%E5%8A%A1%E5%A4%84%E7%90%86%E4%B8%8E%E6%81%A2%E5%A4%8D%E4%B8%8B%E5%A6%82%E4%BD%95%E6%8E%A7%E5%88%B6%E5%B9%B6%E5%8F%91%E4%BA%8B%E5%8A%A1/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">11事务处理与恢复（下）：如何控制并发事务？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E9%9D%A2%E8%AF%95%E5%AE%9D%E5%85%B8/12-%E5%9B%9E%E6%BA%AF%E6%88%91%E6%8A%8A%E5%9B%9E%E6%BA%AF%E6%80%BB%E7%BB%93%E6%88%90%E4%B8%80%E4%B8%AA%E5%85%AC%E5%BC%8F%E5%9B%9E%E6%BA%AF%E9%A2%98%E4%B8%80%E5%87%BA%E5%B0%B1%E7%94%A8%E5%AE%83/">
+            <span class="next-text nav-default">12 回溯：我把回溯总结成一个公式，回溯题一出就用它</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

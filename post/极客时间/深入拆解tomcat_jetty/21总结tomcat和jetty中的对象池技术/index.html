@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>21总结Tomcat和Jetty中的对象池技术 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="20 | 总结：Tomcat和Jetty中的对象池技术
+Java 对象，特别是一个比较大、比较复杂的 Java 对象，它们的创建、初始化和 GC 都需要耗费 CPU 和内存资源，为了减少这些开销，Tomcat 和 Jetty 都使用了对象池技术。所谓的对象池技术，就是说一个 Java 对象用完之后把它保存起来，之后再拿出来重复使用，省去了对象创建、初始化和 GC 的过程。对象池技术是典型的以空间换时间的思路。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/21%E6%80%BB%E7%BB%93tomcat%E5%92%8Cjetty%E4%B8%AD%E7%9A%84%E5%AF%B9%E8%B1%A1%E6%B1%A0%E6%8A%80%E6%9C%AF/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/21%E6%80%BB%E7%BB%93tomcat%E5%92%8Cjetty%E4%B8%AD%E7%9A%84%E5%AF%B9%E8%B1%A1%E6%B1%A0%E6%8A%80%E6%9C%AF/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="21总结Tomcat和Jetty中的对象池技术">
+  <meta property="og:description" content="20 | 总结：Tomcat和Jetty中的对象池技术
+Java 对象，特别是一个比较大、比较复杂的 Java 对象，它们的创建、初始化和 GC 都需要耗费 CPU 和内存资源，为了减少这些开销，Tomcat 和 Jetty 都使用了对象池技术。所谓的对象池技术，就是说一个 Java 对象用完之后把它保存起来，之后再拿出来重复使用，省去了对象创建、初始化和 GC 的过程。对象池技术是典型的以空间换时间的思路。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入拆解Tomcat_Jetty">
+
+  <meta itemprop="name" content="21总结Tomcat和Jetty中的对象池技术">
+  <meta itemprop="description" content="20 | 总结：Tomcat和Jetty中的对象池技术
+Java 对象，特别是一个比较大、比较复杂的 Java 对象，它们的创建、初始化和 GC 都需要耗费 CPU 和内存资源，为了减少这些开销，Tomcat 和 Jetty 都使用了对象池技术。所谓的对象池技术，就是说一个 Java 对象用完之后把它保存起来，之后再拿出来重复使用，省去了对象创建、初始化和 GC 的过程。对象池技术是典型的以空间换时间的思路。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2953">
+  <meta itemprop="keywords" content="深入拆解Tomcat_Jetty">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="21总结Tomcat和Jetty中的对象池技术">
+  <meta name="twitter:description" content="20 | 总结：Tomcat和Jetty中的对象池技术
+Java 对象，特别是一个比较大、比较复杂的 Java 对象，它们的创建、初始化和 GC 都需要耗费 CPU 和内存资源，为了减少这些开销，Tomcat 和 Jetty 都使用了对象池技术。所谓的对象池技术，就是说一个 Java 对象用完之后把它保存起来，之后再拿出来重复使用，省去了对象创建、初始化和 GC 的过程。对象池技术是典型的以空间换时间的思路。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">21总结Tomcat和Jetty中的对象池技术</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2953 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>20 | 总结：Tomcat和Jetty中的对象池技术</p>
+<p>Java 对象，特别是一个比较大、比较复杂的 Java 对象，它们的创建、初始化和 GC 都需要耗费 CPU 和内存资源，为了减少这些开销，Tomcat 和 Jetty 都使用了对象池技术。所谓的对象池技术，就是说一个 Java 对象用完之后把它保存起来，之后再拿出来重复使用，省去了对象创建、初始化和 GC 的过程。对象池技术是典型的以空间换时间的思路。</p>
+<p>由于维护对象池本身也需要资源的开销，不是所有场景都适合用对象池。如果你的 Java 对象数量很多并且存在的时间比较短，对象本身又比较大比较复杂，对象初始化的成本比较高，这样的场景就适合用对象池技术。比如 Tomcat 和 Jetty 处理 HTTP 请求的场景就符合这个特征，请求的数量很多，为了处理单个请求需要创建不少的复杂对象（比如 Tomcat 连接器中 SocketWrapper 和 SocketProcessor），而且一般来说请求处理的时间比较短，一旦请求处理完毕，这些对象就需要被销毁，因此这个场景适合对象池技术。</p>
+<p>Tomcat 的 SynchronizedStack</p>
+<p>Tomcat 用 SynchronizedStack 类来实现对象池，下面我贴出它的关键代码来帮助你理解。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class SynchronizedStack&lt;T&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 内部维护一个对象数组, 用数组实现栈的功能
+</span></span><span class="line"><span class="cl">    private Object[] stack;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 这个方法用来归还对象，用 synchronized 进行线程同步
+</span></span><span class="line"><span class="cl">    public synchronized boolean push(T obj) {
+</span></span><span class="line"><span class="cl">        index++;
+</span></span><span class="line"><span class="cl">        if (index == size) {
+</span></span><span class="line"><span class="cl">            if (limit == -1 || size &lt; limit) {
+</span></span><span class="line"><span class="cl">                expand();// 对象不够用了，扩展对象数组
+</span></span><span class="line"><span class="cl">            } else {
+</span></span><span class="line"><span class="cl">                index--;
+</span></span><span class="line"><span class="cl">                return false;
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">        stack[index] = obj;
+</span></span><span class="line"><span class="cl">        return true;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 这个方法用来获取对象
+</span></span><span class="line"><span class="cl">    public synchronized T pop() {
+</span></span><span class="line"><span class="cl">        if (index == -1) {
+</span></span><span class="line"><span class="cl">            return null;
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">        T result = (T) stack[index];
+</span></span><span class="line"><span class="cl">        stack[index--] = null;
+</span></span><span class="line"><span class="cl">        return result;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 扩展对象数组长度，以 2 倍大小扩展
+</span></span><span class="line"><span class="cl">    private void expand() {
+</span></span><span class="line"><span class="cl">      int newSize = size * 2;
+</span></span><span class="line"><span class="cl">      if (limit != -1 &amp;&amp; newSize &gt; limit) {
+</span></span><span class="line"><span class="cl">          newSize = limit;
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">      // 扩展策略是创建一个数组长度为原来两倍的新数组
+</span></span><span class="line"><span class="cl">      Object[] newStack = new Object[newSize];
+</span></span><span class="line"><span class="cl">      // 将老数组对象引用复制到新数组
+</span></span><span class="line"><span class="cl">      System.arraycopy(stack, 0, newStack, 0, size);
+</span></span><span class="line"><span class="cl">      // 将 stack 指向新数组，老数组可以被 GC 掉了
+</span></span><span class="line"><span class="cl">      stack = newStack;
+</span></span><span class="line"><span class="cl">      size = newSize;
+</span></span><span class="line"><span class="cl">   }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个代码逻辑比较清晰，主要是 SynchronizedStack 内部维护了一个对象数组，并且用数组来实现栈的接口：push 和 pop 方法，这两个方法分别用来归还对象和获取对象。你可能好奇为什么 Tomcat 使用一个看起来比较简单的 SynchronizedStack 来做对象容器，为什么不使用高级一点的并发容器比如 ConcurrentLinkedQueue 呢？</p>
+<p>这是因为 SynchronizedStack 用数组而不是链表来维护对象，可以减少结点维护的内存开销，并且它本身只支持扩容不支持缩容，也就是说数组对象在使用过程中不会被重新赋值，也就不会被 GC。这样设计的目的是用最低的内存和 GC 的代价来实现无界容器，同时 Tomcat 的最大同时请求数是有限制的，因此不需要担心对象的数量会无限膨胀。</p>
+<p>Jetty 的 ByteBufferPool</p>
+<p>我们再来看 Jetty 中的对象池 ByteBufferPool，它本质是一个 ByteBuffer 对象池。当 Jetty 在进行网络数据读写时，不需要每次都在 JVM 堆上分配一块新的 Buffer，只需在 ByteBuffer 对象池里拿到一块预先分配好的 Buffer，这样就避免了频繁的分配内存和释放内存。这种设计你同样可以在高性能通信中间件比如 Mina 和 Netty 中看到。ByteBufferPool 是一个接口：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public interface ByteBufferPool
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    public ByteBuffer acquire(int size, boolean direct);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void release(ByteBuffer buffer);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接口中的两个方法：acquire 和 release 分别用来分配和释放内存，并且你可以通过 acquire 方法的 direct 参数来指定 buffer 是从 JVM 堆上分配还是从本地内存分配。ArrayByteBufferPool 是 ByteBufferPool 的实现类，我们先来看看它的成员变量和构造函数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class ArrayByteBufferPool implements ByteBufferPool
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    private final int _min;// 最小 size 的 Buffer 长度
+</span></span><span class="line"><span class="cl">    private final int _maxQueue;//Queue 最大长度
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 用不同的 Bucket(桶) 来持有不同 size 的 ByteBuffer 对象, 同一个桶中的 ByteBuffer size 是一样的
+</span></span><span class="line"><span class="cl">    private final ByteBufferPool.Bucket[] _direct;
+</span></span><span class="line"><span class="cl">    private final ByteBufferPool.Bucket[] _indirect;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //ByteBuffer 的 size 增量
+</span></span><span class="line"><span class="cl">    private final int _inc;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public ArrayByteBufferPool(int minSize, int increment, int maxSize, int maxQueue)
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        // 检查参数值并设置默认值
+</span></span><span class="line"><span class="cl">        if (minSize&lt;=0)//ByteBuffer 的最小长度
+</span></span><span class="line"><span class="cl">            minSize=0;
+</span></span><span class="line"><span class="cl">        if (increment&lt;=0)
+</span></span><span class="line"><span class="cl">            increment=1024;// 默认以 1024 递增
+</span></span><span class="line"><span class="cl">        if (maxSize&lt;=0)
+</span></span><span class="line"><span class="cl">            maxSize=64*1024;//ByteBuffer 的最大长度默认是 64K
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        //ByteBuffer 的最小长度必须小于增量
+</span></span><span class="line"><span class="cl">        if (minSize&gt;=increment) 
+</span></span><span class="line"><span class="cl">            throw new IllegalArgumentException(&#34;minSize &gt;= increment&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 最大长度必须是增量的整数倍
+</span></span><span class="line"><span class="cl">        if ((maxSize%increment)!=0 || increment&gt;=maxSize)
+</span></span><span class="line"><span class="cl">            throw new IllegalArgumentException(&#34;increment must be a divisor of maxSize&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        _min=minSize;
+</span></span><span class="line"><span class="cl">        _inc=increment;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 创建 maxSize/increment 个桶, 包含直接内存的与 heap 的
+</span></span><span class="line"><span class="cl">        _direct=new ByteBufferPool.Bucket[maxSize/increment];
+</span></span><span class="line"><span class="cl">        _indirect=new ByteBufferPool.Bucket[maxSize/increment];
+</span></span><span class="line"><span class="cl">        _maxQueue=maxQueue;
+</span></span><span class="line"><span class="cl">        int size=0;
+</span></span><span class="line"><span class="cl">        for (int i=0;i&lt;_direct.length;i++)
+</span></span><span class="line"><span class="cl">        {
+</span></span><span class="line"><span class="cl">          size+=_inc;
+</span></span><span class="line"><span class="cl">          _direct[i]=new ByteBufferPool.Bucket(this,size,_maxQueue);
+</span></span><span class="line"><span class="cl">          _indirect[i]=new ByteBufferPool.Bucket(this,size,_maxQueue);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从上面的代码我们看到，ByteBufferPool 是用不同的桶（Bucket）来管理不同长度的 ByteBuffer，因为我们可能需要分配一块 1024 字节的 Buffer，也可能需要一块 64K 字节的 Buffer。而桶的内部用一个 ConcurrentLinkedDeque 来放置 ByteBuffer 对象的引用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">private final Deque&lt;ByteBuffer&gt; _queue = new ConcurrentLinkedDeque&lt;&gt;();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你可以通过下面的图再来理解一下：</p>
+<p>而 Buffer 的分配和释放过程，就是找到相应的桶，并对桶中的 Deque 做出队和入队的操作，而不是直接向 JVM 堆申请和释放内存。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 分配 Buffer
+</span></span><span class="line"><span class="cl">public ByteBuffer acquire(int size, boolean direct)
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    // 找到对应的桶，没有的话创建一个桶
+</span></span><span class="line"><span class="cl">    ByteBufferPool.Bucket bucket = bucketFor(size,direct);
+</span></span><span class="line"><span class="cl">    if (bucket==null)
+</span></span><span class="line"><span class="cl">        return newByteBuffer(size,direct);
+</span></span><span class="line"><span class="cl">    // 这里其实调用了 Deque 的 poll 方法
+</span></span><span class="line"><span class="cl">    return bucket.acquire(direct);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 释放 Buffer
+</span></span><span class="line"><span class="cl">public void release(ByteBuffer buffer)
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    if (buffer!=null)
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">      // 找到对应的桶
+</span></span><span class="line"><span class="cl">      ByteBufferPool.Bucket bucket = bucketFor(buffer.capacity(),buffer.isDirect());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 这里调用了 Deque 的 offerFirst 方法
+</span></span><span class="line"><span class="cl">  if (bucket!=null)
+</span></span><span class="line"><span class="cl">      bucket.release(buffer);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对象池的思考</p>
+<p>对象池作为全局资源，高并发环境中多个线程可能同时需要获取对象池中的对象，因此多个线程在争抢对象时会因为锁竞争而阻塞， 因此使用对象池有线程同步的开销，而不使用对象池则有创建和销毁对象的开销。对于对象池本身的设计来说，需要尽量做到无锁化，比如 Jetty 就使用了 ConcurrentLinkedDeque。如果你的内存足够大，可以考虑用线程本地（ThreadLocal）对象池，这样每个线程都有自己的对象池，线程之间互不干扰。</p>
+<p>为了防止对象池的无限膨胀，必须要对池的大小做限制。对象池太小发挥不了作用，对象池太大的话可能有空闲对象，这些空闲对象会一直占用内存，造成内存浪费。这里你需要根据实际情况做一个平衡，因此对象池本身除了应该有自动扩容的功能，还需要考虑自动缩容。</p>
+<p>所有的池化技术，包括缓存，都会面临内存泄露的问题，原因是对象池或者缓存的本质是一个 Java 集合类，比如 List 和 Stack，这个集合类持有缓存对象的引用，只要集合类不被 GC，缓存对象也不会被 GC。维持大量的对象也比较占用内存空间，所以必要时我们需要主动清理这些对象。以 Java 的线程池 ThreadPoolExecutor 为例，它提供了 allowCoreThreadTimeOut 和 setKeepAliveTime 两种方法，可以在超时后销毁线程，我们在实际项目中也可以参考这个策略。</p>
+<p>另外在使用对象池时，我这里还有一些小贴士供你参考：</p>
+<p>对象在用完后，需要调用对象池的方法将对象归还给对象池。</p>
+<p>对象池中的对象在再次使用时需要重置，否则会产生脏对象，脏对象可能持有上次使用的引用，导致内存泄漏等问题，并且如果脏对象下一次使用时没有被清理，程序在运行过程中会发生意想不到的问题。</p>
+<p>对象一旦归还给对象池，使用者就不能对它做任何操作了。</p>
+<p>向对象池请求对象时有可能出现的阻塞、异常或者返回 null 值，这些都需要我们做一些额外的处理，来确保程序的正常运行。</p>
+<p>本期精华</p>
+<p>Tomcat 和 Jetty 都用到了对象池技术，这是因为处理一次 HTTP 请求的时间比较短，但是这个过程中又需要创建大量复杂对象。</p>
+<p>对象池技术可以减少频繁创建和销毁对象带来的成本，实现对象的缓存和复用。如果你的系统需要频繁的创建和销毁对象，并且对象的创建代价比较大，这种情况下，一般来说你会观察到 GC 的压力比较大，占用 CPU 率比较高，这个时候你就可以考虑使用对象池了。</p>
+<p>还有一种情况是你需要对资源的使用做限制，比如数据库连接，不能无限制地创建数据库连接，因此就有了数据库连接池，你也可以考虑把一些关键的资源池化，对它们进行统一管理，防止滥用。</p>
+<p>课后思考</p>
+<p>请你想想在实际工作中，有哪些场景可以用“池化”技术来优化。</p>
+<p>不知道今天的内容你消化得如何？如果还有疑问，请大胆的在留言区提问，也欢迎你把你的课后思考和心得记录下来，与我和其他同学一起讨论。如果你觉得今天有所收获，欢迎你把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/">深入拆解Tomcat_Jetty</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/21%E6%80%BB%E7%BB%93tomcat%E5%92%8Cjetty%E4%B8%AD%E7%9A%84%E5%AF%B9%E8%B1%A1%E6%B1%A0%E6%8A%80%E6%9C%AF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">21总结：Tomcat和Jetty中的对象池技术</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/21%E6%A1%88%E4%BE%8B%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8kong%E8%BF%9B%E8%A1%8C%E7%BD%91%E5%85%B3%E4%B8%9A%E5%8A%A1%E5%8C%96%E5%AE%9A%E5%88%B6/">
+            <span class="next-text nav-default">21案例：如何使用Kong进行网关业务化定制？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

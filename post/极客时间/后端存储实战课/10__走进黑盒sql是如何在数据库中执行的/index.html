@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>10__走进黑盒：SQL是如何在数据库中执行的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是李玥。
+上一节课我们讲了怎么来避免写出慢 SQL，课后我给你留了一道思考题：在下面这两个 SQL 中，为什么第一个 SQL 在执行的时候无法命中索引呢？
+SELECT * FROM user WHERE left(department_code, 5) = &lsquo;00028&rsquo;;
+SELECT * FROM user WHERE department_code LIKE &lsquo;00028%&rsquo;;
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/10__%E8%B5%B0%E8%BF%9B%E9%BB%91%E7%9B%92sql%E6%98%AF%E5%A6%82%E4%BD%95%E5%9C%A8%E6%95%B0%E6%8D%AE%E5%BA%93%E4%B8%AD%E6%89%A7%E8%A1%8C%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/10__%E8%B5%B0%E8%BF%9B%E9%BB%91%E7%9B%92sql%E6%98%AF%E5%A6%82%E4%BD%95%E5%9C%A8%E6%95%B0%E6%8D%AE%E5%BA%93%E4%B8%AD%E6%89%A7%E8%A1%8C%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="10__走进黑盒：SQL是如何在数据库中执行的？">
+  <meta property="og:description" content="你好，我是李玥。
+上一节课我们讲了怎么来避免写出慢 SQL，课后我给你留了一道思考题：在下面这两个 SQL 中，为什么第一个 SQL 在执行的时候无法命中索引呢？
+SELECT * FROM user WHERE left(department_code, 5) = ‘00028’;
+SELECT * FROM user WHERE department_code LIKE ‘00028%’;">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="后端存储实战课">
+
+  <meta itemprop="name" content="10__走进黑盒：SQL是如何在数据库中执行的？">
+  <meta itemprop="description" content="你好，我是李玥。
+上一节课我们讲了怎么来避免写出慢 SQL，课后我给你留了一道思考题：在下面这两个 SQL 中，为什么第一个 SQL 在执行的时候无法命中索引呢？
+SELECT * FROM user WHERE left(department_code, 5) = ‘00028’;
+SELECT * FROM user WHERE department_code LIKE ‘00028%’;">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3855">
+  <meta itemprop="keywords" content="后端存储实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="10__走进黑盒：SQL是如何在数据库中执行的？">
+  <meta name="twitter:description" content="你好，我是李玥。
+上一节课我们讲了怎么来避免写出慢 SQL，课后我给你留了一道思考题：在下面这两个 SQL 中，为什么第一个 SQL 在执行的时候无法命中索引呢？
+SELECT * FROM user WHERE left(department_code, 5) = ‘00028’;
+SELECT * FROM user WHERE department_code LIKE ‘00028%’;">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">10__走进黑盒：SQL是如何在数据库中执行的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3855 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#sql-是如何在执行器中执行的">SQL 是如何在执行器中执行的？</a></li>
+        <li><a href="#sql-是如何在存储引擎中执行的">SQL 是如何在存储引擎中执行的？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是李玥。</p>
+<p>上一节课我们讲了怎么来避免写出慢 SQL，课后我给你留了一道思考题：在下面这两个 SQL 中，为什么第一个 SQL 在执行的时候无法命中索引呢？</p>
+<p>SELECT * FROM user WHERE left(department_code, 5) = &lsquo;00028&rsquo;;<br>
+SELECT * FROM user WHERE department_code LIKE &lsquo;00028%&rsquo;;</p>
+<p>原因是，这个 SQL 的 WHERE 条件中对 department_code 这个列做了一个 left 截取的计算，对于表中的每一条数据，都得先做截取计算，然后判断截取后的值，所以不得不做全表扫描。你在写 SQL 的时候，尽量不要在 WEHER 条件中，对列做任何计算。</p>
+<p>到这里这个问题就结束了么？那我再给你提一个问题，这两个 SQL 中的 WHERE 条件，虽然写法不一样，但它俩的语义不就是一样的么？是不是都可以解释成：department_code 这一列前 5 个字符是 00028？从语义上来说，没有任何不同是吧？所以，它们的查询结果也是完全一样的。那凭什么第一条 SQL 就得全表扫描，第二条 SQL 就可以命中索引？</p>
+<p>对于我们日常编写 SQL 的一些优化方法，比如说我刚刚讲的：“尽量不要在 WEHER 条件中，对列做计算”，很多同学只是知道这些方法，但是却不知道，为什么按照这些方法写出来的 SQL 就快？</p>
+<p>要回答这些问题，需要了解一些数据库的实现原理。对很多开发者来说，数据库就是个黑盒子，你会写 SQL，会用数据库，但不知道盒子里面到底是怎么一回事儿，这样你只能机械地去记住别人告诉你的那些优化规则，却不知道为什么要遵循这些规则，也就谈不上灵活运用。</p>
+<p>今天这节课，我带你一起打开盒子看一看，SQL 是如何在数据库中执行的。</p>
+<p>数据库是一个非常非常复杂的软件系统，我会尽量忽略复杂的细节，用简单的方式把最主要的原理讲给你。即使这样，这节课的内容仍然会非常的硬核，你要有所准备。</p>
+<p>数据库的服务端，可以划分为<strong>执行器 (Execution Engine)</strong> 和 <strong>存储引擎 (Storage Engine)</strong> 两部分。执行器负责解析 SQL 执行查询，存储引擎负责保存数据。</p>
+<h2 id="sql-是如何在执行器中执行的">SQL 是如何在执行器中执行的？</h2>
+<p>我们通过一个例子来看一下，执行器是如何来解析执行一条 SQL 的。</p>
+<p>SELECT u.id AS user_id, u.name AS user_name, o.id AS order_id<br>
+FROM users u INNER JOIN orders o ON u.id = o.user_id<br>
+WHERE u.id &gt; 50</p>
+<p>这个 SQL 语义是，查询用户 ID 大于 50 的用户的所有订单，这是很简单的一个联查，需要查询 users 和 orders 两张表，WHERE 条件就是，用户 ID 大于 50。</p>
+<p>数据库收到查询请求后，需要先解析 SQL 语句，把这一串文本解析成便于程序处理的结构化数据，这就是一个通用的语法解析过程。跟编程语言的编译器编译时，解析源代码的过程是完全一样的。如果是计算机专业的同学，你上过的《编译原理》这门课，其中很大的篇幅是在讲解这一块儿。没学过《编译原理》的同学也不用担心，你暂时先不用搞清楚，SQL 文本是怎么转换成结构化数据的，不妨碍你学习和理解这节课下面的内容。</p>
+<p>转换后的结构化数据，就是一棵树，这个树的名字叫抽象语法树（AST，Abstract Syntax Tree）。上面这个 SQL，它的 AST 大概是这样的：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/b9f7074e153ae30535325c87bcda85ab.png" alt=""></p>
+<p>这个树太复杂，我只画了主要的部分，你大致看一下，能理解这个 SQL 的语法树长什么样就行了。执行器解析这个 AST 之后，会生成一个逻辑执行计划。所谓的执行计划，可以简单理解为如何一步一步地执行查询和计算，最终得到执行结果的一个分步骤的计划。这个逻辑执行计划是这样的：</p>
+<p>LogicalProject(user_id=[$0], user_name=[$1], order_id=[$5])<br>
+LogicalFilter(condition=[$0 &gt; 50])<br>
+LogicalJoin(condition=[$0 == $6], joinType=[inner])<br>
+LogicalTableScan(table=[users])<br>
+LogicalTableScan(table=[orders])</p>
+<p>和 SQL、AST 不同的是，这个逻辑执行计划已经很像可以执行的程序代码了。你看上面这个执行计划，很像我们编程语言的函数调用栈，外层的方法调用内层的方法。所以，要理解这个执行计划，得从内往外看。</p>
+<ol>
+<li>最内层的 2 个 LogicalTableScan 的含义是，把 USERS 和 ORDERS 这两个表的数据都读出来。</li>
+<li>然后拿这两个表所有数据做一个 LogicalJoin，JOIN 的条件就是第 0 列 (u.id) 等于第 6 列 (o.user_id)。</li>
+<li>然后再执行一个 LogicalFilter 过滤器，过滤条件是第 0 列 (u.id) 大于 5。</li>
+<li>最后，做一个 LogicalProject 投影，只保留第 0(user_id)、1(user_name)、5(order_id) 三列。这里“投影 (Project)”的意思是，把不需要的列过滤掉。</li>
+</ol>
+<p>把这个逻辑执行计划翻译成代码，然后按照顺序执行，就可以正确地查询出数据了。但是，按照上面那个执行计划，需要执行 2 个全表扫描，然后再把 2 个表的所有数据做一个 JOIN 操作，这个性能是非常非常差的。</p>
+<p>我们可以简单算一下，如果，user 表有 1,000 条数据，订单表里面有 10,000 条数据，这个 JOIN 操作需要遍历的行数就是 1,000 x 10,000 = 10,000,000 行。可见，这种从 SQL 的 AST 直译过来的逻辑执行计划，一般性能都非常差，所以，需要对执行计划进行优化。</p>
+<p>如何对执行计划进行优化，不同的数据库有不同的优化方法，这一块儿也是不同数据库性能有差距的主要原因之一。优化的总体思路是，在执行计划中，尽早地减少必须处理的数据量。也就是说，尽量在执行计划的最内层减少需要处理的数据量。看一下简单优化后的逻辑执行计划：</p>
+<p>LogicalProject(user_id=[$0], user_name=[$1], order_id=[$5])<br>
+LogicalJoin(condition=[$0 == $6], joinType=[inner])<br>
+LogicalProject(id=[$0], name=[$1])              // 尽早执行投影<br>
+LogicalFilter(condition=[$0 &gt; 50])          // 尽早执行过滤<br>
+LogicalTableScan(table=[users])<br>
+LogicalProject(id=[$0], user_id=[$1])           // 尽早执行投影<br>
+LogicalTableScan(table=[orders])</p>
+<p>对比原始的逻辑执行计划，这里我们做了两点简单的优化：</p>
+<ol>
+<li>尽早地执行投影，去除不需要的列；</li>
+<li>尽早地执行数据过滤，去除不需要的行。</li>
+</ol>
+<p>这样，就可以在做 JOIN 之前，把需要 JOIN 的数据尽量减少。这个优化后的执行计划，显然会比原始的执行计划快很多。</p>
+<p>到这里，执行器只是在逻辑层面分析 SQL，优化查询的执行逻辑，我们执行计划中操作的数据，仍然是表、行和列。在数据库中，表、行、列都是逻辑概念，所以，这个执行计划叫“逻辑执行计划”。执行查询接下来的部分，就需要涉及到数据库的物理存储结构了。</p>
+<h2 id="sql-是如何在存储引擎中执行的">SQL 是如何在存储引擎中执行的？</h2>
+<p>数据真正存储的时候，无论在磁盘里，还是在内存中，都没法直接存储这种带有行列的二维表。数据库中的二维表，实际上是怎么存储的呢？这就是存储引擎负责解决的问题，存储引擎主要功能就是把逻辑的表行列，用合适的物理存储结构保存到文件中。不同的数据库，它们的物理存储结构是完全不一样的，这也是各种数据库之间巨大性能差距的根本原因。</p>
+<p>我们还是以 MySQL 为例来说一下它的物理存储结构。MySQL 非常牛的一点是，它在设计层面对存储引擎做了抽象，它的存储引擎是可以替换的。它默认的存储引擎是 InnoDB，在 InnoDB 中，数据表的物理存储结构是以主键为关键字的 B+ 树，每一行数据直接就保存在 B+ 树的叶子节点上。比如，上面的订单表组织成 B+ 树，是这个样的：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/bb7c5db2c0499235edf622bc91076619.png" alt=""></p>
+<p>这个树以订单表的主键 orders.id 为关键字组织，其中“62:[row data]”，表示的是订单号为 62 的一行订单数据。在 InnoDB 中，表的索引也是以 B+ 树的方式来存储的，和存储数据的 B+ 树的区别是，在索引树中，叶子节点保存的不是行数据，而是行的主键值。</p>
+<p>如果通过索引来检索一条记录，需要先后查询索引树和数据树这两棵树：先在索引树中检索到行记录的主键值，然后再用主键值去数据树中去查找这一行数据。</p>
+<p>简单了解了存储引擎的物理存储结构之后，我们回过头来继续看 SQL 是怎么在存储引擎中继续执行的。优化后的逻辑执行计划将会被转换成物理执行计划，物理执行计划是和数据的物理存储结构相关的。还是用 InnoDB 来举例，直接将逻辑执行计划转换为物理执行计划：</p>
+<p>InnodbProject(user_id=[$0], user_name=[$1], order_id=[$5])<br>
+InnodbJoin(condition=[$0 == $6], joinType=[inner])<br>
+InnodbTreeNodesProject(id=[key], name=[data[1]])<br>
+InnodbFilter(condition=[key &gt; 50])<br>
+InnodbTreeScanAll(tree=[users])<br>
+InnodbTreeNodesProject(id=[key], user_id=[data[1]])<br>
+InnodbTreeScanAll(tree=[orders])</p>
+<p>物理执行计划同样可以根据数据的物理存储结构、是否存在索引以及数据多少等各种因素进行优化。这一块儿的优化规则同样是非常复杂的，比如，我们可以把对用户树的全树扫描再按照主键过滤这两个步骤，优化为对树的范围查找。</p>
+<p>PhysicalProject(user_id=[$0], user_name=[$1], order_id=[$5])<br>
+PhysicalJoin(condition=[$0 == $6], joinType=[inner])<br>
+InnodbTreeNodesProject(id=[key], name=[data[1]])<br>
+InnodbTreeRangeScan(tree=[users], range=[key &gt; 50])  // 全树扫描再按照主键过滤，直接可以优化为对树的范围查找<br>
+InnodbTreeNodesProject(id=[key], user_id=[data[1]])<br>
+InnodbTreeScanAll(tree=[orders])</p>
+<p>最终，按照优化后的物理执行计划，一步一步地去执行查找和计算，就可以得到 SQL 的查询结果了。</p>
+<p>理解数据库执行 SQL 的过程，以及不同存储引擎中的数据和索引的物理存储结构，对于正确使用和优化 SQL 非常有帮助。</p>
+<p>比如，我们知道了 InnoDB 的索引实现后，就很容易明白为什么主键不能太长，因为表的每个索引保存的都是主键的值，过长的主键会导致每一个索引都很大。再比如，我们了解了执行计划的优化过程后，就很容易理解，有的时候明明有索引却不能命中的原因是，数据库在对物理执行计划优化的时候，评估发现不走索引，直接全表扫描是更优的选择。</p>
+<p>回头再来看一下这节课开头的那两条 SQL，为什么一个不能命中索引，一个能命中？原因是 InnoDB 对物理执行计划进行优化的时候，能识别 LIKE 这种过滤条件，转换为对索引树的范围查找。而对第一条 SQL 这种写法，优化规则就没那么“智能”了。</p>
+<p>它并没有识别出来，这个条件同样可以转换为对索引树的范围查找，而走了全表扫描。并不是说第一个 SQL 写的不好，而是数据库还不够智能。那现实如此，我们能做的就是尽量了解数据库的脾气秉性，按照它现有能力，尽量写出它能优化好的 SQL。</p>
+<h2 id="小结">小结</h2>
+<p>一条 SQL 在数据库中执行，首先 SQL 经过语法解析成 AST，然后 AST 转换为逻辑执行计划，逻辑执行计划经过优化后，转换为物理执行计划，再经过物理执行计划优化后，按照优化后的物理执行计划执行完成数据的查询。几乎所有的数据库，都是由<strong>执行器</strong>和<strong>存储引擎</strong>两部分组成，执行器负责执行计算，存储引擎负责保存数据。</p>
+<p>掌握了查询的执行过程和数据库内部的组成，你才能理解那些优化 SQL 的规则，这些都有助于你更好理解数据库行为，更高效地去使用数据库。</p>
+<p>最后需要说明的一点是，今天这节课所讲的内容，不只是适用于我们用来举例的 MySQL，几乎所有支持 SQL 的数据库，无论是传统的关系型数据库、还是 NoSQL、NewSQL 这些新兴的数据库，无论是单机数据库还是分布式数据库，比如 HBase、Elasticsearch 和 SparkSQL 等等这些数据库，它们的实现原理也都符合我们今天这节课所讲的内容。</p>
+<h2 id="思考题">思考题</h2>
+<p>课后请你选一种你熟悉的<strong>非关系型数据库</strong>，最好是支持 SQL 的，当然，不支持 SQL 有自己的查询语言也可以。比如说 HBase、Redis 或者 MongoDB 等等都可以，尝试分析一下查询的执行过程，对比一下它的执行器和存储引擎与 MySQL 有什么不同。</p>
+<p>欢迎你在留言区与我讨论，如果你觉得今天的内容对你有帮助，也欢迎把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/">后端存储实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AF%B4%E9%80%8F%E4%B8%AD%E5%8F%B0/10__%E6%80%BB%E7%BB%93%E4%B8%AD%E5%8F%B0%E8%90%BD%E5%9C%B0%E5%B7%A5%E5%85%B7%E8%B5%84%E6%BA%90%E6%B1%87%E6%80%BB/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">10__总结：中台落地工具资源汇总</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B5%8F%E8%A7%88%E5%99%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/10__%E4%BD%9C%E7%94%A8%E5%9F%9F%E9%93%BE%E5%92%8C%E9%97%AD%E5%8C%85_%E4%BB%A3%E7%A0%81%E4%B8%AD%E5%87%BA%E7%8E%B0%E7%9B%B8%E5%90%8C%E7%9A%84%E5%8F%98%E9%87%8Fjavascript%E5%BC%95%E6%93%8E%E6%98%AF%E5%A6%82%E4%BD%95%E9%80%89%E6%8B%A9%E7%9A%84/">
+            <span class="next-text nav-default">10__作用域链和闭包_：代码中出现相同的变量，JavaScript引擎是如何选择的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

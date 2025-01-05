@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16GoRPC如何实现服务间通信？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/16gorpc%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%9C%8D%E5%8A%A1%E9%97%B4%E9%80%9A%E4%BF%A1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/16gorpc%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%9C%8D%E5%8A%A1%E9%97%B4%E9%80%9A%E4%BF%A1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16GoRPC如何实现服务间通信？">
+  <meta property="og:description" content="在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go微服务实战38讲">
+
+  <meta itemprop="name" content="16GoRPC如何实现服务间通信？">
+  <meta itemprop="description" content="在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4081">
+  <meta itemprop="keywords" content="Go微服务实战38讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16GoRPC如何实现服务间通信？">
+  <meta name="twitter:description" content="在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16GoRPC如何实现服务间通信？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4081 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。</p>
+<p>在本课时，我们将先通过一个字符串服务为案例简单讲解 Go RPC 是如何进行通信的，然后再具体剖析 Go RPC 的底层原理和实现，对以服务端注册服务、接收并处理客户端请求和客户端发起请求等步骤分别进行详细介绍，相信你学习后，一定会对 Go RPC 有更加全面的了解和认识。</p>
+<p>Go 语言 RPC 过程调用实践</p>
+<p>Go 语言原生的 RPC 过程调用实现起来非常简单。服务端只需实现对外提供的远程过程方法和结构体，然后将其注册到 RPC 服务中，客户端就可以通过其服务名称和方法名称进行 RPC 方法调用。</p>
+<p>本课时我们就使用字符串操作的服务来展示如何使用 Go 语言原生的 RPC 来进行过程调用。</p>
+<p>第一步，定义远程过程调用相关接口传入参数和返回参数的数据结构。如下代码所示，调用字符串操作的请求包括两个参数：字符串 A 和字符串 B。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">type StringRequest struct {
+</span></span><span class="line"><span class="cl">  A string
+</span></span><span class="line"><span class="cl">  B string
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二步，定义一个服务对象。这个服务对象可以很简单，比如类型是 int 或者是 interface{}，重要的是它输出的方法。这里我们定义一个字符串服务类型的 interface，其名称为 Service，它有一个字符串拼接函数 Concat；然后定义一个名为 StringService 的结构体，实现 Service 接口，并给出 Concat 具体实现。代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">type</span> <span class="n">Service</span> <span class="n">interface</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="n">Concat</span> <span class="n">a</span> <span class="ow">and</span> <span class="n">b</span>
+</span></span><span class="line"><span class="cl"> <span class="n">Concat</span><span class="p">(</span><span class="n">req</span> <span class="n">StringRequest</span><span class="p">,</span> <span class="n">ret</span> <span class="o">*</span><span class="n">string</span><span class="p">)</span> <span class="n">error</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">type</span> <span class="n">StringService</span> <span class="n">struct</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="n">StringService</span><span class="p">)</span> <span class="n">Concat</span><span class="p">(</span><span class="n">req</span> <span class="n">StringRequest</span><span class="p">,</span> <span class="n">ret</span> <span class="o">*</span><span class="n">string</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="n">test</span> <span class="k">for</span> <span class="n">length</span> <span class="n">overflow</span>
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">len</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">A</span><span class="p">)</span><span class="o">+</span><span class="n">len</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">B</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">StrMaxSize</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="o">*</span><span class="n">ret</span> <span class="o">=</span> <span class="s2">&#34;&#34;</span>
+</span></span><span class="line"><span class="cl">   <span class="k">return</span> <span class="n">ErrMaxSize</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="o">*</span><span class="n">ret</span> <span class="o">=</span> <span class="n">req</span><span class="o">.</span><span class="n">A</span> <span class="o">+</span> <span class="n">req</span><span class="o">.</span><span class="n">B</span>
+</span></span><span class="line"><span class="cl"> <span class="k">return</span> <span class="n">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第三步，实现 RPC 服务器。这里我们生成了一个 StringSevice 结构体，并使用 rpc.Register 注册这个服务，然后通过 net.Listen 监听对应 socket 并对外提供服务。客户端可以访问服务 StringService 以及它的方法 Concat，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="n">stringService</span> <span class="p">:</span><span class="o">=</span> <span class="n">new</span><span class="p">(</span><span class="n">service</span><span class="o">.</span><span class="n">StringService</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="n">rpc</span><span class="o">.</span><span class="n">Register</span><span class="p">(</span><span class="n">stringService</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="n">rpc</span><span class="o">.</span><span class="n">HandleHTTP</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"> <span class="n">l</span><span class="p">,</span> <span class="n">e</span> <span class="p">:</span><span class="o">=</span> <span class="n">net</span><span class="o">.</span><span class="n">Listen</span><span class="p">(</span><span class="s2">&#34;tcp&#34;</span><span class="p">,</span> <span class="s2">&#34;127.0.0.1:1234&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">e</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="nb">log</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s2">&#34;listen error:&#34;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="n">http</span><span class="o">.</span><span class="n">Serve</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">nil</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第四步，建立 HTTP 客户端，然后通过 Call 方法调用远程 StringService 的对应方法，比如使用同步的方式，代码如下所示。这时客户端就可以进行远程调用了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="n">client</span><span class="p">,</span> <span class="n">err</span> <span class="p">:</span><span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">DialHTTP</span><span class="p">(</span><span class="s2">&#34;tcp&#34;</span><span class="p">,</span> <span class="s2">&#34;127.0.0.1:1234&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="nb">log</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s2">&#34;dialing:&#34;</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="n">stringReq</span> <span class="p">:</span><span class="o">=</span> <span class="o">&amp;</span><span class="n">service</span><span class="o">.</span><span class="n">StringRequest</span><span class="p">{</span><span class="s2">&#34;A&#34;</span><span class="p">,</span> <span class="s2">&#34;B&#34;</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="k">var</span> <span class="n">reply</span> <span class="n">string</span>
+</span></span><span class="line"><span class="cl"> <span class="n">err</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="s2">&#34;StringService.Concat&#34;</span><span class="p">,</span> <span class="n">stringReq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="nb">log</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s2">&#34;Concat error:&#34;</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">异步的调用方式</span> 
+</span></span><span class="line"><span class="cl"> <span class="n">call</span> <span class="p">:</span><span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Call</span><span class="p">(</span><span class="s2">&#34;StringService.Concat&#34;</span><span class="p">,</span> <span class="n">stringReq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="n">_</span> <span class="p">:</span><span class="o">=</span> <span class="o">&lt;-</span><span class="n">call</span><span class="o">.</span><span class="n">Done</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过上述代码的编写就可以实现两个 Go 服务之间的 RPC 调用了。那 Go RPC 又是如何实现的呢？</p>
+<p>Go RPC 原理解析</p>
+<p>接下来我们将对 Go 语言的 RPC 原生实现进行源码分析，细致讲解其具体实现和原理。首先我们会对 RPC 的服务（Server）端代码进行分析，包括注册服务、反射处理和存根保存，然后讲解服务端处理 RPC 请求的流程，最后讲解客户（Client）端的 RPC 请求处理。</p>
+<p>1. Go RPC 服务端原理</p>
+<p>服务端的 RPC 代码主要分为两个部分：①服务方法注册，包括调用注册接口，通过反射处理将方法取出，并存到 map 中；②处理网络调用，主要是监听端口、读取数据包、解码请求和调用反射处理后的方法，将返回值编码，返回给客户端。</p>
+<p>在上面的示例代码中，我们使用 rpc.Register 对 StringService 进行了注册，Register 是进行 RPC 服务注册的入口方法，其参数 interface{} 类型的 rcvr 就是要注册的 RPC 服务类型，该注册过程的流程如下图所示。</p>
+<p>服务端注册 RPC 服务示意图</p>
+<p>Register 方法中通过反射获取接口类型和值，并通过 suitableMethods 函数判断注册的 RPC 是否符合规范，最后调用 serviceMap 的 LoadOrStore(sname, s) 方法将对应 RPC 存根存放于 map 中，供之后查找。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">server</span> <span class="o">*</span><span class="n">Server</span><span class="p">)</span> <span class="n">register</span><span class="p">(</span><span class="n">rcvr</span> <span class="n">interface</span><span class="p">{},</span> <span class="n">name</span> <span class="n">string</span><span class="p">,</span> <span class="n">useName</span> <span class="ne">bool</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">如果服务为空，默认注册一个</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="n">server</span><span class="o">.</span><span class="n">serviceMap</span> <span class="o">==</span> <span class="n">nil</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">server</span><span class="o">.</span><span class="n">serviceMap</span> <span class="o">=</span> <span class="n">make</span><span class="p">(</span><span class="n">map</span><span class="p">[</span><span class="n">string</span><span class="p">]</span><span class="o">*</span><span class="n">service</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">获取注册服务的反射信息</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">s</span> <span class="p">:</span><span class="o">=</span> <span class="n">new</span><span class="p">(</span><span class="n">service</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">s</span><span class="o">.</span><span class="n">typ</span> <span class="o">=</span> <span class="n">reflect</span><span class="o">.</span><span class="n">TypeOf</span><span class="p">(</span><span class="n">rcvr</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">s</span><span class="o">.</span><span class="n">rcvr</span> <span class="o">=</span> <span class="n">reflect</span><span class="o">.</span><span class="n">ValueOf</span><span class="p">(</span><span class="n">rcvr</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">可以使用自定义名称</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">sname</span> <span class="p">:</span><span class="o">=</span> <span class="n">reflect</span><span class="o">.</span><span class="n">Indirect</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">rcvr</span><span class="p">)</span><span class="o">.</span><span class="n">Type</span><span class="p">()</span><span class="o">.</span><span class="n">Name</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="n">useName</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">sname</span> <span class="o">=</span> <span class="n">name</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">方法必须是暴露的，既服务名首字符大写；不允许重复注册。代码有省略</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="o">!</span><span class="n">isExported</span><span class="p">(</span><span class="n">sname</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">useName</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>   
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="n">_</span><span class="p">,</span> <span class="n">present</span> <span class="p">:</span><span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">serviceMap</span><span class="p">[</span><span class="n">sname</span><span class="p">];</span> <span class="n">present</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="n">s</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">sname</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">开始注册</span> <span class="n">rpc</span> <span class="n">struct</span> <span class="err">内部的方法存根</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">s</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">suitableMethods</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">typ</span><span class="p">,</span> <span class="bp">true</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="n">len</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">method</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">如果</span><span class="n">struct内部一个方法也没</span><span class="err">，那么直接报错，打印详细的错误信息</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">保存在</span><span class="n">server的serviceMap中</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">server</span><span class="o">.</span><span class="n">serviceMap</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">s</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">nil</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接下来，我们来看一下服务端处理 RPC 请求的实现。如下图就展示了服务端 RPC 程序处理请求的过程，它会一直循环处理接收到的客户端 RPC 请求，将其交由 ReadRequestHandler 处理，然后从之前 Register 方法保存的 map 中获取到要调用的对应方法；接着从请求中解码出对应的参数，使用反射调用其方法，获取到结果后将结果编码成响应消息返回给客户端。</p>
+<p>RPC 服务端处理流程示意图</p>
+<p>下面，我们来看一下服务端接收并处理 RPC 请求的具体代码实现。</p>
+<p>（1）接收请求</p>
+<p>Server 的 Accept 函数会无限循环地调用 net.Listener 的 Accept 函数来获取客户端建立连接的请求，获取到连接请求后，再使用协程来处理请求。代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">server</span> <span class="o">*</span><span class="n">Server</span><span class="p">)</span> <span class="n">Accept</span><span class="p">(</span><span class="n">lis</span> <span class="n">net</span><span class="o">.</span><span class="n">Listener</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">for</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">conn</span><span class="p">,</span> <span class="n">err</span> <span class="p">:</span><span class="o">=</span> <span class="n">lis</span><span class="o">.</span><span class="n">Accept</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">      <span class="nb">log</span><span class="o">.</span><span class="n">Fatal</span><span class="p">(</span><span class="s2">&#34;rpc.Serve: accept:&#34;</span><span class="p">,</span> <span class="n">err</span><span class="o">.</span><span class="n">Error</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="n">accept连接以后</span><span class="err">，打开一个</span><span class="n">goroutine处理请求</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">go</span> <span class="n">server</span><span class="o">.</span><span class="n">ServeConn</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>（2）读取并解析请求</p>
+<p>ServeConn 函数会从建立的连接中读取数据，然后创建一个 gobServerCodec，并将其交由 Server 的 ServeCodec 函数处理，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">server</span> <span class="o">*</span><span class="n">Server</span><span class="p">)</span> <span class="n">ServeConn</span><span class="p">(</span><span class="n">conn</span> <span class="n">io</span><span class="o">.</span><span class="n">ReadWriteCloser</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">buf</span> <span class="p">:</span><span class="o">=</span> <span class="n">bufio</span><span class="o">.</span><span class="n">NewWriter</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">srv</span> <span class="p">:</span><span class="o">=</span> <span class="o">&amp;</span><span class="n">gobServerCodec</span><span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">rwc</span><span class="p">:</span>  <span class="n">conn</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">dec</span><span class="p">:</span>  <span class="n">gob</span><span class="o">.</span><span class="n">NewDecoder</span><span class="p">(</span><span class="n">conn</span><span class="p">),</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">enc</span><span class="p">:</span>  <span class="n">gob</span><span class="o">.</span><span class="n">NewEncoder</span><span class="p">(</span><span class="n">buf</span><span class="p">),</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">encBuf</span><span class="p">:</span> <span class="n">buf</span><span class="p">,</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">根据指定的</span><span class="n">codec进行协议解析</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">server</span><span class="o">.</span><span class="n">ServeCodec</span><span class="p">(</span><span class="n">srv</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>ServeCodec 函数会循环地调用 readRequest 函数，读取网络连接上的字节流，解析出请求，然后开启协程执行 Server 的 call 函数，处理对应的 RPC 调用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">server</span> <span class="o">*</span><span class="n">Server</span><span class="p">)</span> <span class="n">ServeCodec</span><span class="p">(</span><span class="n">codec</span> <span class="n">ServerCodec</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">sending</span> <span class="p">:</span><span class="o">=</span> <span class="n">new</span><span class="p">(</span><span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">for</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">解析请求</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">service</span><span class="p">,</span> <span class="n">mtype</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">replyv</span><span class="p">,</span> <span class="n">keepReading</span><span class="p">,</span> <span class="n">err</span> <span class="p">:</span><span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">readRequest</span> <span class="p">(</span><span class="n">codec</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="n">debugLog</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">io</span><span class="o">.</span><span class="n">EOF</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="nb">log</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;rpc:&#34;</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="o">!</span><span class="n">keepReading</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">break</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">      <span class="o">//</span> <span class="n">send</span> <span class="n">a</span> <span class="n">response</span> <span class="k">if</span> <span class="n">we</span> <span class="n">actually</span> <span class="n">managed</span> <span class="n">to</span> <span class="n">read</span> <span class="n">a</span> <span class="n">header</span><span class="o">.</span> 
+</span></span><span class="line"><span class="cl">      <span class="o">//</span> <span class="err">如果当前请求错误了，我们应该返回信息，然后继续处理</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="n">req</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">server</span><span class="o">.</span><span class="n">sendResponse</span><span class="p">(</span><span class="n">sending</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">invalidRequest</span><span class="p">,</span> <span class="n">codec</span><span class="p">,</span> <span class="n">err</span><span class="o">.</span><span class="n">Error</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">        <span class="n">server</span><span class="o">.</span><span class="n">freeRequest</span><span class="p">(</span><span class="n">req</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">      <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">continue</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">因为需要继续处理后续请求，所以开一个</span><span class="n">gorutine处理rpc方法</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">go</span> <span class="n">service</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="n">sending</span><span class="p">,</span> <span class="n">mtype</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">replyv</span><span class="p">,</span> <span class="n">codec</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">如果连接关闭了需要释放资源</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">codec</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>（3）执行远程方法并返回响应</p>
+<p>Server 的 call 函数就是通过 Func.Call 反射调用对应 RPC 过程的方法，它还会调用 send Response 将返回值发送给 RPC 客户端，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">s</span> <span class="o">*</span><span class="n">service</span><span class="p">)</span> <span class="n">call</span><span class="p">(</span><span class="n">server</span> <span class="o">*</span><span class="n">Server</span><span class="p">,</span> <span class="n">sending</span> <span class="o">*</span><span class="n">sync</span><span class="o">.</span><span class="n">Mutex</span><span class="p">,</span> <span class="n">mtype</span> <span class="o">*</span><span class="n">methodType</span><span class="p">,</span> <span class="n">req</span> <span class="o">*</span><span class="n">Request</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">replyv</span> <span class="n">reflect</span><span class="o">.</span><span class="n">Value</span><span class="p">,</span> <span class="n">codec</span> <span class="n">ServerCodec</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">function</span> <span class="p">:</span><span class="o">=</span> <span class="n">mtype</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">Func</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">这里是真正调用</span><span class="n">rpc方法的地方</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">returnValues</span> <span class="p">:</span><span class="o">=</span> <span class="n">function</span><span class="o">.</span><span class="n">Call</span><span class="p">([]</span><span class="n">reflect</span><span class="o">.</span><span class="n">Value</span><span class="p">{</span><span class="n">s</span><span class="o">.</span><span class="n">rcvr</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">replyv</span><span class="p">})</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">errInter</span> <span class="p">:</span><span class="o">=</span> <span class="n">returnValues</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Interface</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">errmsg</span> <span class="p">:</span><span class="o">=</span> <span class="s2">&#34;&#34;</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">处理返回请求了</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">server</span><span class="o">.</span><span class="n">sendResponse</span><span class="p">(</span><span class="n">sending</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">replyv</span><span class="o">.</span><span class="n">Interface</span><span class="p">(),</span> <span class="n">codec</span><span class="p">,</span> <span class="n">errmsg</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl">  <span class="n">server</span><span class="o">.</span><span class="n">freeRequest</span><span class="p">(</span><span class="n">req</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>2. 客户端发送 RPC 请求原理</p>
+<p>无论是同步调用还是异步调用，每次 RPC 请求都会生成一个 Call 对象，并使用 seq 作为 key 保存在 map 中，服务端返回响应值时再根据响应值中的 seq 从 map 中取出 Call，进行相应处理。客户端发起 RPC 调用的过程大致如下图所示。</p>
+<p>客户端发送和接收请求流程示意图</p>
+<p>下面我们将依次讲解同步调用和异步调用、请求参数编码和接收服务器响应三个部分的具体实现。</p>
+<p>（1）同步调用和异步调用</p>
+<p>本课时的案例展示了 Go 原生 RPC 的客户端支持同步和异步两种调用，下面我们来介绍一下这两种调用的函数以及调用的数据结构。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">client</span> <span class="o">*</span><span class="n">Client</span><span class="p">)</span> <span class="n">Call</span><span class="p">(</span><span class="n">serviceMethod</span> <span class="n">string</span><span class="p">,</span> <span class="n">args</span> <span class="n">interface</span><span class="p">{},</span> <span class="n">reply</span> <span class="n">interface</span><span class="p">{})</span> <span class="n">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="n">call</span> <span class="p">:</span><span class="o">=</span> <span class="o">&lt;-</span><span class="n">client</span><span class="o">.</span><span class="n">Go</span><span class="p">(</span><span class="n">serviceMethod</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">reply</span><span class="p">,</span> <span class="n">make</span><span class="p">(</span><span class="n">chan</span> <span class="o">*</span><span class="n">Call</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">Done</span>
+</span></span><span class="line"><span class="cl"> <span class="k">return</span> <span class="n">call</span><span class="o">.</span><span class="n">Error</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Call 方法直接调用了 Go 方法，而 Go 方法则是先创建并初始化了 Call 对象，记录下此次调用的方法、参数和返回值，并生成 DoneChannel；然后调用 Client 的 send 方法进行真正的请求发送处理，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="err">异步调用实现</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">client</span> <span class="o">*</span><span class="n">Client</span><span class="p">)</span> <span class="n">Go</span><span class="p">(</span><span class="n">serviceMethod</span> <span class="n">string</span><span class="p">,</span> <span class="n">args</span> <span class="n">interface</span><span class="p">{},</span> <span class="n">reply</span> <span class="n">interface</span><span class="p">{},</span> <span class="n">done</span> <span class="n">chan</span> <span class="o">*</span><span class="n">Call</span><span class="p">)</span> <span class="o">*</span><span class="n">Call</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="o">//</span> <span class="err">初始化</span> <span class="n">Call</span> 
+</span></span><span class="line"><span class="cl"> <span class="n">call</span> <span class="p">:</span><span class="o">=</span> <span class="n">new</span><span class="p">(</span><span class="n">Call</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="n">call</span><span class="o">.</span><span class="n">ServiceMethod</span> <span class="o">=</span> <span class="n">serviceMethod</span>
+</span></span><span class="line"><span class="cl"> <span class="n">call</span><span class="o">.</span><span class="n">Args</span> <span class="o">=</span> <span class="n">args</span>
+</span></span><span class="line"><span class="cl"> <span class="n">call</span><span class="o">.</span><span class="n">Reply</span> <span class="o">=</span> <span class="n">reply</span>
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">done</span> <span class="o">==</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="n">done</span> <span class="o">=</span> <span class="n">make</span><span class="p">(</span><span class="n">chan</span> <span class="o">*</span><span class="n">Call</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="o">//</span> <span class="n">buffered</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="k">if</span> <span class="n">cap</span><span class="p">(</span><span class="n">done</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">     <span class="nb">log</span><span class="o">.</span><span class="n">Panic</span><span class="p">(</span><span class="s2">&#34;rpc: done channel is unbuffered&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="n">call</span><span class="o">.</span><span class="n">Done</span> <span class="o">=</span> <span class="n">done</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">调用</span> <span class="n">Client</span> <span class="err">的</span> <span class="n">send</span> <span class="err">方法</span>
+</span></span><span class="line"><span class="cl"> <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">call</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"> <span class="k">return</span> <span class="n">call</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">type</span> <span class="n">Call</span> <span class="n">struct</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ServiceMethod</span> <span class="n">string</span>   <span class="o">//</span> <span class="err">服务名及方法名</span> <span class="err">格式</span><span class="p">:</span><span class="err">服务</span><span class="o">.</span><span class="err">方法</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Args</span>     <span class="n">interface</span><span class="p">{}</span> <span class="o">//</span> <span class="err">函数的请求参数</span> <span class="p">(</span><span class="o">*</span><span class="n">struct</span><span class="p">)</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Reply</span>     <span class="n">interface</span><span class="p">{}</span> <span class="o">//</span> <span class="err">函数的响应参数</span> <span class="p">(</span><span class="o">*</span><span class="n">struct</span><span class="p">)</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Error</span>     <span class="n">error</span>    <span class="o">//</span> <span class="err">方法完成后</span> <span class="n">error的状态</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Done</span>     <span class="n">chan</span> <span class="o">*</span><span class="n">Call</span> <span class="o">//</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>（2）请求参数编码</p>
+<p>Client 的 send 函数首先会判断客户端实例的状态，如果处于关闭状态，则直接返回结果；否则会生成唯一的 seq 值，将 Call 保存到客户端的哈希表 pending 中，然后调用客户端编码器的WriteRequest 来编码请求并发送，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">client</span> <span class="o">*</span><span class="n">Client</span><span class="p">)</span> <span class="n">send</span><span class="p">(</span><span class="n">call</span> <span class="o">*</span><span class="n">Call</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="o">....</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span><span class="err">生成</span><span class="n">seq</span><span class="p">,</span><span class="err">每次调用均生成唯一的</span><span class="n">seq</span><span class="p">,</span><span class="err">在服务端返回结果后会通过该值进行匹配</span>
+</span></span><span class="line"><span class="cl">  <span class="n">seq</span> <span class="p">:</span><span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">seq</span>
+</span></span><span class="line"><span class="cl">  <span class="n">client</span><span class="o">.</span><span class="n">seq</span><span class="o">++</span>
+</span></span><span class="line"><span class="cl">  <span class="n">client</span><span class="o">.</span><span class="n">pending</span><span class="p">[</span><span class="n">seq</span><span class="p">]</span> <span class="o">=</span> <span class="n">call</span>
+</span></span><span class="line"><span class="cl">  <span class="n">client</span><span class="o">.</span><span class="n">mutex</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">请求并发送请求</span>
+</span></span><span class="line"><span class="cl">  <span class="n">client</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Seq</span> <span class="o">=</span> <span class="n">seq</span>
+</span></span><span class="line"><span class="cl">  <span class="n">client</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">ServiceMethod</span> <span class="o">=</span> <span class="n">call</span><span class="o">.</span><span class="n">ServiceMethod</span>
+</span></span><span class="line"><span class="cl">  <span class="n">err</span> <span class="p">:</span><span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">WriteRequest</span><span class="p">(</span><span class="o">&amp;</span><span class="n">client</span><span class="o">.</span><span class="n">request</span><span class="p">,</span> <span class="n">call</span><span class="o">.</span><span class="n">Args</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span><span class="err">发送请求错误时</span><span class="p">,</span><span class="err">将</span><span class="n">map中call对象删除</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">    <span class="n">client</span><span class="o">.</span><span class="n">mutex</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="n">call</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">pending</span><span class="p">[</span><span class="n">seq</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="n">delete</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">pending</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">client</span><span class="o">.</span><span class="n">mutex</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>（3）接收返回值</p>
+<p>接下来我们来看一下客户端是如何接收并处理服务端返回值的。客户端的 input 函数接收服务端返回的响应值，它进行无限 for 循环，不断调用 codec 也就是 gobClientCodecd 的 ReadResponseHeader 函数，然后根据其返回数据中的 seq 来判断是否是本客户端发出请求的响应值。如果是，则获取对应的 Call 对象，并将其从 pending 哈希表中删除，继续调用 codec 的 ReadReponseBody 方法获取返回值 Reply 对象，并调用 Call 对象的 done 方法，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">client</span> <span class="o">*</span><span class="n">Client</span><span class="p">)</span> <span class="n">input</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">var</span> <span class="n">err</span> <span class="n">error</span>
+</span></span><span class="line"><span class="cl">  <span class="k">var</span> <span class="n">response</span> <span class="n">Response</span>
+</span></span><span class="line"><span class="cl">  <span class="k">for</span> <span class="n">err</span> <span class="o">==</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">response</span> <span class="o">=</span> <span class="n">Response</span><span class="p">{}</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span><span class="err">通过</span><span class="n">response中的</span> <span class="n">Seq获取call对象</span>
+</span></span><span class="line"><span class="cl">    <span class="n">seq</span> <span class="p">:</span><span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">Seq</span>
+</span></span><span class="line"><span class="cl">    <span class="n">client</span><span class="o">.</span><span class="n">mutex</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="n">call</span> <span class="p">:</span><span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">pending</span><span class="p">[</span><span class="n">seq</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="n">delete</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">pending</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">client</span><span class="o">.</span><span class="n">mutex</span><span class="o">.</span><span class="n">Unlock</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl">    <span class="k">switch</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">case</span> <span class="n">call</span> <span class="o">==</span> <span class="n">nil</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="k">case</span> <span class="n">response</span><span class="o">.</span><span class="n">Error</span> <span class="o">!=</span> <span class="s2">&#34;&#34;</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">      <span class="o">//</span><span class="err">上述两个</span><span class="k">case</span><span class="err">，一个处理</span><span class="n">call为nil</span><span class="err">，另外处理服务端返回的错误</span><span class="p">,</span><span class="err">直接将错误返回</span>
+</span></span><span class="line"><span class="cl">    <span class="n">default</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">      <span class="o">//</span><span class="err">通过编码器</span><span class="p">,</span><span class="err">将</span><span class="n">Resonse的body部分解码成reply对象</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">      <span class="n">err</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">ReadResponseBody</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">Reply</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">call</span><span class="o">.</span><span class="n">Error</span> <span class="o">=</span> <span class="n">errors</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="s2">&#34;reading body &#34;</span> <span class="o">+</span> <span class="n">err</span><span class="o">.</span><span class="n">Error</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">      <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="n">call</span><span class="o">.</span><span class="n">done</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中，gobClientCodecd 的 ReadResponseHeader、ReadReponseBody 方法和上文中的 WriteRequest 类似，这里不做赘述。Call 对象的 done 方法则通过 Call 的 DoneChannel，将获得返回值的结果通知到调用层，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">call</span> <span class="o">*</span><span class="n">Call</span><span class="p">)</span> <span class="n">done</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="n">select</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"> <span class="k">case</span> <span class="n">call</span><span class="o">.</span><span class="n">Done</span> <span class="o">&lt;-</span> <span class="n">call</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">   <span class="o">//</span> <span class="n">ok</span>
+</span></span><span class="line"><span class="cl"> <span class="n">default</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">   <span class="k">if</span> <span class="n">debugLog</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">     <span class="nb">log</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;rpc: discarding Call reply due to insufficient Done chan capacity&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"> <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>客户端接收到 RPC 请求的响应后会进行其他业务逻辑操作，RPC 框架则会对进行 RPC 请求所需要的资源进行回收，下次进行 RPC 请求时则需要再次建立相应的结构体并获取对应的资源。</p>
+<p>小结</p>
+<p>Go 语言原生 RPC 算是个基础版本的 RPC 框架，代码精简，可扩展性高，但是只实现了 RPC 最基本的网络通信，而超时熔断、链接管理（保活与重连）、服务注册发现等功能还是欠缺的。因此还是达不到生产环境“开箱即用”的水准，不过 GitHub 就有一个基于 RPC 的功能增强版本——rpcx，支持了大部分主流 RPC 的特性。</p>
+<p>虽然目前官方已经宣布不再添加新功能，并推荐使用 gRPC，但是作为 Go 标准库中的 RPC 框架，还是有很多地方值得我们借鉴和学习，比如注册服务时如何保存反射信息等。本课时我们从源码角度分析了 Go 语言原生 RPC 框架，希望能给你带来对 RPC 框架的整体认知。</p>
+<p>如果 Go 官方团队准备为 Go RPC 添加新功能，那么你最希望添加哪一项目前尚未支持的功能呢？欢迎你在留言区分享你的想法。</p>
+<p>-&ndash; ### 精选评论 ##### **个咪的汪： &gt; go官方的rpc文档地址：https://golang.org/pkg/net/rpc/， 异步方式应该是// 异步的调用方式reply, nil)-call.Done</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/">Go微服务实战38讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%8E%A9%E8%BD%ACserverless%E6%9E%B6%E6%9E%84/16api%E5%9F%BA%E4%BA%8Eservele%E6%9E%84%E5%BB%BA%E5%BC%B9%E6%80%A7%E5%8F%AF%E6%89%A9%E5%B1%95%E7%9A%84retfulapi/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16API：基于Servele构建弹性可扩展的RetfulAPI</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/netty%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8Erpc%E5%AE%9E%E8%B7%B5/16io%E5%8A%A0%E9%80%9F%E4%B8%8E%E4%BC%97%E4%B8%8D%E5%90%8C%E7%9A%84netty%E9%9B%B6%E6%8B%B7%E8%B4%9D%E6%8A%80%E6%9C%AF/">
+            <span class="next-text nav-default">16IO加速：与众不同的Netty零拷贝技术</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>43__灵活实现动态限流限速，其实没有那么难 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是温铭。
+前面的课程中，我为你介绍了漏桶和令牌桶算法，它们都是应对突发流量的常用手段。同时，我们也学习了如何通过 Nginx 配置文件的方式，来实现对请求的限流限速。不过很显然，使用 Nginx 配置文件的方式，仅仅停留在可用的层面，距离好用还是有不小的距离的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/43__%E7%81%B5%E6%B4%BB%E5%AE%9E%E7%8E%B0%E5%8A%A8%E6%80%81%E9%99%90%E6%B5%81%E9%99%90%E9%80%9F%E5%85%B6%E5%AE%9E%E6%B2%A1%E6%9C%89%E9%82%A3%E4%B9%88%E9%9A%BE/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/43__%E7%81%B5%E6%B4%BB%E5%AE%9E%E7%8E%B0%E5%8A%A8%E6%80%81%E9%99%90%E6%B5%81%E9%99%90%E9%80%9F%E5%85%B6%E5%AE%9E%E6%B2%A1%E6%9C%89%E9%82%A3%E4%B9%88%E9%9A%BE/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="43__灵活实现动态限流限速，其实没有那么难">
+  <meta property="og:description" content="你好，我是温铭。
+前面的课程中，我为你介绍了漏桶和令牌桶算法，它们都是应对突发流量的常用手段。同时，我们也学习了如何通过 Nginx 配置文件的方式，来实现对请求的限流限速。不过很显然，使用 Nginx 配置文件的方式，仅仅停留在可用的层面，距离好用还是有不小的距离的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="OpenResty从入门到实战">
+
+  <meta itemprop="name" content="43__灵活实现动态限流限速，其实没有那么难">
+  <meta itemprop="description" content="你好，我是温铭。
+前面的课程中，我为你介绍了漏桶和令牌桶算法，它们都是应对突发流量的常用手段。同时，我们也学习了如何通过 Nginx 配置文件的方式，来实现对请求的限流限速。不过很显然，使用 Nginx 配置文件的方式，仅仅停留在可用的层面，距离好用还是有不小的距离的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2736">
+  <meta itemprop="keywords" content="OpenResty从入门到实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="43__灵活实现动态限流限速，其实没有那么难">
+  <meta name="twitter:description" content="你好，我是温铭。
+前面的课程中，我为你介绍了漏桶和令牌桶算法，它们都是应对突发流量的常用手段。同时，我们也学习了如何通过 Nginx 配置文件的方式，来实现对请求的限流限速。不过很显然，使用 Nginx 配置文件的方式，仅仅停留在可用的层面，距离好用还是有不小的距离的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">43__灵活实现动态限流限速，其实没有那么难</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2736 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#限制请求速率">限制请求速率</a></li>
+        <li><a href="#限制请求数">限制请求数</a></li>
+        <li><a href="#限制并发连接数">限制并发连接数</a></li>
+        <li><a href="#限速器的组合">限速器的组合</a></li>
+        <li><a href="#写在最后">写在最后</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是温铭。</p>
+<p>前面的课程中，我为你介绍了漏桶和令牌桶算法，它们都是应对突发流量的常用手段。同时，我们也学习了如何通过 Nginx 配置文件的方式，来实现对请求的限流限速。不过很显然，使用 Nginx 配置文件的方式，仅仅停留在可用的层面，距离好用还是有不小的距离的。</p>
+<p>第一个问题便是，限速的 key 被限制在 Nginx 的变量范围内，不能灵活地设置。比如，根据不同的省份和不同的客户端渠道，来设置不同的限速阈值，这种常见的需求用 Nginx 就没有办法实现。</p>
+<p>另外一个更大的问题是，不能动态地调整速率，每次修改都需要重载 Nginx 服务，这一点我们在上节课的最后也提到过。这样一来，根据不同的时间段限速这种需求，就只能通过外置的脚本来蹩脚地实现了。</p>
+<p>要知道，技术是为业务服务的，同时，业务也在驱动着技术的进步。在 Nginx 诞生的时代，并没有什么动态调整配置的需求，更多的是反向代理、负载均衡、低内存占用等类似的需求，在驱动着 Nginx 的成长。在技术的架构和实现上，并没有人能够预料到，在移动互联网、IoT、微服务等场景下，对于动态和精细控制的需求会大量爆发。</p>
+<p>而 OpenResty 使用 Lua 脚本的方式，恰好能够弥补 Nginx 在这方面的缺失，形成了有效的互补。这也是 OpenResty 被广泛地用于替换 Nginx 的根源所在。在后面几节课中，我会为你继续介绍更多 OpenResty 中动态的场景和示例。今天，就让我们先来看下，如何使用 OpenResty 来实现动态限流和限速。</p>
+<p>在 OpenResty 中，我们推荐使用 <a href="./lua-resty-limit-traffic.md">lua-resty-limit-traffic</a> 来做流量的限制。它里面包含了 <code>limit-req</code>（限制请求速率）、 <code>limit-count</code>（限制请求数）和 <code>limit-conn</code> （限制并发连接数）这三种不同的限制方式；并且提供了<code>limit.traffic</code> ，可以把这三种方式进行聚合使用。</p>
+<h2 id="限制请求速率">限制请求速率</h2>
+<p>让我们先来看下 <code>limit-req</code>，它使用的是漏桶算法来限制请求的速率。</p>
+<p>在上一节中，我们已经简要介绍了这个 resty 库中漏桶算法的关键实现代码，现在我们就来学习如何使用这个库。我们来看下面这段示例代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">resty --shdict=&#39;my_limit_req_store 100m&#39; -e &#39;local limit_req = require &#34;resty.limit.req&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local lim, err = limit_req.new(&#34;my_limit_req_store&#34;, 200, 100)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local delay, err = lim:incoming(&#34;key&#34;, true)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if not delay then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if err == &#34;rejected&#34; then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return ngx.exit(503)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return ngx.exit(500)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  if delay &gt;= 0.001 then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ngx.sleep(delay)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们知道，<code>lua-resty-limit-traffic</code> 是使用共享字典来对 key 进行保存和计数的，所以在使用 <code>limit-req</code> 前，我们需要先声明 <code>my_limit_req_store</code> 这个 100m 的空间。这一点对于 <code>limit-conn</code> 和 <code>limit-count</code> 也是类似的，它们都需要自己单独的共享字典空间，以便区分开。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">limit_req.new(&#34;my_limit_req_store&#34;, 200, 100)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这行代码，便是其中最关键的一行代码。它的含义，是使用名为 <code>my_limit_req_store</code> 的共享字典来存放统计数据，并把每秒的速率设置为 200。这样，如果超过 200 但小于 300（这个值是 200 + 100 计算得到的）的话，就需要排队等候；如果超过 300 的话，就会直接拒绝。</p>
+<p>在设置完成后，我们就要对终端的请求进行处理了，<code>lim: incoming(&quot;key&quot;, true)</code> 就是来做这件事情的。<code>incoming</code>这个函数有两个参数，我们需要详细解读一下。</p>
+<p>第一个参数，是用户指定的限速的 key。在上面的示例中它是一个字符串常量，这就意味着要对所有终端都统一限速。如果要实现根据不同省份和渠道来限速，其实也很简单，把这两个信息都作为 key 即可，下面是实现这一需求的伪代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span>  <span class="n">province</span> <span class="o">=</span> <span class="n">get_</span> <span class="n">province</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">binary_remote_addr</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">channel</span> <span class="o">=</span> <span class="n">ngx</span><span class="o">.</span><span class="n">req</span><span class="o">.</span><span class="n">get_headers</span><span class="p">()[</span><span class="s2">&#34;channel&#34;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">key</span> <span class="o">=</span> <span class="n">province</span> <span class="o">..</span> <span class="n">channel</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">lim</span><span class="p">:</span><span class="n">incoming</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="bp">true</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然，你也可以举一反三，自定义 key 的含义以及调用 <code>incoming</code> 的条件，这样你就能收到非常灵活的限流限速效果了。</p>
+<p>我们再来看<code>incoming</code> 函数的第二个参数，它是一个布尔值，默认是 false，意味着这个请求不会被记录到共享字典中做统计，这只是一次 <code>演习</code>。如果设置为 true，就会产生实际的效果了。因此，在大多数情况下，你都需要显式地把它设置为 true。</p>
+<p>你可能会纳闷儿，为什么会有这个参数的存在呢？我们不妨考虑一下这样的一个场景，你设置了两个不同的 <code>limit-req</code> 实例，针对不同的 key，一个 key 是主机名，另外一个 key 是客户端的 IP 地址。那么，当一个终端请求被处理的时候，会按照先后顺序调用这两个实例的 <code>incoming</code> 方法，就像下面这段伪码表示的一样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">limiter_one</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_req</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_limit_req_store&#34;</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">limiter_two</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_req</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_limit_req_store&#34;</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">limiter_one</span> <span class="p">:</span><span class="n">incoming</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="bp">true</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">limiter_two</span><span class="p">:</span><span class="n">incoming</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">binary_remote_addr</span><span class="p">,</span> <span class="bp">true</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果用户的请求通过了 <code>limiter_one</code> 的阈值检测，但被 <code>limiter_two</code> 的检测拒绝，那么 <code>limiter_one:incoming</code> 这次函数调用就应该被认为是一次 <code>演习</code>，不应该真的去计数。</p>
+<p>这样一来，上述的代码逻辑就不够严谨了。我们需要事先对所有的 limiter 做一次演习，如果有 limiter 的阈值被触发，可以 rejected 终端请求，就可以直接返回：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">for i = 1, n do
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    local lim = limiters[i]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    local delay, err = lim:incoming(keys[i], i == n)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if not delay then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return nil, err
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这其实就是 <code>incoming</code> 函数第二个参数的意义所在。刚刚这段代码就是 <code>limit.traffic</code> 模块最核心的一段代码，专门用作多个限流器的组合所用。</p>
+<h2 id="限制请求数">限制请求数</h2>
+<p>再来看下 <code>limit.count</code> 这个限制请求数的库，它的效果和 GitHub API 的 Rate Limiting 一样，可以限制固定时间窗口内有多少次用户请求。老规矩，我们先来看一段示例代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local limit_count = require &#34;resty.limit.count&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> local lim, err = limit_count.new(&#34;my_limit_count_store&#34;, 5000, 3600)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> local key = ngx.req.get_headers()[&#34;Authorization&#34;]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local delay, remaining = lim:incoming(key, true)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你可以看到，<code>limit.count</code> 和 <code>limit.req</code> 的使用方法是类似的，我们先在 Nginx.conf 中定义一个字典：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lua_shared_dict my_limit_count_store 100m;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后 <code>new</code> 一个 limiter 对象，最后用 <code>incoming</code> 函数来判断和处理。</p>
+<p>不过，不同的是，<code>limit-count</code> 中的<code>incoming</code> 函数的第二个返回值，代表着还剩余的调用次数，我们可以据此在响应头中增加字段，给终端更好的提示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ngx.header[&#34;X-RateLimit-Limit&#34;] = &#34;5000&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ngx.header[&#34;X-RateLimit-Remaining&#34;] = remaining
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="限制并发连接数">限制并发连接数</h2>
+<p>第三种方式，也就是<code>limit.conn</code> ，是用来限制并发连接数的库。它和前面提到的两个库有所不同，有一个特别的 <code>leaving</code> API，这里我来简单介绍下。</p>
+<p>前面所讲的限制请求速率和限制请求数，都是可以直接在 access 这一个阶段内完成的。而限制并发连接数则不同，它不仅需要在 access 阶段判断是否超过阈值，而且需要在 log 阶段调用 <code>leaving</code> 接口：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">log_by_lua_block</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">local</span> <span class="n">latency</span> <span class="o">=</span> <span class="n">tonumber</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">request_time</span><span class="p">)</span> <span class="o">-</span> <span class="n">ctx</span><span class="o">.</span><span class="n">limit_conn_delay</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">local</span> <span class="n">key</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">limit_conn_key</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">local</span> <span class="n">conn</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">lim</span><span class="p">:</span><span class="n">leaving</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">latency</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>不过，这个接口的核心代码其实也很简单，也就是下面这一行代码，实际上就是把连接数减一的操作。如果你没有在 log 阶段做这个清理的动作，那么连接数就会一直上涨，很快就会达到并发的阈值。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local conn, err = dict:incr(key, -1)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="限速器的组合">限速器的组合</h2>
+<p>到这里，这三种方式我们就分别介绍完了。最后，我们再来看看，怎么把 <code>limit.rate</code>、<code>limit.conn</code> 和 <code>limit.count</code> 组合起来使用。这就需要用到 <code>limit.traffic</code> 中的 <code>combine</code> 函数了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">lim1</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_req</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_req_store&#34;</span><span class="p">,</span> <span class="mi">300</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">lim2</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_req</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_req_store&#34;</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">lim3</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_conn</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_conn_store&#34;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">local</span> <span class="n">limiters</span> <span class="o">=</span> <span class="p">{</span><span class="n">lim1</span><span class="p">,</span> <span class="n">lim2</span><span class="p">,</span> <span class="n">lim3</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">host</span> <span class="o">=</span> <span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">host</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">client</span> <span class="o">=</span> <span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">binary_remote_addr</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">client</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">local</span> <span class="n">delay</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">limit_traffic</span><span class="o">.</span><span class="n">combine</span><span class="p">(</span><span class="n">limiters</span><span class="p">,</span> <span class="n">keys</span><span class="p">,</span> <span class="n">states</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>有了刚刚的知识基础，这段代码你应该很容易看明白。<code>combine</code> 函数的核心代码，在我们上面分析 <code>limit.rate</code> 的时候已经提到了一部分，它主要是借助了演习功能和 uncommit 函数来实现。这样组合以后，你就可以为多个限流器设置不同的阈值和 key，实现更复杂的业务需求了。</p>
+<h2 id="写在最后">写在最后</h2>
+<p><code>limit.traffic</code> 不仅支持今天所讲的这三种限速器，实际上，只要某个限速器有 <code>incoming</code> 和 <code>uncommit</code> 接口，都可以被 <code>limit.traffic</code> 的 <code>combine</code> 函数管理。</p>
+<p>最后，给你留一个作业题。你可以写一个例子，把之前我们介绍过的基于令牌桶的<a href="./lua-resty-limit-rate.md">限速器</a>组合起来吗？欢迎在留言区写下你的答案与我讨论，也欢迎你把这篇文章分享给你的同事朋友，一起学习和交流。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/OpenResty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/12bf8dad402b50769d64b4fa7ee66191.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/">OpenResty从入门到实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/43__%E5%8F%91%E6%8C%A5%E4%BA%BA%E7%9A%84%E6%BD%9C%E8%83%BD%E6%8E%A2%E7%B4%A2%E5%BC%8F%E6%B5%8B%E8%AF%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">43__发挥人的潜能：探索式测试</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/ios%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/43__%E5%89%96%E6%9E%90%E4%BD%BF_app_%E5%85%B7%E6%9C%89%E5%8A%A8%E6%80%81%E5%8C%96%E5%92%8C%E7%83%AD%E6%9B%B4%E6%96%B0%E8%83%BD%E5%8A%9B%E7%9A%84%E6%96%B9%E6%A1%88/">
+            <span class="next-text nav-default">43__剖析使_App_具有动态化和热更新能力的方案</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>39__案例分析（二）：高性能网络应用框架Netty - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="Netty 是一个高性能网络应用框架，应用非常普遍，目前在 Java 领域里，Netty 基本上成为网络程序的标配了。Netty 框架功能丰富，也非常复杂，今天我们主要分析 Netty 框架中的线程模型，而线程模型直接影响着网络程序的性能。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/39__%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E4%BA%8C%E9%AB%98%E6%80%A7%E8%83%BD%E7%BD%91%E7%BB%9C%E5%BA%94%E7%94%A8%E6%A1%86%E6%9E%B6netty/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/39__%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E4%BA%8C%E9%AB%98%E6%80%A7%E8%83%BD%E7%BD%91%E7%BB%9C%E5%BA%94%E7%94%A8%E6%A1%86%E6%9E%B6netty/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="39__案例分析（二）：高性能网络应用框架Netty">
+  <meta property="og:description" content="Netty 是一个高性能网络应用框架，应用非常普遍，目前在 Java 领域里，Netty 基本上成为网络程序的标配了。Netty 框架功能丰富，也非常复杂，今天我们主要分析 Netty 框架中的线程模型，而线程模型直接影响着网络程序的性能。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java并发编程实战">
+
+  <meta itemprop="name" content="39__案例分析（二）：高性能网络应用框架Netty">
+  <meta itemprop="description" content="Netty 是一个高性能网络应用框架，应用非常普遍，目前在 Java 领域里，Netty 基本上成为网络程序的标配了。Netty 框架功能丰富，也非常复杂，今天我们主要分析 Netty 框架中的线程模型，而线程模型直接影响着网络程序的性能。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3012">
+  <meta itemprop="keywords" content="Java并发编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="39__案例分析（二）：高性能网络应用框架Netty">
+  <meta name="twitter:description" content="Netty 是一个高性能网络应用框架，应用非常普遍，目前在 Java 领域里，Netty 基本上成为网络程序的标配了。Netty 框架功能丰富，也非常复杂，今天我们主要分析 Netty 框架中的线程模型，而线程模型直接影响着网络程序的性能。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">39__案例分析（二）：高性能网络应用框架Netty</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3012 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#网络编程性能的瓶颈">网络编程性能的瓶颈</a></li>
+        <li><a href="#reactor-模式">Reactor 模式</a></li>
+        <li><a href="#netty-中的线程模型">Netty 中的线程模型</a></li>
+        <li><a href="#用-netty-实现-echo-程序服务端">用 Netty 实现 Echo 程序服务端</a></li>
+        <li><a href="#总结">总结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>Netty 是一个高性能网络应用框架，应用非常普遍，目前在 Java 领域里，Netty 基本上成为网络程序的标配了。Netty 框架功能丰富，也非常复杂，今天我们主要分析 Netty 框架中的线程模型，而<strong>线程模型直接影响着网络程序的性能</strong>。</p>
+<p>在介绍 Netty 的线程模型之前，我们首先需要把问题搞清楚，了解网络编程性能的瓶颈在哪里，然后再看 Netty 的线程模型是如何解决这个问题的。</p>
+<h2 id="网络编程性能的瓶颈">网络编程性能的瓶颈</h2>
+<p>在<a href="./94604.md">《32 | Balking 模式：再谈线程安全的单例模式》</a>中，我们写过一个简单的网络程序 echo，采用的是阻塞式 I/O（BIO）。BIO 模型里，所有 read() 操作和 write() 操作都会阻塞当前线程的，如果客户端已经和服务端建立了一个连接，而迟迟不发送数据，那么服务端的 read() 操作会一直阻塞，所以<strong>使用 BIO 模型，一般都会为每个 socket 分配一个独立的线程</strong>，这样就不会因为线程阻塞在一个 socket 上而影响对其他 socket 的读写。BIO 的线程模型如下图所示，每一个 socket 都对应一个独立的线程；为了避免频繁创建、消耗线程，可以采用线程池，但是 socket 和线程之间的对应关系并不会变化。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/dc1d37a4a6e770f9b05196b2c86be40f.png" alt=""></p>
+<p>BIO 的线程模型</p>
+<p>BIO 这种线程模型适用于 socket 连接不是很多的场景；但是现在的互联网场景，往往需要服务器能够支撑十万甚至百万连接，而创建十万甚至上百万个线程显然并不现实，所以 BIO 线程模型无法解决百万连接的问题。如果仔细观察，你会发现互联网场景中，虽然连接多，但是每个连接上的请求并不频繁，所以线程大部分时间都在等待 I/O 就绪。也就是说线程大部分时间都阻塞在那里，这完全是浪费，如果我们能够解决这个问题，那就不需要这么多线程了。</p>
+<p>顺着这个思路，我们可以将线程模型优化为下图这个样子，可以用一个线程来处理多个连接，这样线程的利用率就上来了，同时所需的线程数量也跟着降下来了。这个思路很好，可是使用 BIO 相关的 API 是无法实现的，这是为什么呢？因为 BIO 相关的 socket 读写操作都是阻塞式的，而一旦调用了阻塞式 API，在 I/O 就绪前，调用线程会一直阻塞，也就无法处理其他的 socket 连接了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/0b42103a8b1f9bb7930091ab269ce56c.png" alt=""></p>
+<p>理想的线程模型图</p>
+<p>好在 Java 里还提供了非阻塞式（NIO）API，<strong>利用非阻塞式 API 就能够实现一个线程处理多个连接了</strong>。那具体如何实现呢？现在普遍都是<strong>采用 Reactor 模式</strong>，包括 Netty 的实现。所以，要想理解 Netty 的实现，接下来我们就需要先了解一下 Reactor 模式。</p>
+<h2 id="reactor-模式">Reactor 模式</h2>
+<p>下面是 Reactor 模式的类结构图，其中 Handle 指的是 I/O 句柄，在 Java 网络编程里，它本质上就是一个网络连接。Event Handler 很容易理解，就是一个事件处理器，其中 handle_event() 方法处理 I/O 事件，也就是每个 Event Handler 处理一个 I/O Handle；get_handle() 方法可以返回这个 I/O 的 Handle。Synchronous Event Demultiplexer 可以理解为操作系统提供的 I/O 多路复用 API，例如 POSIX 标准里的 select() 以及 Linux 里面的 epoll()。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/78d19ce7b7bb310cbb5a26446062c6fc.png" alt=""></p>
+<p>Reactor 模式类结构图</p>
+<p>Reactor 模式的核心自然是<strong>Reactor 这个类</strong>，其中 register_handler() 和 remove_handler() 这两个方法可以注册和删除一个事件处理器；<strong>handle_events() 方式是核心</strong>，也是 Reactor 模式的发动机，这个方法的核心逻辑如下：首先通过同步事件多路选择器提供的 select() 方法监听网络事件，当有网络事件就绪后，就遍历事件处理器来处理该网络事件。由于网络事件是源源不断的，所以在主程序中启动 Reactor 模式，需要以 <code>while(true){}</code> 的方式调用 handle_events() 方法。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void Reactor::handle_events(){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 通过同步事件多路选择器提供的
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  //select() 方法监听网络事件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  select(handlers);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 处理网络事件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  for(h in handlers){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    h.handle_event();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 在主程序中启动事件循环
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">while (true) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  handle_events();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="netty-中的线程模型">Netty 中的线程模型</h2>
+<p>Netty 的实现虽然参考了 Reactor 模式，但是并没有完全照搬，<strong>Netty 中最核心的概念是事件循环（EventLoop）</strong>，其实也就是 Reactor 模式中的 Reactor，<strong>负责监听网络事件并调用事件处理器进行处理</strong>。在 4.x 版本的 Netty 中，网络连接和 EventLoop 是稳定的多对 1 关系，而 EventLoop 和 Java 线程是 1 对 1 关系，这里的稳定指的是关系一旦确定就不再发生变化。也就是说一个网络连接只会对应唯一的一个 EventLoop，而一个 EventLoop 也只会对应到一个 Java 线程，所以<strong>一个网络连接只会对应到一个 Java 线程</strong>。</p>
+<p>一个网络连接对应到一个 Java 线程上，有什么好处呢？最大的好处就是对于一个网络连接的事件处理是单线程的，这样就<strong>避免了各种并发问题</strong>。</p>
+<p>Netty 中的线程模型可以参考下图，这个图和前面我们提到的理想的线程模型图非常相似，核心目标都是用一个线程处理多个网络连接。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/a2178bbe275aff26662fc96142ceed36.png" alt=""></p>
+<p>Netty 中的线程模型</p>
+<p>Netty 中还有一个核心概念是<strong>EventLoopGroup</strong>，顾名思义，一个 EventLoopGroup 由一组 EventLoop 组成。实际使用中，一般都会创建两个 EventLoopGroup，一个称为 bossGroup，一个称为 workerGroup。为什么会有两个 EventLoopGroup 呢？</p>
+<p>这个和 socket 处理网络请求的机制有关，socket 处理 TCP 网络连接请求，是在一个独立的 socket 中，每当有一个 TCP 连接成功建立，都会创建一个新的 socket，之后对 TCP 连接的读写都是由新创建处理的 socket 完成的。也就是说<strong>处理 TCP 连接请求和读写请求是通过两个不同的 socket 完成的</strong>。上面我们在讨论网络请求的时候，为了简化模型，只是讨论了读写请求，而没有讨论连接请求。</p>
+<p><strong>在 Netty 中，bossGroup 就用来处理连接请求的，而 workerGroup 是用来处理读写请求的</strong>。bossGroup 处理完连接请求后，会将这个连接提交给 workerGroup 来处理，workerGroup 里面有多个 EventLoop，那新的连接会交给哪个 EventLoop 来处理呢？这就需要一个负载均衡算法，Netty 中目前使用的是<strong>轮询算法</strong>。</p>
+<p>下面我们用 Netty 重新实现以下 echo 程序的服务端，近距离感受一下 Netty。</p>
+<h2 id="用-netty-实现-echo-程序服务端">用 Netty 实现 Echo 程序服务端</h2>
+<p>下面的示例代码基于 Netty 实现了 echo 程序服务端：首先创建了一个事件处理器（等同于 Reactor 模式中的事件处理器），然后创建了 bossGroup 和 workerGroup，再之后创建并初始化了 ServerBootstrap，代码还是很简单的，不过有两个地方需要注意一下。</p>
+<p>第一个，如果 NettybossGroup 只监听一个端口，那 bossGroup 只需要 1 个 EventLoop 就可以了，多了纯属浪费。</p>
+<p>第二个，默认情况下，Netty 会创建“2*CPU 核数”个 EventLoop，由于网络连接与 EventLoop 有稳定的关系，所以事件处理器在处理网络事件的时候是不能有阻塞操作的，否则很容易导致请求大面积超时。如果实在无法避免使用阻塞操作，那可以通过线程池来异步处理。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 事件处理器
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final EchoServerHandler serverHandler 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  = new EchoServerHandler();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//boss 线程组  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">EventLoopGroup bossGroup 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  = new NioEventLoopGroup(1); 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//worker 线程组  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">EventLoopGroup workerGroup 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  = new NioEventLoopGroup();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ServerBootstrap b = new ServerBootstrap();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  b.group(bossGroup, workerGroup)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   .channel(NioServerSocketChannel.class)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   .childHandler(new ChannelInitializer&lt;SocketChannel&gt;() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     public void initChannel(SocketChannel ch){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       ch.pipeline().addLast(serverHandler);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  //bind 服务端端口  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ChannelFuture f = b.bind(9090).sync();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  f.channel().closeFuture().sync();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 终止工作线程组
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  workerGroup.shutdownGracefully();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 终止 boss 线程组
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  bossGroup.shutdownGracefully();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> //socket 连接处理器
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class EchoServerHandler extends 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ChannelInboundHandlerAdapter {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 处理读事件  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void channelRead(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ChannelHandlerContext ctx, Object msg){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      ctx.write(msg);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 处理读完成事件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void channelReadComplete(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ChannelHandlerContext ctx){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      ctx.flush();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 处理异常事件
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void exceptionCaught(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ChannelHandlerContext ctx,  Throwable cause) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      cause.printStackTrace();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      ctx.close();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结">总结</h2>
+<p>Netty 是一个款优秀的网络编程框架，性能非常好，为了实现高性能的目标，Netty 做了很多优化，例如优化了 ByteBuffer、支持零拷贝等等，和并发编程相关的就是它的线程模型了。Netty 的线程模型设计得很精巧，每个网络连接都关联到了一个线程上，这样做的好处是：对于一个网络连接，读写操作都是单线程执行的，从而避免了并发程序的各种问题。</p>
+<p>你要想深入理解 Netty 的线程模型，还需要对网络相关知识有一定的理解，关于 Java IO 的演进过程，你可以参考<a href="./nio.pdf.md">Scalable IO in Java</a>，至于 TCP/IP 网络编程的知识你可以参考韩国尹圣雨写的经典教程——《TCP/IP 网络编程》。</p>
+<p>欢迎在留言区与我分享你的想法，也欢迎你在留言区记录你的思考过程。感谢阅读，如果你觉得这篇文章对你有帮助的话，也欢迎把它分享给更多的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/f2ae29f2a91a0266d9d86db774df526d.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">Java并发编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%85%A8%E6%A0%88%E5%B7%A5%E7%A8%8B%E5%B8%88%E4%BF%AE%E7%82%BC%E6%8C%87%E5%8D%97/39__xmljsonyaml%E6%AF%94%E8%BE%83/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">39__XML、JSON、YAML比较</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/39__%E6%A1%88%E4%BE%8B%E7%AF%87%E6%80%8E%E4%B9%88%E7%BC%93%E8%A7%A3_ddos_%E6%94%BB%E5%87%BB%E5%B8%A6%E6%9D%A5%E7%9A%84%E6%80%A7%E8%83%BD%E4%B8%8B%E9%99%8D%E9%97%AE%E9%A2%98/">
+            <span class="next-text nav-default">39__案例篇：怎么缓解_DDoS_攻击带来的性能下降问题？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

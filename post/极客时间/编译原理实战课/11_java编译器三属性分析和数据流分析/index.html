@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>11_Java编译器（三）：属性分析和数据流分析 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是宫文学。
+在上一讲，我们主要讨论了语义分析中的 ENTER 和 PROCESS 阶段。今天我们继续往下探索，看看 ATTR 和 FLOW 两个阶段。
+**ATTR 的字面意思是做属性计算。**在第 4 讲中，我已经讲过了属性计算的概念，你应该还记得什么是 S 属性，什么是 I 属性。那么，Java 编译器会计算哪些属性，又会如何计算呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/11_java%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%89%E5%B1%9E%E6%80%A7%E5%88%86%E6%9E%90%E5%92%8C%E6%95%B0%E6%8D%AE%E6%B5%81%E5%88%86%E6%9E%90/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/11_java%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%89%E5%B1%9E%E6%80%A7%E5%88%86%E6%9E%90%E5%92%8C%E6%95%B0%E6%8D%AE%E6%B5%81%E5%88%86%E6%9E%90/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="11_Java编译器（三）：属性分析和数据流分析">
+  <meta property="og:description" content="你好，我是宫文学。
+在上一讲，我们主要讨论了语义分析中的 ENTER 和 PROCESS 阶段。今天我们继续往下探索，看看 ATTR 和 FLOW 两个阶段。
+**ATTR 的字面意思是做属性计算。**在第 4 讲中，我已经讲过了属性计算的概念，你应该还记得什么是 S 属性，什么是 I 属性。那么，Java 编译器会计算哪些属性，又会如何计算呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="编译原理实战课">
+
+  <meta itemprop="name" content="11_Java编译器（三）：属性分析和数据流分析">
+  <meta itemprop="description" content="你好，我是宫文学。
+在上一讲，我们主要讨论了语义分析中的 ENTER 和 PROCESS 阶段。今天我们继续往下探索，看看 ATTR 和 FLOW 两个阶段。
+**ATTR 的字面意思是做属性计算。**在第 4 讲中，我已经讲过了属性计算的概念，你应该还记得什么是 S 属性，什么是 I 属性。那么，Java 编译器会计算哪些属性，又会如何计算呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7554">
+  <meta itemprop="keywords" content="编译原理实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="11_Java编译器（三）：属性分析和数据流分析">
+  <meta name="twitter:description" content="你好，我是宫文学。
+在上一讲，我们主要讨论了语义分析中的 ENTER 和 PROCESS 阶段。今天我们继续往下探索，看看 ATTR 和 FLOW 两个阶段。
+**ATTR 的字面意思是做属性计算。**在第 4 讲中，我已经讲过了属性计算的概念，你应该还记得什么是 S 属性，什么是 I 属性。那么，Java 编译器会计算哪些属性，又会如何计算呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">11_Java编译器（三）：属性分析和数据流分析</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7554 字 </span>
+          <span class="more-meta"> 预计阅读 16 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#attr属性分析">ATTR：属性分析</a>
+          <ul>
+            <li><a href="#类型检查">类型检查</a></li>
+            <li><a href="#引用消解">引用消解</a></li>
+            <li><a href="#常数折叠">常数折叠</a></li>
+            <li><a href="#推导类型参数">推导类型参数</a></li>
+          </ul>
+        </li>
+        <li><a href="#flow数据流分析">FLOW：数据流分析</a></li>
+        <li><a href="#课程小结">课程小结</a></li>
+        <li><a href="#一课一思">一课一思</a></li>
+        <li><a href="#参考资料">参考资料</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是宫文学。</p>
+<p>在上一讲，我们主要讨论了语义分析中的 ENTER 和 PROCESS 阶段。今天我们继续往下探索，看看 ATTR 和 FLOW 两个阶段。</p>
+<p>**ATTR 的字面意思是做属性计算。**在第 4 讲中，我已经讲过了属性计算的概念，你应该还记得什么是 S 属性，什么是 I 属性。那么，Java 编译器会计算哪些属性，又会如何计算呢？</p>
+<p>**FLOW 的字面意思是做数据流分析。**通过第 7 讲，你已经初步了解了数据流分析的算法。但那个时候是把数据流分析用于编译期后端的优化算法，包括删除公共子表达式、变量传播、死代码删除等。而这里说的数据流分析，属于编译器前端的工作。那么，前端的数据流分析会做什么工作呢？</p>
+<p>这些问题的答案，我今天都会为你一一揭晓。好了，我们进入正题，首先来看看 ATTR 阶段的工作：属性分析。</p>
+<h2 id="attr属性分析">ATTR：属性分析</h2>
+<p>现在，你可以打开 <strong>com.sun.tools.javac.comp.Attr 类</strong>的代码。在这个类的头注释里，你会发现原来 ATTR 做了四件事，分别在 4 个辅助类里实现：</p>
+<ol>
+<li>Check：做类型检查。</li>
+<li>Resolve：做名称的消解，也就是对于程序中出现的变量和方法，关联到其定义。</li>
+<li>ConstFold：常量折叠，比如对于“2+3”这种在编译期就可以计算出结果的表达式，就直接计算出来。</li>
+<li>Infer：用于泛型中的类型参数推导。</li>
+</ol>
+<p>我们首先来看 Check，也就是类型检查。</p>
+<h3 id="类型检查">类型检查</h3>
+<p>类型检查是语义分析阶段的一项重要工作。静态类型系统的语言，比如 Java、C、Kotlin、Swift，都可以通过类型检查，避免很多编译错误。</p>
+<p>那么，一个基础的问题是：<strong>Java 都有哪些类型？</strong></p>
+<p>你是不是会觉得这个问题挺幼稚？Java 的类型，不就是原始数据类型，再加上类、接口这些吗？</p>
+<p>说得对，但是并不全面。你已经看到，Java 编译器中每个 AST 节点都有一个 type 属性。那么，一个模块或者一个包的类型是什么？一个方法的类型又是什么呢？</p>
+<p>在 java.compile 模块中，定义了 Java 的语言模型，其中有一个包，是对 Java 的类型体系做了设计，你可以看一下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/748f25f1f13e275d0b9f76e9a24e0d9e.png" alt=""></p>
+<p>图 1：Java 的类型体系</p>
+<p>这样你就能理解了：原来模块和包的类型是 NoType，而方法的类型是可执行类型（ExecutableType）。你可以看一下源代码，会发现要刻画一个可执行类型是比较复杂的，竟然需要 5 个要素：</p>
+<ol>
+<li>returnType：返回值类型；</li>
+<li>parameterTypes：参数类型的列表；</li>
+<li>receiverType：接收者类型，也就是这个方法是定义在哪个类型（类、接口、枚举）上的；</li>
+<li>thrownTypes：所抛出异常的类型列表；</li>
+<li>typeVariables：类型参数的列表。</li>
+</ol>
+<p>如果你学过 C 语言，你应该记得描述一个函数的类型只需要这个列表中的前两项，也就是返回值类型和参数类型就可以了。通过这样的对比，想必你会对 Java 的可执行类型理解得更清楚。</p>
+<p>然而，通过一个接口体系来刻画类型还是不够细致，Java 又提供了一个 TypeKind 的枚举类型，把某些类型做进一步的细化，比如原始数据类型进一步细分为 BOOLEAN、BYTE、SHORT 等。这种设计方式可以减少接口的数量，使类型体系更简洁。你也可以在编程中借鉴这种设计方式，避免产生过多的、没有什么实际意义的子类型。</p>
+<p>同样，在 jdk.compiler 模块中，有一些具体的类实现了上述类型体系的接口：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/aca04c4faeb89d8b432b2a33eb0228f1.png" alt=""></p>
+<p>图 2：类型体系的实现</p>
+<p>好了，现在你已经了解了 Java 的类型体系。<strong>那么，编译器是如何实现类型检查的呢？</strong></p>
+<p>我用一个 Java 程序的例子，来给你做类型检查的说明。在下面这段代码中，变量 a 的声明语句是错误的，因为等号右边是一个字符串字面量“Hello”，类型是 java.lang.String，跟变量声明语句的类型“int”不相符。在做类型检查的时候，编译器应该检查出这个错误来。</p>
+<p>而后面那句“<code>float b = 10</code>”，虽然变量 b 是 float 型的，而等号右边是一个整型的字面量，但 Java 能够自动把整型字面量转化为浮点型，所以这个语句是合法的。</p>
+<p>public class TypeCheck{<br>
+int a = &ldquo;Hello&rdquo;; //等号两边的类型不兼容，编译报错<br>
+float b = 10;    //整型字面量可以赋值给浮点型变量<br>
+}</p>
+<p>对于“<code>int a = &quot;hello&quot;</code>”这个语句，它的类型检查过程分了四步，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/4fd109d29c5d5fcb249849550387bf7d.png" alt=""></p>
+<p>图 3：类型检查的过程</p>
+<p>**第 1 步，计算 vartype 子节点的类型。**这一步是在把 a 加入符号表的时候（MemberEnter）就顺便一起做了（调用的是“Attr.attribType() 方法”）。计算结果是 int 型。</p>
+<p>**第 2 步，在 ATTR 阶段正式启动以后，深度优先地遍历整棵 AST，自底向上计算每个节点的类型。**自底向上是 S 属性的计算方式。你可以看一下 Attr 类中的各种 attribXXX() 方法，大多数都是要返回一个类型值，也就是处理完当前子树后的类型。这个时候，能够知道 init 部分的类型是字符串型（java.lang.String）。</p>
+<p><strong>第 3 步，检查 init 部分的类型是否正确</strong>。这个时候，比对的就是 vartype 和 init 这两棵子树的类型。具体实现是在 Check 类的 <strong>checkType()</strong> 方法，这个方法要用到下面这两个参数。</p>
+<ol>
+<li><strong>final Type found</strong>：“发现”的类型，也就是“Hello”字面量的类型，这里的值是 java.lang.String。这个是自底向上计算出来的，属于 S 属性。</li>
+<li><strong>final Type req</strong>：“需要”的类型，这里的值是 int。也就是说，a 这个变量需要初始化部分的类型是 int 型的。这个变量是自顶向下传递下来的，属于 I 属性。</li>
+</ol>
+<p>所以你能看出，所谓的类型检查，就是所需类型（I 属性）和实际类型（S 属性）的比对。</p>
+<p>这个时候，你就会发现类型不匹配，从而记录下错误信息。</p>
+<p>下面是在做类型检查时整个的调用栈：</p>
+<p>JavaCompiler.compile()<br>
+-&gt;JavaCompiler.attribute()<br>
+-&gt;Attr.attib()<br>
+-&gt;Attr.attribClass()      //计算 TypeCheck 的属性<br>
+-&gt;Attr.attribClassBody()<br>
+-&gt;Attr.attribStat()       //int a = &ldquo;Hello&rdquo;;<br>
+-&gt;Attr.attribTree()       //遍历声明成员变量 a 的 AST<br>
+-&gt;Attr.visitVarDef()      //访问变量声明节点<br>
+-&gt;Attr.attribExpr(TCTree,Env,Type)//计算&quot;Hello&quot;的属性，并传入 vartype 的类型<br>
+-&gt;Attr.attribTree()       //遍历&quot;Hello&quot;AST，所需类型信息在 ResultInfo 中<br>
+-&gt;Attr.visitLiteral()     //访问字面量节点，所需类型信息在 resultInfo 中<br>
+-&gt;Attr.check()            //把节点的类型跟原型类型 (需要的类型) 做比对<br>
+-&gt;Check.checkType()       //检查跟预期的类型是否一致</p>
+<p>**第 4 步：继续自底向上计算类型属性。**这个时候会把变量声明语句 JCVariableDecl 的类型设置为 vartype 的类型。</p>
+<p>上面是对变量 a 的声明语句的检查过程。对于“<code>float b = 10</code>”的检查过程也类似，但整型是允许赋值给浮点型的，所以编译器不会报错。</p>
+<p>说完了类型检查，我们继续看一下 Resolve，也就是引用的消解。</p>
+<h3 id="引用消解">引用消解</h3>
+<p>在第 5 讲中，我就介绍过了引用消解的概念。给你举个例子，当我们在程序中用到一个变量的时候，必须知道它确切的定义在哪里。比如下面代码中，第 4 行和第 6 行都用到了一个变量 a，但它们指的不是同一个变量。<strong>第 4 行的 a 是类的成员变量，第 6 行的 a 是 foo() 函数中的本地变量。</strong></p>
+<p>public class RefResolve extends RefResolveParent {<br>
+int a = 2;<br>
+void foo(int d){<br>
+int b = a + f;   //这里的 a 是 RefResolve 的成员变量<br>
+int a = 3;       //本地变量 a，覆盖了类的成员变量 a<br>
+int c = a + 10;  //这里的 a 是前一句中声明的本地变量<br>
+}<br>
+}</p>
+<p>class RefResolveParent{<br>
+int f = 4;          //父类中的成员变量<br>
+}</p>
+<p>在编译器中，这两行中的 a 变量，都对应一个标识符（JCIdent）节点，也都会关联一个 Symbol 对象。但这两个 Symbol 对象不是同一个。第 4 行的 a 指的是类的成员变量，而第 6 行的 a 指的是本地变量。</p>
+<p><strong>所以，具体到 Java 编译器，引用消解实际上就是把标识符的 AST 节点关联到正确的 Symbol 的过程。</strong></p>
+<p>引用消解不仅仅针对变量，还针对类型、包名称等各种用到标识符的地方。如果你写了“System.out.println()”这样一个语句，就要引用正确的包符号。</p>
+<p>你可以打开 com.sun.tools.javac.comp.Resolve 类的 <strong>findIdentInternal 方法</strong>，能看到对几种不同的符号做引用消解的入口。</p>
+<p>&hellip;</p>
+<p>if (kind.contains(KindSelector.VAL)) {   //变量消解<br>
+sym = findVar(env, name);<br>
+&hellip;<br>
+}</p>
+<p>if (kind.contains(KindSelector.TYP)) {   //类型消解<br>
+sym = findType(env, name);<br>
+&hellip;<br>
+}</p>
+<p>if (kind.contains(KindSelector.PCK))     //包名称消解<br>
+return lookupPackage(env, name);<br>
+&hellip;</p>
+<p>引用消解的实现思路也很清晰。在上一讲，你知道编译器在 Enter 阶段已经建立了作用域的嵌套结构。那么在这里，<strong>编译器只需要沿着这个嵌套结构逐级查找就行了</strong>。</p>
+<p>比如，对于“<code>int b = a + f</code>”这个变量声明语句，在查找变量 a 时，沿着 Scope 的嵌套关系往上查找两级就行。但对于变量 f，还需要沿着类的继承关系，在符号表里找到父类（或接口），从中查找有没有名称为 f 的成员变量。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/529004a014cc32937e721117bf2d0add.png" alt=""></p>
+<p>图 4：引用消解的实现</p>
+<p>不过，这里还有一个细节需要深究一下。还记得我在前一讲留了一个问题吗？这个问题是：**对于方法体中的本地变量，不是在 ENTER 阶段创建符号，而是在 ATTR 阶段。**具体来说，就是在 ATTR 的 Resolve 环节。这是为什么呢？为什么不在 ENTER 环节把所有的符号都识别出来，并且加到作用域中就行了？</p>
+<p>我来解答一下这个问题。我们把 RefResolve 类中的“<code>int a = 2;</code>”这行注释掉，会发生什么事情呢？foo() 函数的第一行“<code>int b = a + f</code>”应该报错，因为找不到 a 的定义。</p>
+<p>public class RefResolve extends RefResolveParent{<br>
+//int a = 2;          //把这行注释掉<br>
+void foo(int d){<br>
+int b = a + f;   //这里找不到 a，应该报错<br>
+int a = 3;        //本地变量 a，覆盖了类的成员变量 a<br>
+int c = a + 10;   //这里的 a 是前一句中声明的本地变量<br>
+}<br>
+}</p>
+<p>但是，如果编译器在 ENTER 阶段就把所有的符号建立起来了，<strong>那么会发生什么情况呢</strong>？foo() 的方法体所对应的 Scope 就会有一个符号 a。按照前面描述的逐级查找算法，它就会认为“<code>int b = a + f</code>”里的这个 a，就是本地变量 a。这当然是错误的。</p>
+<p>所以，为了保证消解算法不出错，必须保证在做完“<code>int b = a + f</code>”这句的引用消解之后，才会启动下一句“<code>int a = 3</code>”的 ENTER 过程，把符号 a 添加的 foo() 方法体的作用域中。引用消解都处理完毕以后，符号表才会填充完整，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/3f57180f35c1a274b9a442909c0902f0.png" alt=""></p>
+<p>图 5：引用消解后，符号表中添加了本地变量</p>
+<h3 id="常数折叠">常数折叠</h3>
+<p>在 ATTR 阶段，还会做一项优化工作：Constant Fold，即常数折叠。</p>
+<p>我们知道，优化工作通常是在编译器的后端去做的。但因为 javac 编译器只是个前端编译器，生成字节码就完成任务了。不过即使如此，也要保证字节码是比较优化的，减少解释执行的消耗。</p>
+<p>因为常数折叠借助属性计算就可以实现，所以在 ATTR 阶段顺便就把这个优化做了。</p>
+<p>**Java 在什么情况下会做常数折叠呢？**我们来看看下面这个例子。变量 a 和 b 分别是一个整型和字符串型的常数。这样的话，“<code>c=b+a*3</code>”中 c 的值，是可以在编译期就计算出来的。这要做两次常数折叠的计算，最后生成一个“<code>Hello 6</code>”的字符串常数。</p>
+<p>public class ConstFold {<br>
+public String foo(){<br>
+final int a = 2;          //int 类型的常数<br>
+final String b = &ldquo;Hello &ldquo;; //String 类型的常数<br>
+String c = b + a * 3;     //发生两次折叠<br>
+return c;<br>
+}<br>
+}</p>
+<p>触发上述常数折叠的代码，在 com.sun.tools.javac.comp.Attr 类的 <strong>visitBinary() 方法</strong>中，具体实现是在 com.sun.tools.javac.comp.ConstFold 类。它的计算逻辑是：针对每个 AST 节点的 type，可以通过 Type.constValue() 方法，看看它是否有常数值。如果二元表达式的两个子节点都有常数值，那么就可以做常数折叠，计算出的结果保存在父节点的 type 属性中。你可以看看下图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/21fb41abdab68581b088a32416d8479c.png" alt=""></p>
+<p>图 6：AST 节点对应的常数值属性</p>
+<p>扩展：你看了这个图，可能会有一个疑问：常数值为什么不是保存在 AST 节点中，而是保存在类型对象中？类型带上一个值是什么意思？常数值为 2 的整型和常数值为 3 的整型是不是一个类型？ 这是因为 Type 里保存的信息本来就比较杂。我们前面分析过，一个可执行类型（比如方法）里包含返回值、参数类型等各种信息。一个类型的元数据信息（通常指标注），也是存在 Type 里面的。所以，一个方法的类型信息，跟另一个方法的类型信息，是迥然不同的。在这里，不要把 Type 叫做“类型”，而是叫“类型信息”比较好。每个类型信息对象只针对某个 AST 节点，包含了该节点与类型有关的各种信息。因此，在这里面再多放一个常数值，也就无所谓了。</p>
+<p>你能看出，常数折叠实质上是针对 AST 节点的常数值属性来做属性计算的。</p>
+<h3 id="推导类型参数">推导类型参数</h3>
+<p>ATTR 阶段做的最后一项工作，也是跟类型相关，那就是对泛型中的类型参数做推导。</p>
+<p>这是什么意思呢？在 Java 语言中，如果你前面声明了一个参数化类型的变量，那么在后面的初始化部分，你不带这个参数化类型也是可以的，编译器会自动推断出来。</p>
+<p>比如下面这句：</p>
+<p>List<String> lines = new ArrayList<String>();</p>
+<p>你可以去掉初始化部分中的类型参数，只保留一对尖括号就行了：</p>
+<p>List<String> lines = new ArrayList&lt;&gt;();</p>
+<p>甚至更复杂的参数化类型，我们也可以这样简化：</p>
+<p>Map&lt;String, List<String>&gt; myMap = new HashMap&lt;String, List<String>&gt;();<br>
+//简化为：<br>
+Map&lt;String, List<String>&gt; myMap = new HashMap&lt;&gt;();</p>
+<p>你可以在 Infer.instantiateMethod() 方法中打个断点，观察一下泛型的推断。关于泛型这个主题，我会在“揭秘泛型编程的实现机制”这一讲，去展开讲一些关于类型计算的算法，这里就不详细展开了。</p>
+<p>好了，到这里，你已经知道了属性分析所做的四项工作，它们分别针对了四个属性：</p>
+<ol>
+<li>类型检查针对的是类型属性；</li>
+<li>引用消解是针对标识符节点的符号（sym）属性，也就是要找到正确的符号定义；</li>
+<li>常数折叠针对的是常数值属性；</li>
+<li>类型参数的推导，针对的是类型参数属性。</li>
+</ol>
+<p>所以，现在你就可以解答出学教科书时通常会遇到的一个疑问：属性计算到底是计算了哪些属性。我们用实战知识印证了理论。</p>
+<p>接下来我们看看编译器下一个阶段的工作：数据流分析。</p>
+<h2 id="flow数据流分析">FLOW：数据流分析</h2>
+<p>Java 编译器在 FLOW 阶段做了四种数据流分析：活跃性分析、异常分析、赋值分析和本地变量捕获分析。我以其中的活跃性分析方法为例，来给你做讲解，这样其他的几个分析方法，你就可以举一反三了。</p>
+<p><strong>首先，我们来看看活跃性分析方法对 return 语句的检测。</strong></p>
+<p>举个最简单的例子。下面这段代码里，foo 函数的返回值是 int，而函数体中，只有在 if 条件中存在一个 return 语句。这样，代码在 IDE 中就会报编译错误，提示缺少 return 语句。</p>
+<p>public class NoReturn{<br>
+public int foo(int a){  //在 a&lt;=0 的情况下，不会执行 return 语句<br>
+if (a&gt; 0){<br>
+return a;<br>
+}<br>
+/*<br>
+else{<br>
+return -a;<br>
+}<br>
+*/<br>
+}<br>
+}</p>
+<p>想要检查是否缺少 return 语句，我们就要进行活跃性分析。活跃性分析的具体实现是在 Flow 的一个内部类 LiveAnalyzer 中。</p>
+<p>在分析过程中，编译器用了一个 <strong>alive 变量</strong>来代表代码是否会执行到当前位置。打开 <strong>Flow$LiveAnalyzer 类</strong>，你会看到 <strong>visitMethodDef</strong> 中的部分代码，如下所示。如果方法体里有正确的 return 语句，那么扫描完方法体以后，alive 的取值是“DEAD”，也就是这之后不会再有可执行的代码了；否则就是“ALIVE”，这意味着 AST 中并不是所有的分支，都会以 return 结束。</p>
+<p>public void visitMethodDef(JCMethodDecl tree) {<br>
+&hellip;<br>
+alive = Liveness.ALIVE;  //设置为 ALIVE<br>
+scanStat(tree.body);     //扫描所有的语句</p>
+<pre><code>//如果仍然是 ALIVE，但返回值不是 void，那么说明缺少 Return 语句    
+if (alive == Liveness.ALIVE &amp;&amp; !tree.sym.type.getReturnType().hasTag(VOID))  
+    log.error(TreeInfo.diagEndPos(tree.body), Errors.MissingRetStmt);  
+</code></pre>
+<p>&hellip;<br>
+}</p>
+<p>你可以看到下面的代码示例中，当递归下降地扫描到 if 语句的时候，只有同时存在 <strong>then</strong> 的部分和 <strong>else</strong> 的部分，并且两个分支的活跃性检查的结果都是“DEAD”，也就是两个分支都以 return 语句结束的时候，if 节点执行后 alive 就会变成“DEAD”，也就是后边的语句不会再被执行。除此之外，都是“ALIVE”，也就是 if 后边的语句有可能被执行。</p>
+<p>public void visitIf(JCIf tree) {<br>
+scan(tree.cond);         //扫描 if 语句的条件部分<br>
+//扫描 then 部分。如果这里面有 return 语句，alive 会变成 DEAD<br>
+scanStat(tree.thenpart);<br>
+if (tree.elsepart != null) {<br>
+Liveness aliveAfterThen = alive;<br>
+alive = Liveness.ALIVE;<br>
+scanStat(tree.elsepart);<br>
+//只有 then 和 else 部分都有 return 语句，alive 才会变成 DEAD<br>
+alive = alive.or(aliveAfterThen);<br>
+} else {  //如果没有 else 部分，那么把 alive 重新置为 ALIVE<br>
+alive = Liveness.ALIVE;<br>
+}<br>
+}</p>
+<p>看代码还是比较抽象。我把数据流分析的逻辑用控制流图的方式表示出来，你看着会更直观。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/a366a8897bc5a0c71c4ff53a138b6115.png" alt=""></p>
+<p>图 7：活跃性分析</p>
+<p>我们通过活跃性分析，可以学习到数据流分析框架的 5 个要素：</p>
+<ol>
+<li><strong>V</strong>：代表被分析的值，这里是 alive，代表了控制流是否会到达这里。</li>
+<li><strong>I</strong>：是 V 的初始值，这里的初始值是 LIVE；</li>
+<li><strong>D</strong>：指分析方向。这个例子里，是从上到下扫描基本块中的代码；而有些分析是从下往上的。</li>
+<li><strong>F</strong>：指转换函数，也就是遇到每个语句的时候，V 如何变化。这里是在遇到 return 语句的时候，把 alive 变为 DEAD。</li>
+<li><strong>Λ</strong>：meet 运算，也就是当控制流相交的时候，从多个值中计算出一个值。你看看下图，在没有 else 块的时候，两条控制流中 alive 的值是不同的，最后的取值是 LIVE。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/43796215688dceb7178152fc054c27d2.png" alt=""></p>
+<p>图 8：当没有 else 块的时候，两条控制流中的 alive 值不同</p>
+<p>在做 meet 运算的时候，会用到一个叫做半格的数学工具。你可以参考本讲末尾的链接。</p>
+<p>好了，我借助活跃性分析给你简要地讲解了数据流分析框架，我们接着往下看。</p>
+<p><strong>再进一步，活跃性分析还可以检测不可到达的语句</strong>。</p>
+<p>如果我们在 return 语句后面再加一些代码，那么这个时候，alive 已经变成“DEAD”，编译器就会报“语句不可达”的错误。</p>
+<p>Java 编译器还能检测更复杂的语句不可达的情况。比如在下面的例子中，a 和 b 是两个 final 类型的本地变量，final 修饰词意味着这两个变量的值已经不会再改变。</p>
+<p>public class Unreachable{<br>
+public void foo(){<br>
+final int a=1;<br>
+final int b=2;<br>
+while(a&gt;b){ //a&gt;b 的值可以在编译期计算出来<br>
+System.out.println(&ldquo;Inside while block&rdquo;);<br>
+}<br>
+System.out.println(&ldquo;Outside while block&rdquo;);<br>
+}<br>
+}</p>
+<p>这种情况下，在扫描 <strong>while 语句</strong>的时候，条件表达式“<code>a&gt;b</code>”会被计算出来，是 false，这意味着 while 块内部的代码不会被执行。注意，在第 7 讲的优化算法中，这种优化叫做<strong>稀疏有条件的常数折叠</strong>。因为这里是用于编译器前端，所以只是报了编译错误。如果是在中后端做这种优化，就会直接把不可达的代码删除。</p>
+<p>//Flow$AliveAnalyzer<br>
+public void visitWhileLoop(JCWhileLoop tree) {<br>
+ListBuffer<PendingExit> prevPendingExits = pendingExits;<br>
+pendingExits = new ListBuffer&lt;&gt;();<br>
+scan(tree.cond);        //扫描条件<br>
+alive = Liveness.from(!tree.cond.type.isFalse());  //如果条件值为 false，那么 alive 为 DEAD<br>
+scanStat(tree.body);    //扫描 while 循环体<br>
+alive = alive.or(resolveContinues(tree)); <br>
+alive = resolveBreaks(tree, prevPendingExits).or(<br>
+!tree.cond.type.isTrue());<br>
+}</p>
+<p>void scanStat(JCTree tree) { //扫描语句<br>
+//如果在扫描语句的时候，alive 是 DEAD，那么该语句就不可到达了<br>
+if (alive == Liveness.DEAD &amp;&amp; tree != null) {<br>
+log.error(tree.pos(), Errors.UnreachableStmt);<br>
+if (!tree.hasTag(SKIP)) alive = Liveness.RECOVERY;<br>
+}<br>
+scan(tree);<br>
+}</p>
+<p>还有一种代码不可达的情况，就是无限循环后面的代码。你可以思考一下，在上面的例子中，<strong>如果把 while 条件的“a&gt;b”改成“a&lt;b”，会发生什么情况呢？</strong></p>
+<p>编译器会扫描 while 里面有没有合适的 break 语句（通过 <strong>resolveBreaks() 方法</strong>）。如果找不到，就意味着这个循环永远不会结束，那么循环体后面的语句就永远不会到达，从而导致编译器报错。</p>
+<p>除了活跃性分析，Flow 阶段还做了其他三项分析：<strong>异常分析、赋值分析和本地变量捕获分析。</strong></p>
+<p>为了方便你的学习，我把 Java 编译器用到的几个数据流分析方法整理了一下，放在下面的表格中：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/c16157c954c72081da5a406493f772eb.png" alt=""></p>
+<p>这几种分析方法，我建议你可以做几个例子，跟踪代码并研究一下，会加深你对数据流分析的直观理解。</p>
+<p>异常分析、赋值分析和本地变量捕获的思路，与活跃性分析类似，它们都是按照数据流分析框架来处理的。也就是说，对于每个分析方法，你都要注意识别出它的五大要素：值、初始值、转换规则、扫描方向，以及 meet 运算规则。</p>
+<h2 id="课程小结">课程小结</h2>
+<p>今天这一讲，我们研究了 Java 编译过程中的属性分析和数据流分析两个阶段。</p>
+<p><strong>在属性分析阶段</strong>，你能够看到 Java 是如何做类型检查、引用消解、常量折叠和推导类型参数的，它们实际上是对类型（type）、符号（sym）、常量值（constValue）和类型参数这 4 类属性的处理工作。</p>
+<p>我们也见识到了在编译器前端的<strong>数据流分析阶段</strong>，是如何使用数据流分析方法的。通过数据流分析，编译器能够做一些更加深入的语义检查，比如检查控制流是否都经过了 return 语句，以及是否有不可到达的代码、每个异常是否都被处理，变量在使用前是否肯定被赋值，等等。</p>
+<p>总体来说，在 ATTR 和 FLOW 这两个阶段，编译器完成了主要的语义检查工作。如果你在设计一门语言的时候，遇到了如何做语义检查的问题，那你就可以参考一下这一讲的内容。</p>
+<p>在最后，是本节课程知识点的思维导图，供你参考：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/5977e7f2e5be3fc80b13ab92f1776660.png" alt=""></p>
+<h2 id="一课一思">一课一思</h2>
+<p>数据流分析框架很重要，你可以借助实例对它熟悉起来。那么，你能针对赋值分析，把它的 5 个元素列出来吗？欢迎在留言区分享你的思考，我会在下一讲的留言区，通过置顶的方式公布标准答案。</p>
+<p>如果你觉得有收获，欢迎你把今天的内容分享给你的朋友。</p>
+<h2 id="参考资料">参考资料</h2>
+<ol>
+<li>关于数据流分析的理论性内容，可以参考龙书（Compilers Principles, Techniques and Tools）第二版的 9.2 和 9.3 节。你也可以参考《编译原理之美》的第27、28讲，那里进行了比较直观的讲述。</li>
+<li>关于半格这个数学工具，你可以参考龙书第二版的 9.3.1 部分，也同样可以参考《编译原理之美》的第 28 讲。</li>
+</ol>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/">编译原理实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/11_hive%E6%98%AF%E5%A6%82%E4%BD%95%E8%AE%A9mapreduce%E5%AE%9E%E7%8E%B0sql%E6%93%8D%E4%BD%9C%E7%9A%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">11_Hive是如何让MapReduce实现SQL操作的？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/11_kappa%E6%9E%B6%E6%9E%84%E5%88%A9%E7%94%A8kafka%E9%94%BB%E9%80%A0%E7%9A%84%E5%B1%A0%E9%BE%99%E5%88%80/">
+            <span class="next-text nav-default">11_Kappa架构：利用Kafka锻造的屠龙刀</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

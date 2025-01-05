@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>04｜_Mutex：骇客编程，如何拓展额外功能？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是鸟窝。
+前面三讲，我们学习了互斥锁 Mutex 的基本用法、实现原理以及易错场景，可以说是涵盖了互斥锁的方方面面。如果你能熟练掌握这些内容，那么，在大多数的开发场景中，你都可以得心应手。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/04_mutex%E9%AA%87%E5%AE%A2%E7%BC%96%E7%A8%8B%E5%A6%82%E4%BD%95%E6%8B%93%E5%B1%95%E9%A2%9D%E5%A4%96%E5%8A%9F%E8%83%BD/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/04_mutex%E9%AA%87%E5%AE%A2%E7%BC%96%E7%A8%8B%E5%A6%82%E4%BD%95%E6%8B%93%E5%B1%95%E9%A2%9D%E5%A4%96%E5%8A%9F%E8%83%BD/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="04｜_Mutex：骇客编程，如何拓展额外功能？">
+  <meta property="og:description" content="你好，我是鸟窝。
+前面三讲，我们学习了互斥锁 Mutex 的基本用法、实现原理以及易错场景，可以说是涵盖了互斥锁的方方面面。如果你能熟练掌握这些内容，那么，在大多数的开发场景中，你都可以得心应手。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go并发编程实战课">
+
+  <meta itemprop="name" content="04｜_Mutex：骇客编程，如何拓展额外功能？">
+  <meta itemprop="description" content="你好，我是鸟窝。
+前面三讲，我们学习了互斥锁 Mutex 的基本用法、实现原理以及易错场景，可以说是涵盖了互斥锁的方方面面。如果你能熟练掌握这些内容，那么，在大多数的开发场景中，你都可以得心应手。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3447">
+  <meta itemprop="keywords" content="Go并发编程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="04｜_Mutex：骇客编程，如何拓展额外功能？">
+  <meta name="twitter:description" content="你好，我是鸟窝。
+前面三讲，我们学习了互斥锁 Mutex 的基本用法、实现原理以及易错场景，可以说是涵盖了互斥锁的方方面面。如果你能熟练掌握这些内容，那么，在大多数的开发场景中，你都可以得心应手。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">04｜_Mutex：骇客编程，如何拓展额外功能？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3447 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#trylock">TryLock</a></li>
+    <li><a href="#获取等待者的数量等指标">获取等待者的数量等指标</a></li>
+    <li><a href="#使用-mutex-实现一个线程安全的队列">使用 Mutex 实现一个线程安全的队列</a></li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#思考题">思考题</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是鸟窝。</p>
+<p>前面三讲，我们学习了互斥锁 Mutex 的基本用法、实现原理以及易错场景，可以说是涵盖了互斥锁的方方面面。如果你能熟练掌握这些内容，那么，在大多数的开发场景中，你都可以得心应手。</p>
+<p>但是，在一些特定的场景中，这些基础功能是不足以应对的。这个时候，我们就需要开发一些扩展功能了。我来举几个例子。</p>
+<p>比如说，我们知道，如果互斥锁被某个 goroutine 获取了，而且还没有释放，那么，其他请求这把锁的 goroutine，就会阻塞等待，直到有机会获得这把锁。有时候阻塞并不是一个很好的主意，比如你请求锁更新一个计数器，如果获取不到锁的话没必要等待，大不了这次不更新，我下次更新就好了，如果阻塞的话会导致业务处理能力的下降。</p>
+<p>再比如，如果我们要监控锁的竞争情况，一个监控指标就是，等待这把锁的 goroutine 数量。我们可以把这个指标推送到时间序列数据库中，再通过一些监控系统（比如 Grafana）展示出来。要知道，<strong>锁是性能下降的“罪魁祸首”之一，所以，有效地降低锁的竞争，就能够很好地提高性能。因此，监控关键互斥锁上等待的 goroutine 的数量，是我们分析锁竞争的激烈程度的一个重要指标</strong>。</p>
+<p>实际上，不论是不希望锁的 goroutine 继续等待，还是想监控锁，我们都可以基于标准库中 Mutex 的实现，通过 Hacker 的方式，为 Mutex 增加一些额外的功能。这节课，我就来教你实现几个扩展功能，包括实现 TryLock，获取等待者的数量等指标，以及实现一个线程安全的队列。</p>
+<h1 id="trylock">TryLock</h1>
+<p>我们可以为 Mutex 添加一个 TryLock 的方法，也就是尝试获取排外锁。</p>
+<p>这个方法具体是什么意思呢？我来解释一下这里的逻辑。当一个 goroutine 调用这个 TryLock 方法请求锁的时候，如果这把锁没有被其他 goroutine 所持有，那么，这个 goroutine 就持有了这把锁，并返回 true；如果这把锁已经被其他 goroutine 所持有，或者是正在准备交给某个被唤醒的 goroutine，那么，这个请求锁的 goroutine 就直接返回 false，不会阻塞在方法调用上。</p>
+<p>如下图所示，如果 Mutex 已经被一个 goroutine 持有，调用 Lock 的 goroutine 阻塞排队等待，调用 TryLock 的 goroutine 直接得到一个 false 返回。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/4436afa7780f7d23c81a8c10e8e0c30a.png" alt=""></p>
+<p>在实际开发中，如果要更新配置数据，我们通常需要加锁，这样可以避免同时有多个 goroutine 并发修改数据。有的时候，我们也会使用 TryLock。这样一来，当某个 goroutine 想要更改配置数据时，如果发现已经有 goroutine 在更改了，其他的 goroutine 调用 TryLock，返回了 false，这个 goroutine 就会放弃更改。</p>
+<p>很多语言（比如 Java）都为锁提供了 TryLock 的方法，但是，Go 官方issue 6123有一个讨论（后来一些 issue 中也提到过），标准库的 Mutex 不会添加 TryLock 方法。虽然通过 Go 的 Channel 我们也可以实现 TryLock 的功能，但是基于 Channel 的实现我们会放在 Channel 那一讲中去介绍，这一次我们还是基于 Mutex 去实现，毕竟大部分的程序员还是熟悉传统的同步原语，而且传统的同步原语也不容易出错。所以这节课，还是希望带你掌握基于 Mutex 实现的方法。</p>
+<p>那怎么实现一个扩展 TryLock 方法的 Mutex 呢？我们直接来看代码。</p>
+<p>// 复制 Mutex 定义的常量<br>
+const (<br>
+mutexLocked = 1 &laquo; iota // 加锁标识位置<br>
+mutexWoken              // 唤醒标识位置<br>
+mutexStarving           // 锁饥饿标识位置<br>
+mutexWaiterShift = iota // 标识 waiter 的起始 bit 位置<br>
+)</p>
+<p>// 扩展一个 Mutex 结构<br>
+type Mutex struct {<br>
+sync.Mutex<br>
+}</p>
+<p>// 尝试获取锁<br>
+func (m *Mutex) TryLock() bool {<br>
+// 如果能成功抢到锁<br>
+if atomic.CompareAndSwapInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)), 0, mutexLocked) {<br>
+return true<br>
+}</p>
+<pre><code>// 如果处于唤醒、加锁或者饥饿状态，这次请求就不参与竞争了，返回 false  
+old := atomic.LoadInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)))  
+if old&amp;(mutexLocked|mutexStarving|mutexWoken) != 0 {  
+    return false  
+}  
+
+// 尝试在竞争的状态下请求锁  
+new := old | mutexLocked  
+return atomic.CompareAndSwapInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)), old, new)  
+</code></pre>
+<p>}</p>
+<p>第 17 行是一个 fast path，如果幸运，没有其他 goroutine 争这把锁，那么，这把锁就会被这个请求的 goroutine 获取，直接返回。</p>
+<p>如果锁已经被其他 goroutine 所持有，或者被其他唤醒的 goroutine 准备持有，那么，就直接返回 false，不再请求，代码逻辑在第 23 行。</p>
+<p>如果没有被持有，也没有其它唤醒的 goroutine 来竞争锁，锁也不处于饥饿状态，就尝试获取这把锁（第 29 行），不论是否成功都将结果返回。因为，这个时候，可能还有其他的 goroutine 也在竞争这把锁，所以，不能保证成功获取这把锁。</p>
+<p>我们可以写一个简单的测试程序，来测试我们的 TryLock 的机制是否工作。</p>
+<p>这个测试程序的工作机制是这样子的：程序运行时会启动一个 goroutine 持有这把我们自己实现的锁，经过随机的时间才释放。主 goroutine 会尝试获取这把锁。如果前一个 goroutine 一秒内释放了这把锁，那么，主 goroutine 就有可能获取到这把锁了，输出“got the lock”，否则没有获取到也不会被阻塞，会直接输出“<code>can't get the lock</code>”。</p>
+<p>func try() {<br>
+var mu Mutex<br>
+go func() { // 启动一个 goroutine 持有一段时间的锁<br>
+mu.Lock()<br>
+time.Sleep(time.Duration(rand.Intn(2)) * time.Second)<br>
+mu.Unlock()<br>
+}()</p>
+<pre><code>time.Sleep(time.Second)  
+
+ok := mu.TryLock() // 尝试获取到锁  
+if ok { // 获取成功  
+    fmt.Println(&quot;got the lock&quot;)  
+    // do something  
+    mu.Unlock()  
+    return  
+}  
+
+// 没有获取到  
+fmt.Println(&quot;can't get the lock&quot;)  
+</code></pre>
+<p>}</p>
+<h1 id="获取等待者的数量等指标">获取等待者的数量等指标</h1>
+<p>接下来，我想和你聊聊怎么获取等待者数量等指标。</p>
+<p>第二讲中，我们已经学习了 Mutex 的结构。先来回顾一下 Mutex 的数据结构，如下面的代码所示。它包含两个字段，state 和 sema。前四个字节（int32）就是 state 字段。</p>
+<p>type Mutex struct {<br>
+state int32<br>
+sema  uint32<br>
+}</p>
+<p>Mutex 结构中的 state 字段有很多个含义，通过 state 字段，你可以知道锁是否已经被某个 goroutine 持有、当前是否处于饥饿状态、是否有等待的 goroutine 被唤醒、等待者的数量等信息。但是，state 这个字段并没有暴露出来，所以，我们需要想办法获取到这个字段，并进行解析。</p>
+<p>怎么获取未暴露的字段呢？很简单，我们可以通过 unsafe 的方式实现。我来举一个例子，你一看就明白了。</p>
+<p>const (<br>
+mutexLocked = 1 &laquo; iota // mutex is locked<br>
+mutexWoken<br>
+mutexStarving<br>
+mutexWaiterShift = iota<br>
+)</p>
+<p>type Mutex struct {<br>
+sync.Mutex<br>
+}</p>
+<p>func (m *Mutex) Count() int {<br>
+// 获取 state 字段的值<br>
+v := atomic.LoadInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)))<br>
+v = v &raquo; mutexWaiterShift //得到等待者的数值<br>
+v = v + (v &amp; mutexLocked) //再加上锁持有者的数量，0 或者 1<br>
+return int(v)<br>
+}</p>
+<p>这个例子的第 14 行通过 unsafe 操作，我们可以得到 state 字段的值。第 15 行我们右移三位（这里的常量 mutexWaiterShift 的值为 3），就得到了当前等待者的数量。如果当前的锁已经被其他 goroutine 持有，那么，我们就稍微调整一下这个值，加上一个 1（第 16 行），你基本上可以把它看作是当前持有和等待这把锁的 goroutine 的总数。</p>
+<p>state 这个字段的第一位是用来标记锁是否被持有，第二位用来标记是否已经唤醒了一个等待者，第三位标记锁是否处于饥饿状态，通过分析这个 state 字段我们就可以得到这些状态信息。我们可以为这些状态提供查询的方法，这样就可以实时地知道锁的状态了。</p>
+<p>// 锁是否被持有<br>
+func (m *Mutex) IsLocked() bool {<br>
+state := atomic.LoadInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)))<br>
+return state&amp;mutexLocked == mutexLocked<br>
+}</p>
+<p>// 是否有等待者被唤醒<br>
+func (m *Mutex) IsWoken() bool {<br>
+state := atomic.LoadInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)))<br>
+return state&amp;mutexWoken == mutexWoken<br>
+}</p>
+<p>// 锁是否处于饥饿状态<br>
+func (m *Mutex) IsStarving() bool {<br>
+state := atomic.LoadInt32((*int32)(unsafe.Pointer(&amp;m.Mutex)))<br>
+return state&amp;mutexStarving == mutexStarving<br>
+}</p>
+<p>我们可以写一个程序测试一下，比如，在 1000 个 goroutine 并发访问的情况下，我们可以把锁的状态信息输出出来：</p>
+<p>func count() {<br>
+var mu Mutex<br>
+for i := 0; i &lt; 1000; i++ { // 启动 1000 个 goroutine<br>
+go func() {<br>
+mu.Lock()<br>
+time.Sleep(time.Second)<br>
+mu.Unlock()<br>
+}()<br>
+}</p>
+<pre><code>time.Sleep(time.Second)  
+// 输出锁的信息  
+fmt.Printf(&quot;waitings: %d, isLocked: %t, woken: %t,  starving: %t\n&quot;, mu.Count(), mu.IsLocked(), mu.IsWoken(), mu.IsStarving())  
+</code></pre>
+<p>}</p>
+<p>有一点你需要注意一下，在获取 state 字段的时候，并没有通过 Lock 获取这把锁，所以获取的这个 state 的值是一个瞬态的值，可能在你解析出这个字段之后，锁的状态已经发生了变化。不过没关系，因为你查看的就是调用的那一时刻的锁的状态。</p>
+<h1 id="使用-mutex-实现一个线程安全的队列">使用 Mutex 实现一个线程安全的队列</h1>
+<p>最后，我们来讨论一下，如何使用 Mutex 实现一个线程安全的队列。</p>
+<p>为什么要讨论这个话题呢？因为 Mutex 经常会和其他非线程安全（对于 Go 来说，我们其实指的是 goroutine 安全）的数据结构一起，组合成一个线程安全的数据结构。新数据结构的业务逻辑由原来的数据结构提供，而 <strong>Mutex 提供了锁的机制，</strong> <strong>来</strong> <strong>保证线程安全</strong>。</p>
+<p>比如队列，我们可以通过 Slice 来实现，但是通过 Slice 实现的队列不是线程安全的，出队（Dequeue）和入队（Enqueue）会有 data race 的问题。这个时候，Mutex 就要隆重出场了，通过它，我们可以在出队和入队的时候加上锁的保护。</p>
+<p>type SliceQueue struct {<br>
+data []interface{}<br>
+mu   sync.Mutex<br>
+}</p>
+<p>func NewSliceQueue(n int) (q *SliceQueue) {<br>
+return &amp;SliceQueue{data: make([]interface{}, 0, n)}<br>
+}</p>
+<p>// Enqueue 把值放在队尾<br>
+func (q *SliceQueue) Enqueue(v interface{}) {<br>
+q.mu.Lock()<br>
+q.data = append(q.data, v)<br>
+q.mu.Unlock()<br>
+}</p>
+<p>// Dequeue 移去队头并返回<br>
+func (q *SliceQueue) Dequeue() interface{} {<br>
+q.mu.Lock()<br>
+if len(q.data) == 0 {<br>
+q.mu.Unlock()<br>
+return nil<br>
+}<br>
+v := q.data[0]<br>
+q.data = q.data[1:]<br>
+q.mu.Unlock()<br>
+return v<br>
+}</p>
+<p>因为标准库中没有线程安全的队列数据结构的实现，所以，你可以通过 Mutex 实现一个简单的队列。通过 Mutex 我们就可以为一个非线程安全的 data interface{}实现线程安全的访问。</p>
+<h1 id="总结">总结</h1>
+<p>好了，我们来做个总结。</p>
+<p>Mutex 是 package sync 的基石，其他的一些同步原语也是基于它实现的，所以，我们“隆重”地用了四讲来深度学习它。学到后面，你一定能感受到，多花些时间来完全掌握 Mutex 是值得的。</p>
+<p>今天这一讲我和你分享了几个 Mutex 的拓展功能，这些方法是不是给你带来了一种“骇客”的编程体验呢，通过 Hacker 的方式，我们真的可以让 Mutex 变得更强大。</p>
+<p>我们学习了基于 Mutex 实现 TryLock，通过 unsafe 的方式读取到 Mutex 内部的 state 字段，这样，我们就解决了开篇列举的问题，一是不希望锁的 goroutine 继续等待，一是想监控锁。</p>
+<p>另外，使用 Mutex 组合成更丰富的数据结构是我们常见的场景，今天我们就实现了一个线程安全的队列，未来我们还会讲到实现线程安全的 map 对象。</p>
+<p>到这里，Mutex 我们就系统学习完了，最后给你总结了一张 Mutex 知识地图，帮你复习一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/93f19e88a410f83352eb8ce23777f729.png" alt=""></p>
+<h1 id="思考题">思考题</h1>
+<p>你可以为 Mutex 获取锁时加上 Timeout 机制吗？会有什么问题吗？</p>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得有所收获，也欢迎你把今天的内容分享给你的朋友或同事。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">Go并发编程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/04-%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">04-左耳听风</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AF%B4%E9%80%8F5g/045g%E4%BA%A7%E4%B8%9A%E5%85%A8%E6%99%AF%E5%9B%BE%E5%A6%82%E4%BD%95%E8%83%BD%E9%AB%98%E6%95%88%E7%B3%BB%E7%BB%9F%E5%9C%B0%E6%8E%8C%E6%8F%A15g/">
+            <span class="next-text nav-default">04｜5G产业全景图：如何能高效、系统地掌握5G？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>24调度引擎：Kubernete如何高效调度Pod？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/24%E8%B0%83%E5%BA%A6%E5%BC%95%E6%93%8Ekubernete%E5%A6%82%E4%BD%95%E9%AB%98%E6%95%88%E8%B0%83%E5%BA%A6pod/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/24%E8%B0%83%E5%BA%A6%E5%BC%95%E6%93%8Ekubernete%E5%A6%82%E4%BD%95%E9%AB%98%E6%95%88%E8%B0%83%E5%BA%A6pod/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="24调度引擎：Kubernete如何高效调度Pod？">
+  <meta property="og:description" content="我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes原理剖析与实战应用">
+
+  <meta itemprop="name" content="24调度引擎：Kubernete如何高效调度Pod？">
+  <meta itemprop="description" content="我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3240">
+  <meta itemprop="keywords" content="Kubernetes原理剖析与实战应用">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="24调度引擎：Kubernete如何高效调度Pod？">
+  <meta name="twitter:description" content="我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">24调度引擎：Kubernete如何高效调度Pod？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3240 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？</p>
+<p>今天我们就来揭晓。</p>
+<p>Kubernetes 调度器工作原理简介</p>
+<p>kube-scheduler 作为 Kubernetes 的调度器，它的主要任务就是给新创建的 Pod 或者是未被调度的 Pod 挑选一个合适的节点供 Pod 运行，满足 Pod 对资源等的要求。这样对应节点上的 Kubelet 就可以监听到该 Pod，并将其创建、运行。</p>
+<p>整个调度过程听起来很简单，但是要考虑到的问题其实有很多，比如优先级、资源高效利用、高性能等。</p>
+<p>优先级。高优先级的 Pod 肯定要优先被调度，这个我在《21 | 优先级调度：你必须掌握的 Pod 抢占式资源调度》中有详细的案例和说明。</p>
+<p>资源高效利用。比如我们要避免 Pod 都被调度到一个或某几个节点上，造成节点负载太大；或是避免同一个工作负载（如 Deployment）的几个副本，跑在同一个节点上，以免这个节点宕机对整个业务造成影响。</p>
+<p>高性能。我们需要支持快速地完成大规模 Pod 的调度工作，这样才能够支撑大规模的集群。</p>
+<p>可扩展性强。方便用户自己增加调度逻辑，可以参考官方文档中的内容。</p>
+<p>……</p>
+<p>总的来说，调度的过程主要分为两个大步骤。</p>
+<p>过滤一些不满足条件的节点，这个过程也称为 Predict。</p>
+<p>调度器会对这些合适的节点进行打分排序，从中选择一个最优的节点，这个过程也称为 Priority。</p>
+<p>这里面其实包含了很多的调度策略，在此不一一说明，你可以阅读这份调度策略列表，了解各个策略对应的含义。</p>
+<p>在实际使用的过程中，你可以直接使用调度器的默认配置，不需要对其做过多的定制化。当然，如果你有特殊的需求，也可以构建自己的调度器，具体可以参考这份文档来更改默认调度器的调度策略、调度插件以及调度行为。</p>
+<p>下面我们主要来认识一下调度器都有哪些高级特性。</p>
+<p>调度器的高级特性</p>
+<p>调度器的高级特性有 NodeName 和 NodeSelector、亲和性和反亲性、污点和容忍，我们依次来了解一下。</p>
+<p>NodeName 和 NodeSelector</p>
+<p>首先是 NodeName 和 NodeSelector。</p>
+<p>我们可以通过 spec.nodeName 强制约束在某个指定的 Node 上运行 Pod，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">kind: Pod
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: pod-with-nodename
+</span></span><span class="line"><span class="cl">  namespace: demo
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  nodeName: node1 #指定调度节点 node1 上
+</span></span><span class="line"><span class="cl">  containers:
+</span></span><span class="line"><span class="cl">  - name: nginx-demo
+</span></span><span class="line"><span class="cl">    image: nginx:1.19.4
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这个 Pod 就被约束在 node1 上。通过这种方式指定节点，会跳过 kube-scheduler 的调度逻辑，即不需要经过调度。</p>
+<p>除了这种强制指定节点的方式，我们还可以通过 NodeSelector 的方式来选择节点。调度器的调度策略 MatchNodeSelector 会匹配 Node 的 label，从而达到节点筛选的目的。比如下面这个例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># 我们先对节点进行打标
+</span></span><span class="line"><span class="cl">$ kubectl label nodes node1 abc.com/role=dev
+</span></span><span class="line"><span class="cl"># 通过如下命令可以查看该节点目前的所有 label
+</span></span><span class="line"><span class="cl">$ kubectl get node node1 --show-labels
+</span></span><span class="line"><span class="cl">NAME    STATUS   ROLES    AGE   VERSION          LABELS
+</span></span><span class="line"><span class="cl">node1   Ready    master   75d   v1.16.6-beta.0   abc.com/role=dev,beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=docker-desktop,kubernetes.io/os=linux,node-role.kubernetes.io/master=
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对节点打好标以后，就可以通过 spec.nodeSelector 来将 Pod 调度到带有指定 label 标记的节点上。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">kind: Pod
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: pod-with-nodename
+</span></span><span class="line"><span class="cl">  namespace: demo
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  nodeSelector:
+</span></span><span class="line"><span class="cl">    abc.com/role: dev #指定调度到带有 abc.com/role=dev 这种 label 标记的节点上
+</span></span><span class="line"><span class="cl">  containers:
+</span></span><span class="line"><span class="cl">  - name: nginx-demo
+</span></span><span class="line"><span class="cl">    image: nginx:1.19.4
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>nodeSelector 提供了一种非常简单的方法，方便我们将 Pod 约束到带有特定 label 的节点上。</p>
+<p>除此之外，kube-scheduler 还提供了更加动态的方式，即亲和性和反亲和性，可以帮助我们完成更高级的 Pod 调度，比如将某些 Pod 都调度到某个节点上。</p>
+<p>下面我们就来认识一下亲和性和反亲和性。</p>
+<p>亲和性和反亲和性</p>
+<p>Kubernetes 提供了如下 3 种类型：</p>
+<p>nodeAffinity（节点亲和性）；</p>
+<p>podAffinity（Pod 亲和性）；</p>
+<p>podAntiAffinity（Pod 反亲和性）。</p>
+<p>这 3 种亲和性和反亲和性策略支持更广泛的操作符，差异如下表所示：</p>
+<p>对于上述的亲和性和反亲和性功能，每种都有 3 种规则可以设置。</p>
+<p>RequiredDuringSchedulingRequiredDuringExecution：在 Pod 调度期间要求满足亲和性或者反亲和性的规则要求。如果不能满足这些指定的规则，那该 Pod 不能被调度到对应的主机上。而且在之后的运行过程中，如果因为某些原因（比如 label 被修改了）导致规则不再满足了，系统就会尝试把该 Pod 从主机上驱逐掉。</p>
+<p>RequiredDuringSchedulingIgnoredDuringExecution：在 Pod 调度期间要求满足亲和性或者反亲和性规则。如果不能满足的话，那么该 Pod 不能被调度到对应的主机上。在之后的运行过程中，系统也不会再去检查这些规则是否还继续满足。</p>
+<p>PreferredDuringSchedulingIgnoredDuringExecution：在 Pod 调度期间要尽量地指定的亲和性和反亲和性规则。即使不能满足，Pod 也有可能被调度到对应的主机上。在之后的运行过程中，系统也不会再去检查这些规则是否继续满足。</p>
+<p>我们这里来说说具体的使用场景。</p>
+<p>对于 nodeAffinity，主要有两个使用场景：</p>
+<p>帮助我们将一个工作负载的所有 Pod 部署到指定的 label 的主机上，这点和 nodeSelector 是类似的；帮助我们将 Pod 部署到不带有特定 label 的主机上，即 Notin，比如不在 Master 节点上部署该 Pod。</p>
+<p>下面是一个官方使用的 nodeAffinity 的例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">kind: Pod
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: with-node-affinity
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  affinity:
+</span></span><span class="line"><span class="cl">    nodeAffinity:
+</span></span><span class="line"><span class="cl">      requiredDuringSchedulingIgnoredDuringExecution:
+</span></span><span class="line"><span class="cl">        nodeSelectorTerms:
+</span></span><span class="line"><span class="cl">        - matchExpressions:
+</span></span><span class="line"><span class="cl">          - key: kubernetes.io/e2e-az-name
+</span></span><span class="line"><span class="cl">            operator: In
+</span></span><span class="line"><span class="cl">            values:
+</span></span><span class="line"><span class="cl">            - e2e-az1
+</span></span><span class="line"><span class="cl">            - e2e-az2
+</span></span><span class="line"><span class="cl">      preferredDuringSchedulingIgnoredDuringExecution:
+</span></span><span class="line"><span class="cl">      - weight: 1
+</span></span><span class="line"><span class="cl">        preference:
+</span></span><span class="line"><span class="cl">          matchExpressions:
+</span></span><span class="line"><span class="cl">          - key: another-node-label-key
+</span></span><span class="line"><span class="cl">            operator: In
+</span></span><span class="line"><span class="cl">            values:
+</span></span><span class="line"><span class="cl">            - another-node-label-value
+</span></span><span class="line"><span class="cl">  containers:
+</span></span><span class="line"><span class="cl">  - name: with-node-affinity
+</span></span><span class="line"><span class="cl">    image: k8s.gcr.io/pause:2.0
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个 Pod 指定必须运行在 label 带有 kubernetes.io/e2e-az-name=e2e-az1 或 kubernetes.io/e2e-az-name=e2e-az2 的节点上。如果没有任何一个节点有这些 label，则该 Pod 不会被调度。同时这些节点上最好还带有 another-node-label-key=another-node-label-vale 的标签。</p>
+<p>对于 podAffinity 和 podAntiAffinity，你可以基于已经在节点上运行的 Pod 的标签来约束新 Pod 可以调度到的节点，而不是基于节点上的标签。</p>
+<p>如下是一个官方使用的 podAffinity 和 podAntiAffinity 的例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">a piVersion: v1
+</span></span><span class="line"><span class="cl">kind: Pod
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: with-pod-affinity
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  affinity:
+</span></span><span class="line"><span class="cl">    podAffinity:
+</span></span><span class="line"><span class="cl">      requiredDuringSchedulingIgnoredDuringExecution:
+</span></span><span class="line"><span class="cl">      - labelSelector:
+</span></span><span class="line"><span class="cl">          matchExpressions:
+</span></span><span class="line"><span class="cl">          - key: security
+</span></span><span class="line"><span class="cl">            operator: In
+</span></span><span class="line"><span class="cl">            values:
+</span></span><span class="line"><span class="cl">            - S1
+</span></span><span class="line"><span class="cl">        topologyKey: topology.kubernetes.io/zone
+</span></span><span class="line"><span class="cl">    podAntiAffinity:
+</span></span><span class="line"><span class="cl">      preferredDuringSchedulingIgnoredDuringExecution:
+</span></span><span class="line"><span class="cl">      - weight: 100
+</span></span><span class="line"><span class="cl">        podAffinityTerm:
+</span></span><span class="line"><span class="cl">          labelSelector:
+</span></span><span class="line"><span class="cl">            matchExpressions:
+</span></span><span class="line"><span class="cl">            - key: security
+</span></span><span class="line"><span class="cl">              operator: In
+</span></span><span class="line"><span class="cl">              values:
+</span></span><span class="line"><span class="cl">              - S2
+</span></span><span class="line"><span class="cl">          topologyKey: topology.kubernetes.io/zone
+</span></span><span class="line"><span class="cl">  containers:
+</span></span><span class="line"><span class="cl">  - name: with-pod-affinity
+</span></span><span class="line"><span class="cl">    image: k8s.gcr.io/pause:2.0
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述这个例子中使用了 podAffinity 和 podAntiAffinity。其中亲和性这块的规则表示该 Pod 必须部署在一个节点上，这个节点上至少有一个处于正在运行状态的带有 security=s1 标签的 Pod，并且要求部署的节点同正在运行的 Pod 所在节点都在相同的云服务区域中，也就是 topologyKey:topology.kubernetes.io/zone。</p>
+<p>换言之，一旦某个区域出了问题，我们希望这些 Pod 能够再次迁移到同一个区域。当然， topologyKey 可以是任何合法的标签键，比如 kubernetes.io/hostname，你可以参考官方文档，看看这个值在使用上的限制。</p>
+<p>对于例子中 Pod 反亲和性规则，表示该 Pod 不希望部署在一个运行着带有 label 为 security=s2 的 Pod 的节点上。</p>
+<p>除了在 Pod 层面进行限制外，我们还可以对 Node 进行操作，可以禁止某些 Pod 调度上来。</p>
+<p>污点和容忍（Taints and Tolerations）</p>
+<p>最后我们来看污点和容忍（Taints and Tolerations）。</p>
+<p>我们可以给节点设置污点，通过这个污点就可以避免 Pod 调度上来，除非在 Pod 上设置了污点容忍。</p>
+<p>每个污点的组成如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">key=value:effect
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每个污点规则都有一个 key 和 value，其中 value 可以为空，effect 描述污点的作用。当前 taint effect 支持如下 3 个选项：</p>
+<p>NoSchedule 表示不会将 Pod 调度到带该污点的 Node 上；</p>
+<p>PreferNoSchedule 表示尽量避免将 Pod 调度到带该污点的 Node 上；</p>
+<p>NoExecute 表示不会将 Pod 调度到带有该污点的 Node 上，同时会将 Node 上已经运行中的 Pod 驱逐出去。</p>
+<p>我们使用 kubectl 命令就可以快速地设置和去除污点，命令如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># 设置污点
+</span></span><span class="line"><span class="cl">kubectl taint nodes node1 key1=value1:NoSchedule
+</span></span><span class="line"><span class="cl"># 去除污点
+</span></span><span class="line"><span class="cl">kubectl taint nodes node1 key1:NoSchedule-
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以在 Pod 上设置容忍（Toleration），这样就可以将 Pod 调度到存在污点的 Node 上。在 Pod 的 spec 中设置 tolerations 字段可以给 Pod 设置上容忍点 Toleration，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">tolerations:
+</span></span><span class="line"><span class="cl">- key: &#34;key1&#34;
+</span></span><span class="line"><span class="cl">  operator: &#34;Equal&#34;
+</span></span><span class="line"><span class="cl">  value: &#34;value1&#34;
+</span></span><span class="line"><span class="cl">  effect: &#34;NoSchedule&#34;
+</span></span><span class="line"><span class="cl">  tolerationSeconds: 3600
+</span></span><span class="line"><span class="cl">- key: &#34;key1&#34;
+</span></span><span class="line"><span class="cl">  operator: &#34;Equal&#34;
+</span></span><span class="line"><span class="cl">  value: &#34;value1&#34;
+</span></span><span class="line"><span class="cl">  effect: &#34;NoExecute&#34;
+</span></span><span class="line"><span class="cl">- key: &#34;key2&#34;
+</span></span><span class="line"><span class="cl">  operator: &#34;Exists&#34;
+</span></span><span class="line"><span class="cl">  effect: &#34;NoSchedule&#34;
+</span></span><span class="line"><span class="cl">  
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其中 key、vaule、effect 要与 Node 上设置的 taint 保持一致；operator 的值为 Exists 将会忽略 value 值；tolerationSeconds 用于描述当 Pod 需要被驱逐时可以在 Pod 上继续保留运行的时间。</p>
+<p>写在最后</p>
+<p>这一讲我带你了解了 Kubernetes 调度器的工作原理以及调度器的一些高级特性，也介绍了 Kubernetes 是如何高效调度 Pod 的。你可以在实际使用中慢慢体会调度器的这些高级特性。</p>
+<p>那么，学完这些，你对于调度 Pod 还有什么疑问吗？欢迎在留言区留言。</p>
+<p>下一讲，我将带你剖析容器运行时以及 CRI 原理。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/">Kubernetes原理剖析与实战应用</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E9%9D%A2%E8%AF%95%E5%AE%9D%E5%85%B8/24%E5%BD%A9%E8%9B%8B%E8%81%8A%E8%81%8A%E6%88%91%E7%9A%84%E5%A4%A7%E5%8E%82%E9%9D%A2%E8%AF%95%E7%BB%8F%E5%8E%86%E8%B0%88%E8%B0%88%E6%88%91%E5%AF%B9%E7%AE%97%E6%B3%95%E5%AD%A6%E4%B9%A0%E7%9A%84%E7%9C%8B%E6%B3%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">24彩蛋聊聊我的大厂面试经历，谈谈我对算法学习的看法</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/netty%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8Erpc%E5%AE%9E%E8%B7%B5/24%E6%9C%8D%E5%8A%A1%E5%8F%91%E5%B8%83%E4%B8%8E%E8%AE%A2%E9%98%85%E6%90%AD%E5%BB%BA%E7%94%9F%E4%BA%A7%E8%80%85%E5%92%8C%E6%B6%88%E8%B4%B9%E8%80%85%E7%9A%84%E5%9F%BA%E7%A1%80%E6%A1%86%E6%9E%B6/">
+            <span class="next-text nav-default">24服务发布与订阅：搭建生产者和消费者的基础框架</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

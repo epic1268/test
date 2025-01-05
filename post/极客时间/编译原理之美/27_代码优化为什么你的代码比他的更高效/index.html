@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>27_代码优化：为什么你的代码比他的更高效？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在使用 LLVM 的过程中，你应该觉察到了，优化之后和优化之前的代码相差很大。代码优化之后，数量变少了，性能也更高了。而针对这个看起来很神秘的代码优化，我想问你一些问题：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/27_%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BD%A0%E7%9A%84%E4%BB%A3%E7%A0%81%E6%AF%94%E4%BB%96%E7%9A%84%E6%9B%B4%E9%AB%98%E6%95%88/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/27_%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BD%A0%E7%9A%84%E4%BB%A3%E7%A0%81%E6%AF%94%E4%BB%96%E7%9A%84%E6%9B%B4%E9%AB%98%E6%95%88/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="27_代码优化：为什么你的代码比他的更高效？">
+  <meta property="og:description" content="在使用 LLVM 的过程中，你应该觉察到了，优化之后和优化之前的代码相差很大。代码优化之后，数量变少了，性能也更高了。而针对这个看起来很神秘的代码优化，我想问你一些问题：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="编译原理之美">
+
+  <meta itemprop="name" content="27_代码优化：为什么你的代码比他的更高效？">
+  <meta itemprop="description" content="在使用 LLVM 的过程中，你应该觉察到了，优化之后和优化之前的代码相差很大。代码优化之后，数量变少了，性能也更高了。而针对这个看起来很神秘的代码优化，我想问你一些问题：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6069">
+  <meta itemprop="keywords" content="编译原理之美">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="27_代码优化：为什么你的代码比他的更高效？">
+  <meta name="twitter:description" content="在使用 LLVM 的过程中，你应该觉察到了，优化之后和优化之前的代码相差很大。代码优化之后，数量变少了，性能也更高了。而针对这个看起来很神秘的代码优化，我想问你一些问题：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">27_代码优化：为什么你的代码比他的更高效？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6069 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#了解代码优化的目标对象范围和策略">了解代码优化的目标、对象、范围和策略</a></li>
+        <li><a href="#一些优化的场景">一些优化的场景</a></li>
+        <li><a href="#如何做本地优化">如何做本地优化</a></li>
+        <li><a href="#用-llvm-来演示优化功能">用 LLVM 来演示优化功能</a></li>
+        <li><a href="#课程小结">课程小结</a></li>
+        <li><a href="#一课一思">一课一思</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在使用 LLVM 的过程中，你应该觉察到了，优化之后和优化之前的代码相差很大。代码优化之后，数量变少了，性能也更高了。而针对这个看起来很神秘的代码优化，我想问你一些问题：</p>
+<ol>
+<li>代码优化的目标是什么？除了性能上的优化，还有什么优化？</li>
+<li>代码优化可以在多大的范围内执行？是在一个函数内，还是可以针对整个应用程序？</li>
+<li>常见的代码优化场景有哪些？</li>
+</ol>
+<p>这些问题是代码优化的基本问题，很重要，我会用两节课的时间带你了解和掌握。</p>
+<p>当然了，代码优化是编译器后端的两大工作之一（另一个是代码生成），弄懂它，你就掌握了一大块后端技术。而学习代码优化的原理，然后通过 LLVM 实践一下，这样原理与实践相结合，会帮你早日弄懂代码优化。</p>
+<p>接下来，我带你概要地了解一下代码优化的目标、对象、范围和策略等内容。</p>
+<h2 id="了解代码优化的目标对象范围和策略">了解代码优化的目标、对象、范围和策略</h2>
+<ol>
+<li>代码优化的目标</li>
+</ol>
+<p>代码优化的目标，是优化程序对计算机资源的使用。我们平常最关心的就是 CPU 资源，最大效率地利用 CPU 资源可以提高程序的性能。代码优化有时候还会有其他目标，比如代码大小、内存占用大小、磁盘访问次数、网络通讯次数等等。</p>
+<ol>
+<li>代码优化的对象</li>
+</ol>
+<p>从代码优化的对象看，大多数的代码优化都是在 IR 上做的，而不是在前一阶段的 AST 和后一阶段汇编代码上进行的，为什么呢？</p>
+<p>**其实，在 AST 上也能做一些优化，**比如在讲前端内容的时候，我们曾经会把一些不必要的 AST 层次削减掉（例如 add-&gt;mul-&gt;pri-&gt;Int，每个父节点只有一个子节点，可以直接简化为一个 Int 节点），但它抽象层次太高，含有的硬件架构信息太少，难以执行很多优化算法。 <strong>在汇编代码上进行优化</strong>会让算法跟机器相关，当换一个目标机器的时候，还要重新编写优化代码。**所以，在 IR 上是最合适的，**它能尽量做到机器独立，同时又暴露出很多的优化机会。</p>
+<ol>
+<li>代码优化的范围</li>
+</ol>
+<p>从优化的范围看，分为本地优化、全局优化和过程间优化。</p>
+<p>优化通常针对一组指令，最常用也是最重要的指令组，就是基本块。基本块的特点是：每个基本块只能从入口进入，从最后一条指令退出，每条指令都会被顺序执行。因着这个特点，我们在做某些优化时会比较方便。比如，针对下面的基本块，我们可以很安全地把第 3 行的“y:=t+x”改成“y:= 3 * x”，因为 t 的赋值一定是在 y 的前面：</p>
+<p>BB1:<br>
+t:=2 * x<br>
+y:=t + x<br>
+Goto BB2</p>
+<p>这种针对基本块的优化，我们叫做<strong>本地优化（Local Optimization）。</strong></p>
+<p>**那么另一个问题来了：**我们能否把第二行的“t:=2 * x”也优化删掉呢？这取决于是否有别的代码会引用 t。所以，我们需要进行更大范围的分析，才能决定是否把第二行优化掉。</p>
+<p>超越基本块的范围进行分析，我们需要用到**控制流图（Control Flow Graph，CFG）。**CFG 是一种有向图，它体现了基本块之前的指令流转关系。如果从 BB1 的最后一条指令是跳转到 BB2，那么从 BB1 到 BB2 就有一条边。一个函数（或过程）里如果包含多个基本块，可以表达为一个 CFG。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/3082082283c1c03314acd4194171f3c7.png" alt=""></p>
+<p>如果通过分析 CFG，我们发现 t 在其他地方没有被使用，就可以把第二行删掉。这种针对一个函数、基于 CFG 的优化，叫做<strong>全局优化（Global Optimization）。</strong></p>
+<p>比全局优化更大范围的优化，叫做**过程间优化（Inter-procedural Optimization），**它能跨越函数的边界，对多个函数之间的关系进行优化，而不是仅针对一个函数做优化。</p>
+<ol>
+<li>代码优化的策略</li>
+</ol>
+<p>最后，你不需要每次都把代码优化做彻底，因为做代码优化本身也需要消耗计算机的资源。所以，你需要权衡代码优化带来的好处和优化本身的开支这两个方面，然后确定做多少优化。比如，在浏览器里加载 JavaScript 的时候，JavaScript 引擎一定会对 JavaScript 做优化，但如果优化消耗的时间太长，界面的响应会变慢，反倒影响用户使用页面的体验，所以 JavaScript 引擎做优化时要掌握合适的度或调整优化时机。</p>
+<p>接下来，我带你认识一些常见的代码优化的场景，这样可以让你对代码优化的认识更加直观，然后我们也可以将这部分知识作为后面讨论算法的基础。</p>
+<h2 id="一些优化的场景">一些优化的场景</h2>
+<ol>
+<li>代数优化（Algebraic Optimazation）</li>
+</ol>
+<p>代数优化是最简单的一种优化，当操作符是代数运算的时候，你可以根据学过的数学知识进行优化。</p>
+<p>比如“x:=x+0”这行代码，操作前后 x 没有任何变化，所以这样的代码可以删掉；又比如“x:=x*0”可以简化成“x:=0”；对某些机器来说，移位运算的速度比乘法的快，那么“x:=x*8”可以优化成“x:=x&laquo;3”。</p>
+<ol>
+<li>常数折叠（Constant Folding）</li>
+</ol>
+<p>它是指，对常数的运算可以在编译时计算，比如“x:= 20 * 3”可以优化成“x:=60”。另外，在 if 条件中，如果条件是一个常量，那就可以确定地取某个分支。比如：“If 2&gt;0 Goto BB2”可以简化成“Goto BB2”就好了。</p>
+<ol>
+<li>删除不可达的基本块</li>
+</ol>
+<p>有些代码永远不可能被激活。比如在条件编译的场景中，我们会写这样的程序：“if(DEBUG) {…}”。如果编译时，DEBUG 是一个常量 false，那这个代码块就没必要编译了。</p>
+<ol>
+<li>删除公共子表达式（Common Subexpression Elimination）</li>
+</ol>
+<p>下面这两行代码，x 和 y 右边的形式是一样的，如果这两行代码之间，a 和 b 的值没有发生变化（比如采用 SSA 形式），那么 x 和 y 的值一定是一样的。</p>
+<p>x := a + b<br>
+y := a + b</p>
+<p>那我们就可以让 y 等于 x，从而减少了一次“a+b”的计算，这种优化叫做删除公共子表达式。</p>
+<p>x := a + b<br>
+y := x</p>
+<ol>
+<li>拷贝传播（Copy Propagation）和常数传播（Constant Propagation）</li>
+</ol>
+<p>下面的示例代码中，第三行可以被替换成“z:= 2 * x”，因为 y 的值就等于 x，这叫做拷贝传播。</p>
+<p>x := a + b<br>
+y := x<br>
+z := 2 * y</p>
+<p>如果 y := 10，常数 10 也可以传播下去，把最后一行替换成 z:= 2 * 10，这叫做常数传播。再做一次常数折叠，就变成 z:=20 了。</p>
+<ol>
+<li>死代码删除（Ded code elimintation）</li>
+</ol>
+<p>在上面的拷贝传播中，如果没有其他地方使用 y 变量了，那么第二行就是死代码，就可以删除掉，这种优化叫做死代码删除。</p>
+<p>**最后我强调一下，**一个优化可能导致另一个优化，比如，拷贝传播导致 y 不再被使用，我们又可以进行死代码删除的优化。所以，一般进行多次优化、多次扫描。</p>
+<p>了解了优化的场景之后，你能直观地知道代码优化到底做了什么事情，不过知其然还要知其所以然，你还需要了解这些优化都是怎么实现的。</p>
+<h2 id="如何做本地优化">如何做本地优化</h2>
+<p>上面这些优化场景，可以用于本地优化、全局优化和过程间优化。这节课我们先看看如何做本地优化，因为它相对简单，学习难度较低，下节课再接着讨论全局优化。</p>
+<p>假设下面的代码是一个基本块（省略最后的终结指令）：</p>
+<p>a := b<br>
+c := a + b<br>
+c := b<br>
+d := a + b<br>
+e := a + b</p>
+<p>为了优化它们，我们的方法是计算一个“可用表达式（available expression）”的集合。可用表达式，是指存在一个变量，保存着某个表达式的值。</p>
+<p><strong>我们从上到下顺序计算这个集合：</strong></p>
+<p>1. 一开始是空集。</p>
+<p>2. 经过第一行代码后，集合里增加了“a:=b”；</p>
+<p>3. 经过第二行代码后，增加了“c:=a+b”。</p>
+<p>**4. 注意，**在经过第三行代码以后，由于变量 c 的定义变了，所以“c:=a+b”不再可用，而是换成了“c:=b”。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/f3454e5252b6948e79b6aea6cb93dede.png" alt=""></p>
+<p>你能看到，代码“e:=a+b”，和集合中的“d:=a+b”等号右边部分是相同的，所以我们首先可以**删除公共子表达式，**优化成“e:=d”。变成下面这样：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/f294620170c778d9c6f870596fb0df76.png" alt=""></p>
+<p>然后，我们可以做一下**拷贝传播，**利用“a:=b”，把表达式中的多个 a 都替换成 b。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/925bc9cd548e1a3044bf649e1e0917a7.png" alt=""></p>
+<p>到目前为止，a 都被替换成了 b，对 e 的计算也简化了，优化后的代码变成了下面这样：</p>
+<p>a := b<br>
+c := b + b<br>
+c := b<br>
+d := b + b<br>
+e := d</p>
+<p>观察一下这段代码，它似乎还存在可优化的空间，比如，会存在死代码，而我们可以将其删除。</p>
+<p>假设，在后序的基本块中，b 和 c 仍然会被使用，但其他变量就不会再被用到了。那么，上面这 5 行代码哪行能被删除呢？这时，我们要做另一个分析：活跃性分析（Liveness Analysis）。</p>
+<p>我们说一个变量是活的，意思是它的值在改变前，会被其他代码读取。（对于 SSA 格式的 IR，变量定义出来之后就不会再改变，所以你只要看后面的代码有没有使用这个变量的就可以了）我们会分析每个变量的活跃性，把死的变量删掉。</p>
+<p>**怎么做呢？**我们这次还是要借助一个集合，不过这个集合是从后向前，倒序计算的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/a18025d522a6a37e5dccded16373a118.png" alt=""></p>
+<p>一开始集合里的元素是{b, c}，这是初始值，表示 b 和 c 会被后面的代码使用，所以它们是活的。</p>
+<ol>
+<li>扫描过“e := d”后，因为用到了 d，所以 d 是活的，结果是{b, c, d}。</li>
+<li>再扫描“d := b + b”，用到了 b，但集合里已经有 b 了；这里给 d 赋值了，已经满足了后面代码对 d 的要求，所以可以从集合里去掉 d 了，结果是{b，c}。</li>
+<li>再扫描“c := b”，从集合里去掉 c，结果是{b}。</li>
+<li>继续扫描，一直到第一行，最后的集合仍然是{b}。</li>
+</ol>
+<p>现在，基于这个集合，我们就可以做死代码删除了。**当给一个变量赋值时，它后面跟着的集合没有这个变量，说明它不被需要，就可以删掉了。**图中标橙色的三行，都是死代码，都可以删掉。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/b430aa90988b5a93d5c46c2e6bee2f40.png" alt=""></p>
+<p>删掉以后，只剩下了两行代码。**注意，**由于“e := d”被删掉了，导致 d 也不再被需要，变成了死变量。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/dbe550013bdbc5bc8985f4c0b7b25aed.png" alt=""></p>
+<p>把变量 d 删掉以后，就剩下了一行代码“c := b”了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/4dfbac57f25e9a05cc5520cc4a9e8a26.png" alt=""></p>
+<p>到此为止，我们完成了整个的优化过程，5 行代码优化成了 1 行代码，成果是很显著的！</p>
+<p><strong>我来带你总结一下这个优化过程：</strong></p>
+<ol>
+<li>我们首先做一个正向扫描，进行可用表达式分析，建立可用表达式的集合，然后参照这个集合替换公共子表达式，以及做拷贝传播。</li>
+<li>接着，我们做一个反向扫描，进行活跃性分析，建立活变量的集合，识别出死变量，并依据它删除给死变量赋值的代码。</li>
+<li>上述优化可能需要做不止一遍，才能得到最后的结果。</li>
+</ol>
+<p>这样看来，优化并不难吧？当然了，目前我们做的优化是基于一段顺序执行的代码，没有跳转，都是属于一个基本块的，属于本地优化。</p>
+<p>直观地理解了本地优化之后，我们可以把这种理解用**更加形式化的方式表达出来，**这样，你可以理解得更加透彻。本地优化中，可用表达式分析和活跃性分析，都可以看做是由下面 4 个元素构成的：</p>
+<ol>
+<li>D（方向）。是朝前还是朝后遍历。</li>
+<li>V（值）。代码的每一个地方都要计算出一个值。可用表达式分析和活跃性分析的值是一个集合，也有些分析的值并不是集合，在下一讲你会看到这样的例子。</li>
+<li>F（转换函数，对 V 进行转换）。比如，在做可用表达式分析的时候，遇到了“c := b”时，可用表达式的集合从{a := b, c := a + b}转换成了{a := b, c := b}。**这里遵守的转换规则是：**因为变量 c 被重新赋值了，那么就从集合里，把变量 c 原来的定义去掉，并把带有 c 的表达式都去掉，因为过去的 c 已经失效了，然后，把变量 c 新的定义加进去。</li>
+<li>I（初始值，是算法开始时 V 的取值）。做可用表达式分析的时候，初始值是空集。在做活跃性分析的时候，初始值是后面代码中还会访问的变量，也就是活变量。</li>
+</ol>
+<p>这样形式化以后，我们就可以按照这个模型来统一理解各种本地优化算法。接下来，我们来体验和熟悉一下 LLVM 的优化功能。</p>
+<h2 id="用-llvm-来演示优化功能">用 LLVM 来演示优化功能</h2>
+<p>在25 讲中，我们曾经用 Clang 命令带上 O2 参数来生成优化的 IR：</p>
+<p>clang -emit-llvm -S -O2 fun1.c -o fun1-O2.ll</p>
+<p>实际上，LLVM 还有一个单独的命令 opt，来做代码优化。缺省情况下，它的输入和输出都是.bc 文件，所以我们还要在.bc 和.ll 两种格式之间做转换。</p>
+<p>clang -emit-llvm -S fun1.c -o fun1.ll  // 生成 LLVM IR<br>
+llc fun1.ll -o fun1.bc                 // 编译成字节码<br>
+opt -O2 fun1.bc -o fun1-O2.bc          // 做 O2 级的优化<br>
+llvm-dis fun1-O2.bc -o fun1-O2.ll      // 将字节码反编译成文本格式</p>
+<p>**其中要注意的一点，**是要把第一行命令生成的 fun1.ll 文件中的“optone”这个属性去掉，因为这个它的意思是不要代码优化。</p>
+<p>我们还可以简化上述操作，给 opt 命令带上 -S 参数，直接对.ll 文件进行优化：</p>
+<p>opt -S -O2 fun1.ll -o fun1-O2.ll</p>
+<p><strong>另外，我解释一下 -O2 参数：</strong>-O2 代表的是二级优化，LLVM 中定义了多个优化级别，基本上数字越大，所做的优化就越多。</p>
+<p>我们可以不使用笼统的优化级别，而是指定采用某个特别的优化算法，比如 mem2reg 算法，会把对内存的访问优化成尽量访问寄存器。</p>
+<p>opt -S -mem2reg fun1.ll -o fun1-O2.ll</p>
+<p>用 opt &ndash;help 命令，可以查看 opt 命令所支持的所有优化算法。</p>
+<p>对于常数折叠，在调用 API 生成 IR 的时候，LLVM 缺省就会去做这个优化。比如下面这段代码，是返回 2+3 的值，但生成 IR 的时候直接变成了 5，因为这种优化比较简单，不需要做复杂的分析：</p>
+<p>Function * codegen_const_folding(){<br>
+// 创建函数<br>
+FunctionType *funType = FunctionType::get(Type::getInt32Ty(TheContext), false);<br>
+Function *fun = Function::Create(funType, Function::ExternalLinkage, &ldquo;const_folding&rdquo;, TheModule.get());</p>
+<pre><code>// 创建一个基本块  
+BasicBlock *BB = BasicBlock::Create(TheContext, &quot;&quot;, fun);  
+Builder.SetInsertPoint(BB);  
+
+Value * tmp1 = ConstantInt::get(TheContext, APInt(32, 2, true));  
+Value * tmp2 = ConstantInt::get(TheContext, APInt(32, 3, true));  
+Value * tmp3 =  Builder.CreateAdd(tmp1, tmp2);  
+
+Builder.CreateRet(tmp3);  
+return fun;  
+</code></pre>
+<p>}</p>
+<p>生成的 IR 如下：</p>
+<p>define i32 @const_folding() {<br>
+ret i32 5<br>
+}</p>
+<p>**你需要注意，**很多优化算法，都是要基于寄存器变量来做，所以，我们通常都会先做一下 -mem2reg 优化。</p>
+<p>在 LLVM 中，做优化算法很方便，因为它采用的是 SSA 格式。具体来说，LLVM 中定义了 Value 和 User 两个接口，它们体现了 LLVM IR 最强大的特性，即静态单赋值中的定义 - 使用链，这种定义 - 使用关系会被用到优化算法中。</p>
+<p>在26 讲中，我们已经讲过了 Value 类。</p>
+<p>如果一个类是从 Value 继承的，意味着它定义了一个值。另一个类是 User 类，函数和指令也是 User 类的子类，也就是说，在函数和指令中，可以使用别的地方定义的值。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/d152770964431a6ac484d2f55097114c.png" alt=""></p>
+<p><strong>这两个类是怎么帮助到优化算法中的呢？</strong></p>
+<p>在 User 中，可以访问所有它用到的 Value，比如一个加法指令（%c = add nsw i32 %a, %b）用到了 a 和 b 这两个变量。</p>
+<p>而在 Value 中，可以访问所有使用这个值的 User，比如给 c 赋值的这条指令。</p>
+<p>所以，你可以遍历一个 Value 的所有 User，把它替换成另一个 Value，这就是拷贝传播。</p>
+<p><strong>接下来，我们看看如何用程序实现 IR 的优化。</strong></p>
+<p>在 LLVM 内部，优化工作是通过一个个的 Pass（遍）来实现的，它支持三种类型的 Pass：</p>
+<ol>
+<li>一种是分析型的 Pass（Analysis Passes），只是做分析，产生一些分析结果用于后序操作。</li>
+<li>一些是做代码转换的（Transform Passes），比如做公共子表达式删除。</li>
+<li>还有一类 pass 是工具型的，比如对模块做正确性验证。你可以查阅 LLVM 所支持的各种 Pass。</li>
+</ol>
+<p>下面的代码创建了一个 PassManager，并添加了两个优化 Pass：</p>
+<p>// 创建一个 PassManager<br>
+TheFPM = std::make_unique<a href="legacy::FunctionPassManager">legacy::FunctionPassManager</a>(TheModule.get());</p>
+<p>// 窥孔优化和一些位计算优化<br>
+TheFPM-&gt;add(createInstructionCombiningPass());</p>
+<p>// 表达式重关联<br>
+TheFPM-&gt;add(createReassociatePass());</p>
+<p>TheFPM-&gt;doInitialization();</p>
+<p>之后，再简单地调用 PassManager 的 run() 方法，就可以对代码进行优化：</p>
+<p>TheFPM-&gt;run(*fun);</p>
+<p>你可以查看本讲附带的代码，尝试自己编写一些示例程序，查看优化前和优化后的效果。</p>
+<h2 id="课程小结">课程小结</h2>
+<p>本节课，我带你学习了代码优化的原理，然后通过 LLVM 实践了一下，演示了优化功能，我希望你能记住几个关键点：</p>
+<p>1. 代码优化分为本地优化、全局优化和过程间优化三个范围。有些优化对于这三个范围都是适用的，但也有一些优化算法是全局优化和过程间优化专有的。</p>
+<p>2. 可用表达式分析和活跃性分析是本地优化时的两个关键算法。这些算法都是由扫描方向、值、转换函数和初始值这四个要素构成的。</p>
+<p>3.LLVM 用 pass 来做优化，你可以通过命令行或程序来使用这些 Pass。你也可以编写自己的 Pass。</p>
+<p>最后，我建议你多编写一些测试代码，并用 opt 命令去查看它的优化效果，在这个过程中增加对代码优化的感性认识。</p>
+<h2 id="一课一思">一课一思</h2>
+<p>针对不同的领域（商业、科学计算、游戏等），代码优化的重点可能是不同的。针对你所熟悉的计算机语言和领域，你知道有哪些优化的需求？是采用什么技术实现的？欢迎在留言区分享你的观点。</p>
+<p>最后，感谢你的阅读，如果这篇文章有所收获，也欢迎你将它分享给更多的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/77577e606d183349707a8a62717dc60c.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E4%B9%8B%E7%BE%8E/">编译原理之美</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/27_%E5%A4%A7%E6%95%B0%E6%8D%AE%E4%BB%8E%E5%93%AA%E9%87%8C%E6%9D%A5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">27_大数据从哪里来？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%89%93%E9%80%A0%E7%88%86%E6%AC%BE%E7%9F%AD%E8%A7%86%E9%A2%91/27_%E5%A4%9A%E5%85%83%E5%8C%96%E5%8F%98%E7%8E%B0%E5%A6%82%E4%BD%95%E6%98%8E%E7%A1%AE%E4%B8%8D%E5%90%8C%E5%88%9B%E4%BD%9C%E9%98%B6%E6%AE%B5%E7%9A%84%E5%8F%98%E7%8E%B0%E4%BB%BB%E5%8A%A1/">
+            <span class="next-text nav-default">27_多元化变现：如何明确不同创作阶段的变现任务？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

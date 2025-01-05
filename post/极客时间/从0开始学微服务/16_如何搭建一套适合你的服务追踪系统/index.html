@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16_如何搭建一套适合你的服务追踪系统？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="专栏第 8 期我给你讲了服务追踪系统的原理以及实现，简单回顾一下服务追踪系统的实现，主要包括三个部分。
+埋点数据收集，负责在服务端进行埋点，来收集服务调用的上下文数据。 实时数据处理，负责对收集到的链路信息，按照 traceId 和 spanId 进行串联和存储。 数据链路展示，把处理后的服务调用数据，按照调用链的形式展示出来。 如果要自己从 0 开始实现一个服务追踪系统，针对以上三个部分你都必须有相应的解决方案。首先你需要在业务代码的框架层开发调用拦截程序，在调用的前后收集相关信息，把信息传输给到一个统一的处理中心。然后处理中心需要实时处理收集到链路信息，并按照 traceId 和 spanId 进行串联，处理完以后再存到合适的存储中。最后还要能把存储中存储的信息，以调用链路图或者调用拓扑图的形式对外展示。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/16_%E5%A6%82%E4%BD%95%E6%90%AD%E5%BB%BA%E4%B8%80%E5%A5%97%E9%80%82%E5%90%88%E4%BD%A0%E7%9A%84%E6%9C%8D%E5%8A%A1%E8%BF%BD%E8%B8%AA%E7%B3%BB%E7%BB%9F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/16_%E5%A6%82%E4%BD%95%E6%90%AD%E5%BB%BA%E4%B8%80%E5%A5%97%E9%80%82%E5%90%88%E4%BD%A0%E7%9A%84%E6%9C%8D%E5%8A%A1%E8%BF%BD%E8%B8%AA%E7%B3%BB%E7%BB%9F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16_如何搭建一套适合你的服务追踪系统？">
+  <meta property="og:description" content="专栏第 8 期我给你讲了服务追踪系统的原理以及实现，简单回顾一下服务追踪系统的实现，主要包括三个部分。
+埋点数据收集，负责在服务端进行埋点，来收集服务调用的上下文数据。 实时数据处理，负责对收集到的链路信息，按照 traceId 和 spanId 进行串联和存储。 数据链路展示，把处理后的服务调用数据，按照调用链的形式展示出来。 如果要自己从 0 开始实现一个服务追踪系统，针对以上三个部分你都必须有相应的解决方案。首先你需要在业务代码的框架层开发调用拦截程序，在调用的前后收集相关信息，把信息传输给到一个统一的处理中心。然后处理中心需要实时处理收集到链路信息，并按照 traceId 和 spanId 进行串联，处理完以后再存到合适的存储中。最后还要能把存储中存储的信息，以调用链路图或者调用拓扑图的形式对外展示。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="从0开始学微服务">
+
+  <meta itemprop="name" content="16_如何搭建一套适合你的服务追踪系统？">
+  <meta itemprop="description" content="专栏第 8 期我给你讲了服务追踪系统的原理以及实现，简单回顾一下服务追踪系统的实现，主要包括三个部分。
+埋点数据收集，负责在服务端进行埋点，来收集服务调用的上下文数据。 实时数据处理，负责对收集到的链路信息，按照 traceId 和 spanId 进行串联和存储。 数据链路展示，把处理后的服务调用数据，按照调用链的形式展示出来。 如果要自己从 0 开始实现一个服务追踪系统，针对以上三个部分你都必须有相应的解决方案。首先你需要在业务代码的框架层开发调用拦截程序，在调用的前后收集相关信息，把信息传输给到一个统一的处理中心。然后处理中心需要实时处理收集到链路信息，并按照 traceId 和 spanId 进行串联，处理完以后再存到合适的存储中。最后还要能把存储中存储的信息，以调用链路图或者调用拓扑图的形式对外展示。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3770">
+  <meta itemprop="keywords" content="从0开始学微服务">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16_如何搭建一套适合你的服务追踪系统？">
+  <meta name="twitter:description" content="专栏第 8 期我给你讲了服务追踪系统的原理以及实现，简单回顾一下服务追踪系统的实现，主要包括三个部分。
+埋点数据收集，负责在服务端进行埋点，来收集服务调用的上下文数据。 实时数据处理，负责对收集到的链路信息，按照 traceId 和 spanId 进行串联和存储。 数据链路展示，把处理后的服务调用数据，按照调用链的形式展示出来。 如果要自己从 0 开始实现一个服务追踪系统，针对以上三个部分你都必须有相应的解决方案。首先你需要在业务代码的框架层开发调用拦截程序，在调用的前后收集相关信息，把信息传输给到一个统一的处理中心。然后处理中心需要实时处理收集到链路信息，并按照 traceId 和 spanId 进行串联，处理完以后再存到合适的存储中。最后还要能把存储中存储的信息，以调用链路图或者调用拓扑图的形式对外展示。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16_如何搭建一套适合你的服务追踪系统？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3770 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#openzipkin">OpenZipkin</a></li>
+        <li><a href="#pinpoint">Pinpoint</a></li>
+        <li><a href="#选型对比">选型对比</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p><a href="./15273.md">专栏第 8 期</a>我给你讲了服务追踪系统的原理以及实现，简单回顾一下服务追踪系统的实现，主要包括三个部分。</p>
+<ul>
+<li>埋点数据收集，负责在服务端进行埋点，来收集服务调用的上下文数据。</li>
+<li>实时数据处理，负责对收集到的链路信息，按照 traceId 和 spanId 进行串联和存储。</li>
+<li>数据链路展示，把处理后的服务调用数据，按照调用链的形式展示出来。</li>
+</ul>
+<p>如果要自己从 0 开始实现一个服务追踪系统，针对以上三个部分你都必须有相应的解决方案。首先你需要在业务代码的框架层开发调用拦截程序，在调用的前后收集相关信息，把信息传输给到一个统一的处理中心。然后处理中心需要实时处理收集到链路信息，并按照 traceId 和 spanId 进行串联，处理完以后再存到合适的存储中。最后还要能把存储中存储的信息，以调用链路图或者调用拓扑图的形式对外展示。</p>
+<p>可以想象这个技术难度以及开发工作量都不小，对于大部分中小业务团队来说，都十分具有挑战。不过幸运的是，业界已经有不少开源的服务追踪系统实现，并且应用范围也已经十分广泛，对大部分的中小业务团队来说，足以满足对服务追踪系统的需求。</p>
+<p>业界比较有名的服务追踪系统实现有阿里的鹰眼、Twitter 开源的 OpenZipkin，还有 Naver 开源的 Pinpoint，它们都是受 Google 发布的 Dapper 论文启发而实现的。其中阿里的鹰眼解决方案没有开源，而且由于阿里需要处理数据量比较大，所以鹰眼的定位相对定制化，不一定适合中小规模的业务团队，感兴趣的同学可以点击本期文章末尾“拓展阅读”进行学习。</p>
+<p>下面我主要来介绍下开源实现方案 OpenZipkin 和 Pinpoint，再看看它们有什么区别。</p>
+<h2 id="openzipkin">OpenZipkin</h2>
+<p>OpenZipkin 是 Twitter 开源的服务追踪系统，下面这张图展示了它的架构设计。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/c9a225c5ee4e9ddfb3ed1122031ba50a.png" alt=""><br>
+（图片来源：<a href="https://zipkin.io/public/img/architecture-1.png">https://zipkin.io/public/img/architecture-1.png</a>）</p>
+<p>从图中看，OpenZipkin 主要由四个核心部分组成。</p>
+<ul>
+<li>Collector：负责收集探针 Reporter 埋点采集的数据，经过验证处理并建立索引。</li>
+<li>Storage：存储服务调用的链路数据，默认使用的是 Cassandra，是因为 Twitter 内部大量使用了 Cassandra，你也可以替换成 Elasticsearch 或者 MySQL。</li>
+<li>API：将格式化和建立索引的链路数据以 API 的方式对外提供服务，比如被 UI 调用。</li>
+<li>UI：以图形化的方式展示服务调用的链路数据。</li>
+</ul>
+<p>它的工作原理可以用下面这张图来描述。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/f2ff5a9254694c4395330a81429d02ee.png" alt=""><br>
+（图片来源：<a href="https://zipkin.io/pages/architecture.html">https://zipkin.io/pages/architecture.html</a>）</p>
+<p>具体流程是，通过在业务的 HTTP Client 前后引入服务追踪代码，这样在 HTTP 方法“/foo”调用前，生成 trace 信息：TraceId：aa、SpanId：6b、annotation：GET /foo，以及当前时刻的 timestamp：1483945573944000，然后调用结果返回后，记录下耗时 duration，之后再把这些 trace 信息和 duration 异步上传给 Zipkin Collector。</p>
+<h2 id="pinpoint">Pinpoint</h2>
+<p>Pinpoint 是 Naver 开源的一款深度支持 Java 语言的服务追踪系统，下面这张图是它的架构设计。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/d1ac72709075e70535d22dfca6d73f45.png" alt=""><br>
+（图片来源：<a href="http://naver.github.io/pinpoint/1.7.3/images/pinpoint-architecture.png">http://naver.github.io/pinpoint/1.7.3/images/pinpoint-architecture.png</a>）</p>
+<p>Pinpoint 主要也由四个部分组成。</p>
+<ul>
+<li>Pinpoint Agent：通过 Java 字节码注入的方式，来收集 JVM 中的调用数据，通过 UDP 协议传递给 Collector，数据采用 Thrift 协议进行编码。</li>
+<li>Pinpoint Collector：收集 Agent 传过来的数据，然后写到 HBase Storgage。</li>
+<li>HBase Storage：采用 HBase 集群存储服务调用的链路信息。</li>
+<li>Pinpoint Web UI：通过 Web UI 展示服务调用的详细链路信息。</li>
+</ul>
+<p>它的工作原理你可以看这张图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/e0abe5e6de8bcf6285a511bc28fddbed.png" alt=""><br>
+（图片来源：<a href="http://naver.github.io/pinpoint/1.7.3/images/td%5Ffigure6.png">http://naver.github.io/pinpoint/1.7.3/images/td%5Ffigure6.png</a>）</p>
+<p>具体来看，就是请求进入 TomcatA，然后生成 TraceId：TomcatA^ TIME ^ 1、SpanId：10、pSpanId：-1（代表是根请求），接着 TomatA 调用 TomcatB 的 hello 方法，TomcatB 生成 TraceId：TomcatA^ TIME ^1、新的 SpanId：20、pSpanId：10（代表是 TomcatA 的请求），返回调用结果后将 trace 信息发给 Collector，TomcatA 收到调用结果后，将 trace 信息也发给 Collector。Collector 把 trace 信息写入到 HBase 中，Rowkey 就是 traceId，SpanId 和 pSpanId 都是列。然后就可以通过 UI 查询调用链路信息了。</p>
+<h2 id="选型对比">选型对比</h2>
+<p>根据我的经验，考察服务追踪系统主要从下面这几个方面。</p>
+<p><strong>1. 埋点探针支持平台的广泛性</strong></p>
+<p>OpenZipkin 和 Pinpoint 都支持哪些语言平台呢？</p>
+<p>OpenZipkin 提供了不同语言的 Library，不同语言实现时需要引入不同版本的 Library。</p>
+<p>官方提供了 C#、Go、Java、JavaScript、Ruby、Scala、PHP 等主流语言版本的 Library，而且开源社区还提供了更丰富的不同语言版本的 Library，详细的可以点击<a href="./existing%5Finstrumentations.md">这里</a>查看；而 Pinpoint 目前只支持 Java 语言。</p>
+<p>所以从探针支持的语言平台广泛性上来看，OpenZipkin 比 Pinpoint 的使用范围要广，而且开源社区很活跃，生命力更强。</p>
+<p><strong>2. 系统集成难易程度</strong></p>
+<p>再来看下系统集成的难易程度。</p>
+<p>以 OpenZipkin 的 Java 探针 Brave 为例，它只提供了基本的操作 API，如果系统要想集成 Brave，必须在配置里手动里添加相应的配置文件并且增加 trace 业务代码。具体来讲，就是你需要先修改工程的 POM 依赖，以引入 Brave 相关的 JAR 包。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">&lt;dependencyManagement&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &lt;dependencies&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &lt;dependency&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &lt;groupId&gt;io.zipkin.brave&lt;/groupId&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &lt;artifactId&gt;brave-bom&lt;/artifactId&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &lt;version&gt;${brave.version}&lt;/version&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &lt;type&gt;pom&lt;/type&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        &lt;scope&gt;import&lt;/scope&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      &lt;/dependency&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    &lt;/dependencies&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  &lt;/dependencyManagement&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后假如你想收集每一次 HTTP 调用的信息，你就可以使用 Brave 在 Apache Httpclient 基础上封装的 httpClient，它会记录每一次 HTTP 调用的信息，并上报给 OpenZipkin。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">httpclient =TracingHttpClientBuilder.create(tracing).build();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而 Pinpoint 是通过字节码注入的方式来实现拦截服务调用，从而收集 trace 信息的，所以不需要代码做任何改动。Java 字节码注入的大致原理你可以参考下图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/d0129412758796f5ca982cd4cd9f7e06.png" alt=""><br>
+（图片来源：<a href="http://naver.github.io/pinpoint/1.7.3/images/td%5Ffigure3.png">http://naver.github.io/pinpoint/1.7.3/images/td%5Ffigure3.png</a>）</p>
+<p>我来解释一下，就是 JVM 在加载 class 二进制文件时，动态地修改加载的 class 文件，在方法的前后执行拦截器的 before() 和 after() 方法，在 before() 和 after() 方法里记录 trace() 信息。而应用不需要修改业务代码，只需要在 JVM 启动时，添加类似下面的启动参数就可以了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-javaagent:$AGENT_PATH/pinpoint-bootstrap-$VERSION.jar
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-Dpinpoint.agentId=&lt;Agent&#39;s UniqueId&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-Dpinpoint.applicationName=&lt;The name indicating a same service (AgentId collection)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>所以从系统集成难易程度上看，Pinpoint 要比 OpenZipkin 简单。</p>
+<p><strong>3. 调用链路数据的精确度</strong></p>
+<p>从下面这张 OpenZipkin 的调用链路图可以看出，OpenZipkin 收集到的数据只到接口级别，进一步的信息就没有了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/8c8306ec1b9e6582203313a30778bff1.png" alt=""><br>
+（图片来源：<a href="http://ovcjgn2x0.bkt.clouddn.com/zipkin-info.jpg">http://ovcjgn2x0.bkt.clouddn.com/zipkin-info.jpg</a>）</p>
+<p>再来看下 Pinpoint，因为 Pinpoint 采用了字节码注入的方式实现 trace 信息收集，所以它能拿到的信息比 OpenZipkin 多得多。从下面这张图可以看出，它不仅能够查看接口级别的链路调用信息，还能深入到调用所关联的数据库信息。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/0dc6b3a71ab2b0a64d5c49e8b2396e6c.png" alt=""><br>
+（图片来源：<a href="http://ovcjgn2x0.bkt.clouddn.com/pp-info.jpg">http://ovcjgn2x0.bkt.clouddn.com/pp-info.jpg</a>）</p>
+<p>同理在绘制链路拓扑图时，OpenZipkin 只能绘制服务与服务之间的调用链路拓扑图，比如下面这张示意图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/42b3916fdb28d3e8c4d9b4b623e9b2b3.png" alt=""><br>
+（图片来源：<a href="http://ovcjgn2x0.bkt.clouddn.com/zipdependency1.jpg">http://ovcjgn2x0.bkt.clouddn.com/zipdependency1.jpg</a>）</p>
+<p>而 Pinpoint 不仅能够绘制服务与服务之间，还能绘制与 DB 之间的调用链路拓扑图，比如下图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/a31551f21d0a4a8b6c6df5c0d34987c5.png" alt=""><br>
+（图片来源：<a href="http://ovcjgn2x0.bkt.clouddn.com/ppreal.jpg">http://ovcjgn2x0.bkt.clouddn.com/ppreal.jpg</a>）</p>
+<p>所以，从调用链路数据的精确度上看，Pinpoint 要比 OpenZipkin 精确得多。</p>
+<h2 id="总结">总结</h2>
+<p>今天我给你讲解了两个开源服务追踪系统 OpenZipkin 和 Pinpoint 的具体实现，并从埋点探针支持平台广泛性、系统集成难易程度、调用链路数据精确度三个方面对它们进行了对比。</p>
+<p>从选型的角度来讲，如果你的业务采用的是 Java 语言，那么采用 Pinpoint 是个不错的选择，因为它不需要业务改动一行代码就可以实现 trace 信息的收集。除此之外，Pinpoint 不仅能看到服务与服务之间的链路调用，还能看到服务内部与资源层的链路调用，功能更为强大，如果你有这方面的需求，Pinpoint 正好能满足。</p>
+<p>如果你的业务不是 Java 语言实现，或者采用了多种语言，那毫无疑问应该选择 OpenZipkin，并且，由于其开源社区很活跃，基本上各种语言平台都能找到对应的解决方案。不过想要使用 OpenZipkin，还需要做一些额外的代码开发工作，以引入 OpenZipkin 提供的 Library 到你的系统中。</p>
+<p>除了 OpenZipkin 和 Pinpoint，业界还有其他开源追踪系统实现，比如 Uber 开源的 Jaeger，以及国内的一款开源服务追踪系统 SkyWalking。不过由于目前应用范围不是很广，这里就不详细介绍了，感兴趣的同学可以点击“拓展阅读”自行学习。</p>
+<h2 id="思考题">思考题</h2>
+<p>OpenZipkin 在探针采集完数据后有两种方式把数据传递给 Collector，一种是通过 HTTP 调用，一种是基于 MQ 的异步通信方式，比如使用 RabbitMQ 或者 Kafka，你觉得哪种方式更好一些？为什么？</p>
+<p>欢迎你在留言区写下自己的思考，与我一起讨论。</p>
+<hr>
+<p><strong>拓展阅读：</strong></p>
+<p>阿里巴巴鹰眼：<a href="http://ppt.geekbang.org/slide/download/939/595f4cdcb9d52.pdf/18">http://ppt.geekbang.org/slide/download/939/595f4cdcb9d52.pdf/18</a></p>
+<p>Jaeger：<a href="https://www.jaegertracing.io">https://www.jaegertracing.io</a></p>
+<p>SkyWalking：<a href="https://github.com/apache/incubator-skywalking">https://github.com/apache/incubator-skywalking</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/b10ed5e0f291705aa335d48abe58cc5d.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%BE%AE%E6%9C%8D%E5%8A%A1/">从0开始学微服务</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%9F%BA%E7%A1%80%E8%AF%BE/16_%E4%BA%BA%E5%B7%A5%E7%A5%9E%E7%BB%8F%E7%BD%91%E7%BB%9C__%E9%81%93%E6%B3%95%E8%87%AA%E7%84%B6%E4%B9%85%E8%97%8F%E7%8E%84%E5%86%A5%E7%A5%9E%E7%BB%8F%E7%BD%91%E7%BB%9C%E7%9A%84%E7%94%9F%E7%90%86%E5%AD%A6%E8%83%8C%E6%99%AF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16_人工神经网络__道法自然，久藏玄冥：神经网络的生理学背景</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%88%90%E4%B8%BAai%E4%BA%A7%E5%93%81%E7%BB%8F%E7%90%86/16_%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%BD%93%E4%BB%8A%E6%9C%80%E7%81%AB%E7%9A%84%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E6%8A%80%E6%9C%AF%E4%BD%A0%E4%B8%80%E5%AE%9A%E8%A6%81%E7%9F%A5%E9%81%93/">
+            <span class="next-text nav-default">16_深度学习：当今最火的机器学习技术，你一定要知道</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

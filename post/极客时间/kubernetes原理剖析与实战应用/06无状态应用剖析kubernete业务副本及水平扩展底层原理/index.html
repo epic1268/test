@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>06无状态应用：剖析Kubernete业务副本及水平扩展底层原理 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上两节课中，我们已经了解了 Kubernetes 中最关键的对象 Pod，也学习了一些 Pod 的常见用法。
+每一个 Pod 都是应用的一个实例，但是通常来说你不会直接在 Kubernetes 中创建和运行单个 Pod。因为 Pod 的生命周期是短暂的，即“用后即焚”。理解这一点很重要，这也是“不可变基础设施”这一理念在 Kubernetes 中的最佳实践。同样，对于你后续进行业务改造和容器化上云也具有指导意义。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/06%E6%97%A0%E7%8A%B6%E6%80%81%E5%BA%94%E7%94%A8%E5%89%96%E6%9E%90kubernete%E4%B8%9A%E5%8A%A1%E5%89%AF%E6%9C%AC%E5%8F%8A%E6%B0%B4%E5%B9%B3%E6%89%A9%E5%B1%95%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/06%E6%97%A0%E7%8A%B6%E6%80%81%E5%BA%94%E7%94%A8%E5%89%96%E6%9E%90kubernete%E4%B8%9A%E5%8A%A1%E5%89%AF%E6%9C%AC%E5%8F%8A%E6%B0%B4%E5%B9%B3%E6%89%A9%E5%B1%95%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="06无状态应用：剖析Kubernete业务副本及水平扩展底层原理">
+  <meta property="og:description" content="在上两节课中，我们已经了解了 Kubernetes 中最关键的对象 Pod，也学习了一些 Pod 的常见用法。
+每一个 Pod 都是应用的一个实例，但是通常来说你不会直接在 Kubernetes 中创建和运行单个 Pod。因为 Pod 的生命周期是短暂的，即“用后即焚”。理解这一点很重要，这也是“不可变基础设施”这一理念在 Kubernetes 中的最佳实践。同样，对于你后续进行业务改造和容器化上云也具有指导意义。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes原理剖析与实战应用">
+
+  <meta itemprop="name" content="06无状态应用：剖析Kubernete业务副本及水平扩展底层原理">
+  <meta itemprop="description" content="在上两节课中，我们已经了解了 Kubernetes 中最关键的对象 Pod，也学习了一些 Pod 的常见用法。
+每一个 Pod 都是应用的一个实例，但是通常来说你不会直接在 Kubernetes 中创建和运行单个 Pod。因为 Pod 的生命周期是短暂的，即“用后即焚”。理解这一点很重要，这也是“不可变基础设施”这一理念在 Kubernetes 中的最佳实践。同样，对于你后续进行业务改造和容器化上云也具有指导意义。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3714">
+  <meta itemprop="keywords" content="Kubernetes原理剖析与实战应用">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="06无状态应用：剖析Kubernete业务副本及水平扩展底层原理">
+  <meta name="twitter:description" content="在上两节课中，我们已经了解了 Kubernetes 中最关键的对象 Pod，也学习了一些 Pod 的常见用法。
+每一个 Pod 都是应用的一个实例，但是通常来说你不会直接在 Kubernetes 中创建和运行单个 Pod。因为 Pod 的生命周期是短暂的，即“用后即焚”。理解这一点很重要，这也是“不可变基础设施”这一理念在 Kubernetes 中的最佳实践。同样，对于你后续进行业务改造和容器化上云也具有指导意义。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">06无状态应用：剖析Kubernete业务副本及水平扩展底层原理</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3714 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上两节课中，我们已经了解了 Kubernetes 中最关键的对象 Pod，也学习了一些 Pod 的常见用法。</p>
+<p>每一个 Pod 都是应用的一个实例，但是通常来说你不会直接在 Kubernetes 中创建和运行单个 Pod。因为 Pod 的生命周期是短暂的，即“用后即焚”。理解这一点很重要，这也是“不可变基础设施”这一理念在 Kubernetes 中的最佳实践。同样，对于你后续进行业务改造和容器化上云也具有指导意义。</p>
+<p>当一个 Pod 被创建出来，不管是由你直接创建，还是由其他工作负载控制器（Workload Controller）自动创建，经过调度器调度以后，就永久地“长”在某个节点上了，直到该 Pod 被删除，或者因为资源不够被驱逐，抑或由于对应的节点故障导致宕机等。因此单独地用一个 Pod 来承载业务，是没办法保证高可用、可伸缩、负载均衡等要求，而且 Pod 也无法“自愈”。</p>
+<p>这时我们就需要在 Pod 之上做一层抽象，通过多个副本（Replica）来保证可用 Pod 的数量，避免业务不可用。在介绍 Kubernetes 中对这种抽象的实现之前，我们先来看看应用的业务类型。</p>
+<p>有状态服务 VS 无状态服务</p>
+<p>一般来说，业务的服务类型可分为无状态服务和有状态服务。举个简单的例子，像打网络游戏这类的服务，就是有状态服务，而正常浏览网页这类服务一般都是无状态服务。其实判断两种请求的关键在于，两个来自相同发起者的请求在服务器端是否具备上下文关系。</p>
+<p>如果是有状态服务，其请求是状态化的，服务器端需要保存请求的相关信息，这样每个请求都可以默认地使用之前的请求上下文。</p>
+<p>而无状态服务就不需要这样，每次请求都包含了需要的所有信息，每次请求都和之前的没有任何关系。</p>
+<p>有状态服务和无状态服务分别有各自擅长的业务类型和技术优势，在 Kubernetes 中，分别有不同的工作负载控制器来负责承载这两类服务。</p>
+<p>本节课，我们先介绍 Kubernetes 中的无状态工作负载。</p>
+<p>Kubernetes 中的无状态工作负载</p>
+<p>Kubernetes 中各个对象的 metadata 字段都有 label（标签）和 annotation（注解） 两个对象，可以用来标识一些元数据信息。不论是 label 还是 annotation，都是一组键值对，键值不允许相同。关于各个对象的 API 基本构成，可以参照 04 讲中 API 的定义说明，Kubernetes 的各个对象的 API 都符合这个规范。</p>
+<p>annotation 主要用来记录一些非识别的信息，并不用于标识和选择对象。</p>
+<p>label 主要用来标识一些有意义且和对象密切相关的信息，用来支持labelSelector（标签选择器）以及一些查询操作，还有选择对象。</p>
+<p>为了让这种抽象的对象可以跟 Pod 关联起来，Kubernetes 使用了labelSelector来跟 label 进行选择匹配，从而达到这种松耦合的关联效果。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get pod -l label1=value1,label2=value2 -n my-namespace
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>比如，我们就可以通过上述命令，查询出 my-namespace 这个命名空间下面，带有标签
+label1=value1
+和
+label2=value2
+的 pod。label 中的键值对在匹配的时候是“且”的关系。</p>
+<p>ReplicationController</p>
+<p>Kubernetes 中有一系列的工作负载可以用来部署无状态服务。在最初，Kubernetes 中使用了ReplicationController来做 Pod 的副本控制，即确保该服务的 Pod 数量维持在特定的数量。为了简洁并便于使用，ReplicationController通常缩写为“rc”，并作为 kubectl 命令的快捷方式，例如：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get rc -n my-namespace
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果副本数少于预定的值，则创建新的 Pod。如果副本数大于预定的值，就删除多余的副本。因此即使你的业务应用只需要一个 Pod，你也可以使用 rc 来自动帮你维护和创建 Pod。</p>
+<p>ReplicaSet</p>
+<p>随后社区开发了下一代的 Pod 控制器 ReplicaSet（可简写为 rs） 用来替代 ReplicaController。虽然 ReplicaController 目前依然可以使用，但是社区已经不推荐继续使用了。这两者的功能和目的完全相同，但是 ReplicaSet 具备更强大的基于集合的标签选择器，这样你可以通过一组值来进行标签匹配选择。目前支持三种操作符：
+in
+、
+notin
+和
+exists
+。</p>
+<p>例如，你可以用
+environment in (production, qa)
+来匹配 label 中带有
+environment=production
+或
+environment=qa
+的 Pod。</p>
+<p>同样你也可以使用
+tier notin (frontend,backend)
+来匹配 label 中不带有
+tier=frontend
+或
+tier=backend
+的 Pod。</p>
+<p>或者你可以用 partition来匹配 label 中带有 partition 这个 key 的 Pod。</p>
+<p>了解了标签选择器，我们就可以通过如下的 kubectl 命令查找 Pod：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">kubectl get pods -l environment=production,tier=frontend
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>或者使用：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">kubectl get pods -l &#39;environment in (production),tier in (frontend)&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>虽然 Replicaset 可以独立使用，但是为了能够更好地协调 Pod 的创建、删除以及更新等操作，我们都是直接使用更高级的 Deployment来管理 Replicaset，社区也是一直这么定位和推荐的。比如一些业务升级的场景，使用单一的 ReplicaController 或者 Replicaset 是无法实现滚动升级的诉求，至少需要定义两个该对象才能实现，而且这两个对象使用的标签选择器中的 label 至少要有一个不相同。通过不断地对这两个对象的副本进行增减，也可以称为调和（Reconcile），才可以完成滚动升级。这样使用起来不方便，也增加了用户的使用门槛，极大地降低了业务发布的效率。</p>
+<p>Deployment</p>
+<p>通过 Deployment，我们就不需要再关心和操作 ReplicaSet 了。</p>
+<p>（https://storage.googleapis.com/cdn.thenewstack.io/media/2017/11/07751442-deployment.png）</p>
+<p>Deployment、ReplicaSet 和 Pod 这三者之间的关系见上图。通过 Deployment，我们可以管理多个 label 各不相同的 ReplicaSet，每个 ReplicaSet 负责保证对应数目的 Pod 在运行。</p>
+<p>我们来看一个定义 Deployment 的例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">kind: Deployment
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: nginx-deployment-demo
+</span></span><span class="line"><span class="cl">  namespace: demo
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">    app: nginx
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  replicas: 3
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">    matchLabels:
+</span></span><span class="line"><span class="cl">      app: nginx
+</span></span><span class="line"><span class="cl">  template:
+</span></span><span class="line"><span class="cl">    metadata:
+</span></span><span class="line"><span class="cl">      labels:
+</span></span><span class="line"><span class="cl">        app: nginx
+</span></span><span class="line"><span class="cl">        version: v1
+</span></span><span class="line"><span class="cl">    spec:
+</span></span><span class="line"><span class="cl">      containers:
+</span></span><span class="line"><span class="cl">      - name: nginx
+</span></span><span class="line"><span class="cl">        image: nginx:1.14.2
+</span></span><span class="line"><span class="cl">        ports:
+</span></span><span class="line"><span class="cl">        - containerPort: 80
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们这里定义了副本数
+spec.replicas
+为 3，同时在
+spec.selector.matchLabels
+中设置了
+app=nginx
+的 label，用于匹配
+spec.template.metadata.labels
+的 label。我们还增加了
+version=v1
+的 label 用于后续滚动升级做比较。</p>
+<p>我们将上述内容保存到
+deploy-demo.yaml
+文件中。</p>
+<p>注意，
+spec.selector.matchLabels
+中写的 label 一定要能匹配得了
+spec.template.metadata.labels
+中的 label。否则该 Deployment 无法关联创建出来的 ReplicaSet。</p>
+<p>然后我们通过下面这些命令，便可以在命名空间 demo 中创建名为 nginx-deployment-demo 的 Deployment。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl create ns demo
+</span></span><span class="line"><span class="cl">$ kubectl create -f deploy-demo.yaml
+</span></span><span class="line"><span class="cl">deployment.apps/nginx-deployment-demo created
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>创建完成后，我们可以查看自动创建出来的 rs。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get rs -n demo
+</span></span><span class="line"><span class="cl">NAME                               DESIRED   CURRENT   READY   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9   3         3         0       5s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接下来，我们可以通过如下的几个命令不断地查询系统，看看对应的 Pod 是否运行成功。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS              RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   0/1     ContainerCreating   0          30s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-d78fx   0/1     ContainerCreating   0          30s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   0/1     ContainerCreating   0          30s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS    RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   1/1     Running   0          63s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-d78fx   1/1     Running   0          63s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   1/1     Running   0          63s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以看到，从 Deployment 到这里，最后的 Pod 已经创建成功了。</p>
+<p>现在我们试着做下镜像更新看看。更改
+spec.template.metadata.labels
+中的
+version=v1
+为
+version=v2
+，同时更新镜像
+nginx:1.14.2
+为
+nginx:1.19.2
+。</p>
+<p>你可以直接通过下述命令来直接更改：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl edit deploy nginx-deployment-demo -n demo 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>也可以更改
+deploy-demo.yaml
+这个文件：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">kind: Deployment
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  name: nginx-deployment-demo
+</span></span><span class="line"><span class="cl">  namespace: demo
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">    app: nginx
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  replicas: 3
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">    matchLabels:
+</span></span><span class="line"><span class="cl">      app: nginx
+</span></span><span class="line"><span class="cl">  template:
+</span></span><span class="line"><span class="cl">    metadata:
+</span></span><span class="line"><span class="cl">      labels:
+</span></span><span class="line"><span class="cl">        app: nginx
+</span></span><span class="line"><span class="cl">        version: v2
+</span></span><span class="line"><span class="cl">    spec:
+</span></span><span class="line"><span class="cl">      containers:
+</span></span><span class="line"><span class="cl">      - name: nginx
+</span></span><span class="line"><span class="cl">        image: nginx:1.19.2
+</span></span><span class="line"><span class="cl">        ports:
+</span></span><span class="line"><span class="cl">        - containerPort: 80
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后运行这些命令：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl apply -f deploy-demo.yaml
+</span></span><span class="line"><span class="cl">Warning: kubectl apply should be used on resource created by either kubectl create --save-config or kubectl apply
+</span></span><span class="line"><span class="cl">deployment.apps/nginx-deployment-demo configured
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个时候，我们来看看 ReplicaSet 有什么变化：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get rs -n demo
+</span></span><span class="line"><span class="cl">NAME                               DESIRED   CURRENT   READY   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9   3         3         3       4m10s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7   1         1         0       3s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，这个时候自动创建了一个新的 rs 出来：
+nginx-deployment-demo-7594578db7
+。一般 Deployment 的默认更新策略是 RollingUpdate，即先创建一个新的 Pod，并待其成功运行以后，再删除旧的。</p>
+<p>还有一个更新策略是Recreate，即先删除现有的 Pod，再创建新的。关于 Deployment，我们还可以设置最大不可用（
+maxUnavailable
+）和最大增量（
+maxSurge
+），来更精确地控制滚动更新操作，具体配置可参照这个文档。</p>
+<p>我建议你使用默认的策略来保证可用性。后面 Deployment 控制器会不断对这两个 rs 进行调和，直到新的 rs 副本数为 3，老的 rs 副本数为 0。</p>
+<p>我们可以通过如下命令，能够观察到 Deployment 的调和过程。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS    RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   1/1     Running   0          4m15s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-d78fx   1/1     Running   0          4m15s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   1/1     Running   0          4m15s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS              RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   1/1     Running             0          4m22s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-d78fx   1/1     Running             0          4m22s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   1/1     Running             0          4m22s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-zk8jq   0/1     ContainerCreating   0          15s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v2
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS              RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-zk8jq   0/1     ContainerCreating   0          19s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v2
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS              RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-4g4fk   0/1     ContainerCreating   0          1s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-zk8jq   1/1     Running             0          31s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS        RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   1/1     Running       0          4m40s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-d78fx   1/1     Running       0          4m40s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   1/1     Terminating   0          4m40s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v2
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS              RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-4g4fk   1/1     Running             0          5s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-ftzmf   0/1     ContainerCreating   0          2s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-zk8jq   1/1     Running             0          35s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS        RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-7w5gp   0/1     Terminating   0          4m52s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9-ssstk   0/1     Terminating   0          4m52s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v2
+</span></span><span class="line"><span class="cl">NAME                                     READY   STATUS    RESTARTS   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-4g4fk   1/1     Running   0          17s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-ftzmf   1/1     Running   0          14s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7-zk8jq   1/1     Running   0          47s
+</span></span><span class="line"><span class="cl">$ kubectl get rs -n demo
+</span></span><span class="line"><span class="cl">NAME                               DESIRED   CURRENT   READY   AGE
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-5d65f98bd9   0         0         0       5m5s
+</span></span><span class="line"><span class="cl">nginx-deployment-demo-7594578db7   3         3         3       58s
+</span></span><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx,version=v1
+</span></span><span class="line"><span class="cl">No resources found in demo namespace.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>或者可以通过 kubectl 的 watch 功能：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl get pod -n demo -l app=nginx -w
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>至此，我们完成了 Deployment 的升级过程。</p>
+<p>写在最后</p>
+<p>Kubernetes 中这些高阶的抽象对象，都是通过标签选择器来控制 Pod 的，包括我们下一节课要讲的有状态服务控制器。通过这些标签选择器，我们也可以通过 kubectl 命令行方便地查询一些对象。</p>
+<p>有了 Deployment 这个高级对象，我们可以很方便地完成无状态服务的发布、更新升级，无须多余的人工参与，就能保证业务的高可用性。这也是 Kubernetes 迷人之处——声明式 API。</p>
+<p>如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p>
+<p>-&ndash; ### 精选评论 ##### **伟： &gt; 不明白文中提到的工作负载是什么意思？所以这节看的一头雾水，老师，能解释下吗 ##### **堃： &gt; 用yaml创建deploy的时候也会同时创建rs吗 ######     讲师回复： &gt;     是的，这部分的 rs 是有 kube-controller-manager 自己来创建和管理的，我们不用直接操作。 ##### **6113： &gt; 还有，当副本扩容时，副本数+1了，那如何确保这个副本是可以正常提供服务的呢 ##### **6113： &gt; 当副本伸缩时，具体是谁在操作容器？是如何操作的呢？ ##### **锋： &gt; 老师好，请问除了修改镜像，还有什么配置项改动会触发滚动更新呢？</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/">Kubernetes原理剖析与实战应用</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/06%E6%95%B0%E6%8D%AE%E5%88%86%E7%89%87%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%88%86%E5%BA%93%E5%88%86%E8%A1%A8%E5%88%86%E5%BA%93&#43;%E5%88%86%E8%A1%A8%E4%BB%A5%E5%8F%8A%E5%BC%BA%E5%88%B6%E8%B7%AF%E7%94%B1%E4%B8%8A/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">06数据分片：如何实现分库、分表、分库&#43;分表以及强制路由？（上）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%8E%A9%E8%BD%ACserverless%E6%9E%B6%E6%9E%84/06%E4%BE%9D%E8%B5%96%E7%AE%A1%E7%90%86serverle%E5%BA%94%E7%94%A8%E6%80%8E%E4%B9%88%E5%AE%89%E8%A3%85%E4%BE%9D%E8%B5%96/">
+            <span class="next-text nav-default">06依赖管理：Serverle应用怎么安装依赖？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

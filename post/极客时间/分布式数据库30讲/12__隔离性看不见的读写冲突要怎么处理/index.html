@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__隔离性：看不见的读写冲突，要怎么处理？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天继续聊读写冲突。上一讲我们谈的都是显式的读写冲突，也就是写操作和读操作都在同一时间发生。但其实，还有一种看不见的读写冲突，它是由于时间的不确定性造成的，更加隐蔽，处理起来也更复杂。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/12__%E9%9A%94%E7%A6%BB%E6%80%A7%E7%9C%8B%E4%B8%8D%E8%A7%81%E7%9A%84%E8%AF%BB%E5%86%99%E5%86%B2%E7%AA%81%E8%A6%81%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/12__%E9%9A%94%E7%A6%BB%E6%80%A7%E7%9C%8B%E4%B8%8D%E8%A7%81%E7%9A%84%E8%AF%BB%E5%86%99%E5%86%B2%E7%AA%81%E8%A6%81%E6%80%8E%E4%B9%88%E5%A4%84%E7%90%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__隔离性：看不见的读写冲突，要怎么处理？">
+  <meta property="og:description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天继续聊读写冲突。上一讲我们谈的都是显式的读写冲突，也就是写操作和读操作都在同一时间发生。但其实，还有一种看不见的读写冲突，它是由于时间的不确定性造成的，更加隐蔽，处理起来也更复杂。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="分布式数据库30讲">
+
+  <meta itemprop="name" content="12__隔离性：看不见的读写冲突，要怎么处理？">
+  <meta itemprop="description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天继续聊读写冲突。上一讲我们谈的都是显式的读写冲突，也就是写操作和读操作都在同一时间发生。但其实，还有一种看不见的读写冲突，它是由于时间的不确定性造成的，更加隐蔽，处理起来也更复杂。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3648">
+  <meta itemprop="keywords" content="分布式数据库30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__隔离性：看不见的读写冲突，要怎么处理？">
+  <meta name="twitter:description" content="你好，我是王磊，你也可以叫我 Ivan。
+我们今天继续聊读写冲突。上一讲我们谈的都是显式的读写冲突，也就是写操作和读操作都在同一时间发生。但其实，还有一种看不见的读写冲突，它是由于时间的不确定性造成的，更加隐蔽，处理起来也更复杂。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__隔离性：看不见的读写冲突，要怎么处理？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3648 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#不确定时间窗口">不确定时间窗口</a></li>
+        <li><a href="#写等待spanner">写等待：Spanner</a>
+          <ul>
+            <li><a href="#理论等待时间">理论等待时间</a></li>
+            <li><a href="#实际等待时间">实际等待时间</a></li>
+          </ul>
+        </li>
+        <li><a href="#读等待cockroachdb">读等待：CockroachDB</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是王磊，你也可以叫我 Ivan。</p>
+<p>我们今天继续聊读写冲突。上一讲我们谈的都是显式的读写冲突，也就是写操作和读操作都在同一时间发生。但其实，还有一种看不见的读写冲突，它是由于时间的不确定性造成的，更加隐蔽，处理起来也更复杂。</p>
+<p>关于时间，我们在第 5 讲中已经做了深入讨论，最后我们接受了一个事实，那就是无法在工程层面得到绝对准确的时间。其实，任何度量标准都没有绝对意义上的准确，这是因为量具本身就是有误差的，时间、长度、重量都是这样的。</p>
+<h2 id="不确定时间窗口">不确定时间窗口</h2>
+<p>那么，时间误差会带来什么问题呢？我们用下面这张图来说明。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/4a183b67ce94c8fedb2fc2548dcbe71b.png" alt=""></p>
+<p>我们这里还是沿用上一讲的例子，图中共有 7 个数据库事务，T1 到 T7，其中 T6 是读事务，其他都是写事务。事务 T2 结束的时间点（记为 T2-C）早于事务 T6 启动的时间点（记为 T6-S），这是基于数据记录上的时间戳得出的判断，但实际上这个判断很可能是错的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/f46c9b6e190ccb616dcad481f53f52f0.png" alt=""></p>
+<p>为什么这么说呢？这是因为时间误差的存在，T2-C 时间点附近会形成一个不确定时间窗口，也称为置信区间或可信区间。严格来说，我们只能确定 T2-C 在这个时间窗口内，但无法更准确地判断具体时间点。同样，T6-S 也只是一个时间窗口。时间误差不能消除，但可以通过工程方式控制在一定范围内，例如在 Spanner 中这个不确定时间窗口（记为ɛ）最大不超过 7 毫秒，平均是 4 毫秒。</p>
+<p>在这个案例中，当我们还原两个时间窗口后，发现两者存在重叠，所以无法判断 T2-C 与 T6-S 的先后关系。这真是个棘手的问题，怎么解决呢？</p>
+<p>只有避免时间窗口出现重叠。那么如何避免重叠呢？</p>
+<p>答案是等待。“waiting out the uncertainty”，用等待来消除不确定性。</p>
+<p>具体怎么做呢？在实践中，我们看到有两种方式可供选择，分别是写等待和读等待。</p>
+<h2 id="写等待spanner">写等待：Spanner</h2>
+<p>Spanner 选择了写等待方式，更准确地说是用提交等待（commit-wait）来消除不确定性。</p>
+<p>Spanner 是直接将时间误差暴露出来的，所以调用当前时间函数 TT.now() 时，会获得的是一个区间对象 TTinterval。它的两个边界值 earliest 和 latest 分别代表了最早可能时间和最晚可能时间，而绝对时间就在这两者之间。另外，Spanner 还提供了 TT.before() 和 TT.after() 作为辅助函数，其中 TT.after() 用于判断当前时间是否晚于指定时间。</p>
+<h3 id="理论等待时间">理论等待时间</h3>
+<p>那么，对于一个绝对时间点 S，什么时候 TT.after(S) 为真呢？至少需要等到 S + ɛ时刻才可以，这个ɛ就是我们前面说的不确定时间窗口的宽度。我画了张图来帮你理解这个概念。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/bd6a7df23af07c24320c49a8d3a09eee.png" alt=""></p>
+<p>从直觉上说，标识数据版本的“提交时间戳”和事务的真实提交时间应该是一个时间，那么我们推演一下这个过程。有当前事务 Ta，已经获得了一个绝对时间 S 作为“提交时间戳”。Ta 在 S 时刻写盘，保存的时间戳也是 S。事务 Tb 在 Ta 结束后的 S+X 时刻启动，获得时间区间的最小值是 TT1.earliest。如果 X 小于时间区间ɛ，则 TT1.earliest 就会小于 S，那么 Tb 就无法读取到 Ta 写入的数据。</p>
+<p>你看，Tb 在 Ta 提交后启动却读取不到 Ta 写入的数据，这显然不符合线性一致性的要求。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/6572a8e6eb6e0019c68d0f4a964bccdd.png" alt=""></p>
+<p>写等待的处理方式是这样的。事务 Ta 在获得“提交时间戳”S 后，再等待ɛ时间后才写盘并提交事务。真正的提交时间是晚于“提交时间戳”的，中间这段时间就是等待。这样 Tb 事务启动后，能够得到的最早时间 TT2.earliet 肯定不会早于 S 时刻，所以 Tb 就一定能够读取到 Ta。这样就符合线性一致性的要求了。</p>
+<p>综上，事务获得“提交时间戳”后必须等待ɛ时间才能写入磁盘，即 commit-wait。</p>
+<p>到这里，写等待算是说清楚了。但是，你仔细想想，有什么不对劲的地方吗？</p>
+<p>对，就是那个绝对时间 S。都说了半天时间有误差，那又怎么可能拿到一个绝对时间呢？这不是自相矛盾吗？</p>
+<p>Spanner 确实拿不到绝对时间，为了说清楚这个事情，我们稍微延伸一下话题。</p>
+<h3 id="实际等待时间">实际等待时间</h3>
+<p>Spanner 将含有写操作的事务定义为读写事务。读写事务的写操作会以两阶段提交（2PC）的方式执行。有关 2PC 的内容在第 9 讲中已经介绍过，如果你已经记不清了，可以去复习一下。</p>
+<p>2PC 的第一阶段是预备阶段，每个参与者都会获取一个“预备时间戳”，与数据一起写入日志。第二阶段，协调节点写入日志时需要一个“提交时间戳”，而它必须要大于任何参与者的“预备时间戳”。所以，协调节点调用 TT.now() 函数后，要取该时间区间的 lastest 值（记为 s），而且 s 必须大于所有参与者的“预备时间戳”，作为“提交时间戳”。</p>
+<p>这样，事务从拿到提交时间戳到 TT.after(s) 为 true，实际等待了两个单位的时间误差。我们还是画图来解释一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/6f78dab7b77215fecf3ee12266a88538.png" alt=""></p>
+<p>针对同一个数据项，事务 T8 和 T9 分别对进行写入和读取操作。T8 在绝对时间 100ms 的时候，调用 TT.now() 函数，得到一个时间区间 [99,103]，选择最大值 103 作为提交时间戳，而后等待 8 毫秒（即 2ɛ）后提交。</p>
+<p>这样，无论如何 T9 事务启动时间都晚于 T8 的“提交时间戳”，也就能读取到 T8 的更新。</p>
+<p>回顾一下这个过程，第一个时间差是 2PC 带来的，如果换成其他事务模型也许可以避免，而第二个时间差是真正的 commit-wait，来自时间的不确定性，是不能避免的。</p>
+<p>TrueTime 的平均误差是 4 毫秒，commit-wait 需要等待两个周期，那 Spanner 读写事务的平均延迟必然大于等于 8 毫秒。为啥有人会说 Spanner 的 TPS 是 125 呢？原因就是这个了。其实，这只是事务操作数据出现重叠时的吞吐量，而无关的读写事务是可以并行处理的。</p>
+<p>对数据库来说，8 毫秒的延迟虽然不能说短，但对多数场景来说还是能接受的。可是，TrueTime 是 Google 的独门招式，其他分布式数据库怎么办呢？它们的时间误差远大于 8 毫秒，难道也用 commit-wait，那一定是灾难啊！</p>
+<p>这就要说到第二种方式，读等待。</p>
+<h2 id="读等待cockroachdb">读等待：CockroachDB</h2>
+<p>读等待的代表产品是 CockroachDB。</p>
+<p>因为 CockroachDB 采用混合逻辑时钟（HLC），所以对于没有直接关联的事务，只能用物理时钟比较先后关系。CockroachDB 各节点的物理时钟使用 NTP 机制同步，误差在几十至几百毫秒之间，用户可以基于网络情况通过参数”maximum clock offset”设置这个误差，默认配置是 250 毫秒。</p>
+<p>写等待模式下，所有包含写操作的事务都受到影响，要延后提交；而读等待只在特殊条件下才被触发，影响的范围要小得多。</p>
+<p>那到底是什么特殊条件呢？我们还是使用开篇的那个例子来说明。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/b3360314eaa66577c0753c81c05b9339.png" alt=""></p>
+<p>事务 T6 启动获得了一个时间戳 T6-S1，此时虽然事务 T2 已经在 T2-C 提交，但 T2-C 与 T6-S1 的间隔小于集群的时间偏移量，所以无法判断 T6 的提交是否真的早于 T2。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/e59501764ee41bc82e874af3354a0d44.png" alt=""></p>
+<p>这时，CockroachDB 的办法是重启（Restart）读操作的事务，就是让 T6 获得一个更晚的时间戳 T6-S2，使得 T6-S2 与 T2-C 的间隔大于 offset，那么就能读取 T2 的写入了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/e2136300b94b98443e7fc0b2535c8bfd.png" alt=""></p>
+<p>不过，接下来又出现更复杂的情况，T6-S2 与 T3 的提交时间戳 T3-C 间隔太近，又落入了 T3 的不确定时间窗口，所以 T6 事务还需要再次重启。而 T3 之后，T6 还要重启越过 T4 的不确定时间窗口。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/8af1f9e253e19907ffa23333ad10a067.png" alt=""></p>
+<p>最后，当 T6 拿到时间戳 T6-S4 后，终于跳过了所有不确定时间窗口，读等待过程到此结束，T6 可以正式开始它的工作了。</p>
+<p>在这个过程中，可以看到读等待的两个特点：一是偶发，只有当读操作与已提交事务间隔小于设置的时间误差时才会发生；二是等待时间的更长，因为事务在重启后可能落入下一个不确定时间窗口，所以也许需要经过多次重启。</p>
+<h2 id="小结">小结</h2>
+<p>到这里，今天的内容就告一段落了，时间误差的问题比较抽象，你可能会学得比较辛苦，让我帮你整理一下今天内容。</p>
+<ol>
+<li>时间误差是客观存在的，任何系统都不能获得准确的绝对时间，只能得到一个时间区间，差别仅在于有些系统承认这点，而有些系统不承认。</li>
+<li>有两种方式消除时间误差的影响，分别是写等待和读等待。写等待影响范围大，所有包含写操作的事务都要至少等待一个误差周期。读等待的影响范围小，只有当读操作时间戳与访问数据项的提交时间戳落入不确定时间窗口后才会触发，但读等待的周期可能更长，可能是数个误差周期。</li>
+<li>写等待适用于误差很小的系统，Spanner 能够将时间误差控制在 7 毫秒以内，所以有条件使用该方式。读等待适用于误差更大的系统，CockroachDB 对误差的预期达到 250 毫秒。</li>
+</ol>
+<p>总之，处理时间误差的方式就是等待，“waiting out the uncertainty”，等待不确定性过去。你可能觉得写等待和读等待都不完美，但这就是全球化部署的代价。我想你肯定会追问，那为什么要实现全球化部署呢？简单地说，全球化部署最突出的优势就是可以让所有节点都处于工作状态，就近服务客户；而缺失这种能力就只能把所有主副本限制在同机房或者同城机房的范围内，异地机房不具备真正的服务能力，这会带来资源浪费、用户体验下降、切换演练等一系列问题。我会在第 24 讲专门讨论全球化部署的问题。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/5700c14da4d56aa0f98e2736b2fe866c.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<p>最后，我要留给你一道思考题。</p>
+<p>今天，我们继续探讨了读写冲突的话题，在引入了时间误差后，整个处理过程变得更复杂了，而无论是“读等待”还是“写等待”都会让系统的性能明显下降。说到底是由多个独立时间源造成的，而多个时间源是为了支持全球化部署。那么，今天的问题就是，你觉得在什么情况下，不用“等待”也能达到线性一致性或因果一致性呢？</p>
+<p>欢迎你在评论区留言和我一起讨论，我会在答疑篇和你继续讨论这个问题。如果你身边的朋友也对时间误差下的读写冲突这个话题感兴趣，你也可以把今天这一讲分享给他，我们一起讨论。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%9330%E8%AE%B2/">分布式数据库30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86%E5%AE%9E%E6%88%9820%E8%AE%B2/12__%E9%AB%98%E6%95%88%E4%BC%9A%E8%AE%AE%E9%A1%B9%E7%9B%AE%E4%B8%AD%E8%A6%81%E5%BC%80%E5%A5%BD%E5%93%AA%E4%BA%9B%E4%BC%9A/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__高效会议：项目中要开好哪些会？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%B9%94%E6%96%B0%E4%BA%AE%E7%9A%84cto%E6%88%90%E9%95%BF%E5%A4%8D%E7%9B%98/12__%E7%AE%A1%E7%90%86%E6%88%98%E7%95%A5%E4%B8%8A%E7%9A%84%E8%81%9A%E7%84%A6%E5%92%8C%E6%94%BE%E5%BC%83%E6%9C%89%E8%88%8D%E6%89%8D%E6%9C%89%E5%BE%97/">
+            <span class="next-text nav-default">12__管理战略上的聚焦和放弃：有舍才有得</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

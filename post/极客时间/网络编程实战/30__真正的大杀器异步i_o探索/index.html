@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>30__真正的大杀器：异步I_O探索 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战的第 30 讲，欢迎回来。
+在性能篇的前几讲中，我们谈到了阻塞 I/O、非阻塞 I/O 以及像 select、poll、epoll 等 I/O 多路复用技术，并在此基础上结合线程技术，实现了以事件分发为核心的 reactor 反应堆模式。你或许还听说过一个叫做 Proactor 的网络事件驱动模式，这个 Proactor 模式和 reactor 模式到底有什么区别和联系呢？在今天的内容中，我们先讲述异步 I/O，再一起揭开以异步 I/O 为基础的 proactor 模式的面纱。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/30__%E7%9C%9F%E6%AD%A3%E7%9A%84%E5%A4%A7%E6%9D%80%E5%99%A8%E5%BC%82%E6%AD%A5i_o%E6%8E%A2%E7%B4%A2/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/30__%E7%9C%9F%E6%AD%A3%E7%9A%84%E5%A4%A7%E6%9D%80%E5%99%A8%E5%BC%82%E6%AD%A5i_o%E6%8E%A2%E7%B4%A2/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="30__真正的大杀器：异步I_O探索">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战的第 30 讲，欢迎回来。
+在性能篇的前几讲中，我们谈到了阻塞 I/O、非阻塞 I/O 以及像 select、poll、epoll 等 I/O 多路复用技术，并在此基础上结合线程技术，实现了以事件分发为核心的 reactor 反应堆模式。你或许还听说过一个叫做 Proactor 的网络事件驱动模式，这个 Proactor 模式和 reactor 模式到底有什么区别和联系呢？在今天的内容中，我们先讲述异步 I/O，再一起揭开以异步 I/O 为基础的 proactor 模式的面纱。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="30__真正的大杀器：异步I_O探索">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战的第 30 讲，欢迎回来。
+在性能篇的前几讲中，我们谈到了阻塞 I/O、非阻塞 I/O 以及像 select、poll、epoll 等 I/O 多路复用技术，并在此基础上结合线程技术，实现了以事件分发为核心的 reactor 反应堆模式。你或许还听说过一个叫做 Proactor 的网络事件驱动模式，这个 Proactor 模式和 reactor 模式到底有什么区别和联系呢？在今天的内容中，我们先讲述异步 I/O，再一起揭开以异步 I/O 为基础的 proactor 模式的面纱。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3880">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="30__真正的大杀器：异步I_O探索">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战的第 30 讲，欢迎回来。
+在性能篇的前几讲中，我们谈到了阻塞 I/O、非阻塞 I/O 以及像 select、poll、epoll 等 I/O 多路复用技术，并在此基础上结合线程技术，实现了以事件分发为核心的 reactor 反应堆模式。你或许还听说过一个叫做 Proactor 的网络事件驱动模式，这个 Proactor 模式和 reactor 模式到底有什么区别和联系呢？在今天的内容中，我们先讲述异步 I/O，再一起揭开以异步 I/O 为基础的 proactor 模式的面纱。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">30__真正的大杀器：异步I_O探索</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3880 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#阻塞--非阻塞-vs-同步--异步">阻塞 / 非阻塞 VS 同步 / 异步</a></li>
+        <li><a href="#aio_read-和-aio_write-的用法">aio_read 和 aio_write 的用法</a></li>
+        <li><a href="#linux-下-socket-套接字的异步支持">Linux 下 socket 套接字的异步支持</a></li>
+        <li><a href="#windows-下的-iocp-和-proactor-模式">Windows 下的 IOCP 和 Proactor 模式</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战的第 30 讲，欢迎回来。</p>
+<p>在性能篇的前几讲中，我们谈到了阻塞 I/O、非阻塞 I/O 以及像 select、poll、epoll 等 I/O 多路复用技术，并在此基础上结合线程技术，实现了以事件分发为核心的 reactor 反应堆模式。你或许还听说过一个叫做 Proactor 的网络事件驱动模式，这个 Proactor 模式和 reactor 模式到底有什么区别和联系呢？在今天的内容中，我们先讲述异步 I/O，再一起揭开以异步 I/O 为基础的 proactor 模式的面纱。</p>
+<h2 id="阻塞--非阻塞-vs-同步--异步">阻塞 / 非阻塞 VS 同步 / 异步</h2>
+<p>尽管在前面的课程中，多少都涉及到了阻塞、非阻塞、同步、异步的概念，但为了避免看见这些概念一头雾水，今天，我们就先来梳理一下这几个概念。</p>
+<p>第一种是阻塞 I/O。阻塞 I/O 发起的 read 请求，线程会被挂起，一直等到内核数据准备好，并把数据从内核区域拷贝到应用程序的缓冲区中，当拷贝过程完成，read 请求调用才返回。接下来，应用程序就可以对缓冲区的数据进行数据解析。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/e36815e25d6f50d7e14850a4a3dc3fb9.png" alt=""><br>
+第二种是非阻塞 I/O。非阻塞的 read 请求在数据未准备好的情况下立即返回，应用程序可以不断轮询内核，直到数据准备好，内核将数据拷贝到应用程序缓冲，并完成这次 read 调用。注意，这里最后一次 read 调用，获取数据的过程，<strong>是一个同步的过程。这里的同步指的是内核区域的数据拷贝到缓存区这个过程。</strong></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/03b8b20810e27b68ef4a98370fec8a0f.png" alt=""><br>
+每次让应用程序去轮询内核的 I/O 是否准备好，是一个不经济的做法，因为在轮询的过程中应用进程啥也不能干。于是，像 select、poll 这样的 I/O 多路复用技术就隆重登场了。通过 I/O 事件分发，当内核数据准备好时，再通知应用程序进行操作。这个做法大大改善了应用进程对 CPU 的利用率，在没有被通知的情况下，应用进程可以使用 CPU 做其他的事情。</p>
+<p>注意，这里 read 调用，获取数据的过程，<strong>也是一个同步的过程。</strong></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/7d3018244d128e18c0321fc00839858a.png" alt=""><br>
+第一种阻塞 I/O 我想你已经比较了解了，在阻塞 I/O 的情况下，应用程序会被挂起，直到获取数据。第二种非阻塞 I/O 和第三种基于非阻塞 I/O 的多路复用技术，获取数据的操作不会被阻塞。</p>
+<p>无论是第一种阻塞 I/O，还是第二种非阻塞 I/O，第三种基于非阻塞 I/O 的多路复用都是<strong>同步调用技术。为什么这么说呢？因为同步调用、异步调用的说法，是对于获取数据的过程而言的，前面几种最后获取数据的 read 操作调用，都是同步的，在 read 调用时，内核将数据从内核空间拷贝到应用程序空间，这个过程是在 read 函数中同步进行的，如果内核实现的拷贝效率很差，read 调用就会在这个同步过程中消耗比较长的时间。</strong></p>
+<p>而真正的异步调用则不用担心这个问题，我们接下来就来介绍第四种 I/O 技术，当我们发起 aio_read 之后，就立即返回，内核自动将数据从内核空间拷贝到应用程序空间，这个拷贝过程是异步的，内核自动完成的，和前面的同步操作不一样，应用程序并不需要主动发起拷贝动作。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/003207972beed9ef5e9a925de8f0e37d.png" alt=""><br>
+还记得<a href="./141573.md">第 22</a><a href="./141573.md">讲</a>中讲到的去书店买书的例子吗？基于这个例子，针对以上的场景，我们可以这么理解。</p>
+<p>第一种阻塞 I/O 就是你去了书店，告诉老板你想要某本书，然后你就一直在那里等着，直到书店老板翻箱倒柜找到你想要的书。</p>
+<p>第二种非阻塞 I/O 类似于你去了书店，问老板有没有一本书，老板告诉你没有，你就离开了。一周以后，你又来这个书店，再问这个老板，老板一查，有了，于是你买了这本书。</p>
+<p>第三种基于非阻塞的 I/O 多路复用，你来到书店告诉老板：“老板，到货给我打电话吧，我再来付钱取书。”</p>
+<p>第四种异步 I/O 就是你连去书店取书的过程也想省了，你留下地址，付了书费，让老板到货时寄给你，你直接在家里拿到就可以看了。</p>
+<p>这里放置了一张表格，总结了以上几种 I/O 模型。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/1b40f80f778dc96b9d6c6885c18d9c75.png" alt=""></p>
+<h2 id="aio_read-和-aio_write-的用法">aio_read 和 aio_write 的用法</h2>
+<p>听起来，异步 I/O 有一种高大上的感觉。其实，异步 I/O 用起来倒是挺简单的。下面我们看一下一个具体的例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">#include &#34;lib/common.h&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">#include &lt;aio.h&gt;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="ne">int</span> <span class="n">BUF_SIZE</span> <span class="o">=</span> <span class="mi">512</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="ne">int</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">err</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">result_size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">创建一个临时文件</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">char</span> <span class="n">tmpname</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">snprintf</span><span class="p">(</span><span class="n">tmpname</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">tmpname</span><span class="p">),</span> <span class="s2">&#34;/tmp/aio_test_</span><span class="si">%d</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">getpid</span><span class="p">());</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">unlink</span><span class="p">(</span><span class="n">tmpname</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">tmpname</span><span class="p">,</span> <span class="n">O_CREAT</span> <span class="o">|</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_EXCL</span><span class="p">,</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">error</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">errno</span><span class="p">,</span> <span class="s2">&#34;open file failed &#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">BUF_SIZE</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">struct</span> <span class="n">aiocb</span> <span class="n">aiocb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">初始化</span> <span class="n">buf</span> <span class="err">缓冲，写入的数据应该为</span> <span class="mh">0xfafa</span> <span class="err">这样的，</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">memset</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mh">0xfa</span><span class="p">,</span> <span class="n">BUF_SIZE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">aiocb</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">struct</span> <span class="n">aiocb</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">aiocb</span><span class="o">.</span><span class="n">aio_fildes</span> <span class="o">=</span> <span class="n">fd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">aiocb</span><span class="o">.</span><span class="n">aio_buf</span> <span class="o">=</span> <span class="n">buf</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">aiocb</span><span class="o">.</span><span class="n">aio_nbytes</span> <span class="o">=</span> <span class="n">BUF_SIZE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">开始写</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">aio_write</span><span class="p">(</span><span class="o">&amp;</span><span class="n">aiocb</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34; Error at aio_write(): </span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">因为是异步的，需要判断什么时候写完</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">aio_error</span><span class="p">(</span><span class="o">&amp;</span><span class="n">aiocb</span><span class="p">)</span> <span class="o">==</span> <span class="n">EINPROGRESS</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;writing... </span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">判断写入的是否正确</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">err</span> <span class="o">=</span> <span class="n">aio_error</span><span class="p">(</span><span class="o">&amp;</span><span class="n">aiocb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">result_size</span> <span class="o">=</span> <span class="n">aio_return</span><span class="p">(</span><span class="o">&amp;</span><span class="n">aiocb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">result_size</span> <span class="o">!=</span> <span class="n">BUF_SIZE</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34; aio_write failed() : </span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">下面准备开始读数据</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">char</span> <span class="n">buffer</span><span class="p">[</span><span class="n">BUF_SIZE</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">struct</span> <span class="n">aiocb</span> <span class="n">cb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">cb</span><span class="o">.</span><span class="n">aio_nbytes</span> <span class="o">=</span> <span class="n">BUF_SIZE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">cb</span><span class="o">.</span><span class="n">aio_fildes</span> <span class="o">=</span> <span class="n">fd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">cb</span><span class="o">.</span><span class="n">aio_offset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">cb</span><span class="o">.</span><span class="n">aio_buf</span> <span class="o">=</span> <span class="n">buffer</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">开始读数据</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">aio_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cb</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34; air_read failed() : </span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">因为是异步的，需要判断什么时候读完</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">aio_error</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cb</span><span class="p">)</span> <span class="o">==</span> <span class="n">EINPROGRESS</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;Reading... </span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">判断读是否成功</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="ne">int</span> <span class="n">numBytes</span> <span class="o">=</span> <span class="n">aio_return</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cb</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">numBytes</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;Success.</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">printf</span><span class="p">(</span><span class="s2">&#34;Error.</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="o">//</span> <span class="err">清理文件句柄</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个程序展示了如何使用 aio 系列函数来完成异步读写。主要用到的函数有:</p>
+<ul>
+<li>aio_write：用来向内核提交异步写操作；</li>
+<li>aio_read：用来向内核提交异步读操作；</li>
+<li>aio_error：获取当前异步操作的状态；</li>
+<li>aio_return：获取异步操作读、写的字节数。</li>
+</ul>
+<p>这个程序一开始使用 aio_write 方法向内核提交了一个异步写文件的操作。第 23-27 行是这个异步写操作的结构体。结构体 aiocb 是应用程序和操作系统内核传递的异步申请数据结构，这里我们使用了文件描述符、缓冲区指针 aio_buf 以及需要写入的字节数 aio_nbytes。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct aiocb {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   int       aio_fildes;       /* File descriptor */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   off_t     aio_offset;       /* File offset */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   volatile void  *aio_buf;     /* Location of buffer */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   size_t    aio_nbytes;       /* Length of transfer */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   int       aio_reqprio;      /* Request priority offset */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   struct sigevent    aio_sigevent;     /* Signal number and value */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   int       aio_lio_opcode;       /* Operation to be performed */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里我们用了一个 0xfa 的缓冲区，这在后面的演示中可以看到结果。</p>
+<p>30-34 行向系统内核申请了这个异步写操作，并且在 37-39 行查询异步动作的结果，当其结束时在 42-48 行判断写入的结果是否正确。</p>
+<p>紧接着，我们使用了 aio_read 从文件中读取这些数据。为此，我们准备了一个新的 aiocb 结构体，告诉内核需要把数据拷贝到 buffer 这个缓冲区中，和异步写一样，发起异步读之后在第 65-67 行一直查询异步读动作的结果。</p>
+<p>接下来运行这个程序，我们看到屏幕上打印出一系列的字符，显示了这个操作是有内核在后台帮我们完成的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">./aio01
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">writing... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Reading... 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Success.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>打开 /tmp 目录下的 aio_test_xxxx 文件，可以看到，这个文件成功写入了我们期望的数据。<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/05efb2de4f2b85ec5e5959b69a313ad6.png" alt=""><br>
+请注意，以上的读写，都不需要我们在应用程序里再发起调用，系统内核直接帮我们做好了。</p>
+<h2 id="linux-下-socket-套接字的异步支持">Linux 下 socket 套接字的异步支持</h2>
+<p>aio 系列函数是由 POSIX 定义的异步操作接口，可惜的是，Linux 下的 aio 操作，不是真正的操作系统级别支持的，它只是由 GNU libc 库函数在用户空间借由 pthread 方式实现的，而且仅仅针对磁盘类 I/O，套接字 I/O 不支持。</p>
+<p>也有很多 Linux 的开发者尝试在操作系统内核中直接支持 aio，例如一个叫做 Ben LaHaise 的人，就将 aio 实现成功 merge 到 2.5.32 中，这部分能力是作为 patch 存在的，但是，它依旧不支持套接字。</p>
+<p>Solaris 倒是有真正的系统系别的 aio，不过还不是很确定它在套接字上的性能表现，特别是和磁盘 I/O 相比效果如何。</p>
+<p>综合以上结论就是，Linux 下对异步操作的支持非常有限，这也是为什么使用 epoll 等多路分发技术加上非阻塞 I/O 来解决 Linux 下高并发高性能网络 I/O 问题的根本原因。</p>
+<h2 id="windows-下的-iocp-和-proactor-模式">Windows 下的 IOCP 和 Proactor 模式</h2>
+<p>和 Linux 不同，Windows 下实现了一套完整的支持套接字的异步编程接口，这套接口一般被叫做 IOCompletetionPort(IOCP)。</p>
+<p>这样，就产生了基于 IOCP 的所谓 Proactor 模式。</p>
+<p>和 Reactor 模式一样，Proactor 模式也存在一个无限循环运行的 event loop 线程，但是不同于 Reactor 模式，这个线程并不负责处理 I/O 调用，它只是负责在对应的 read、write 操作完成的情况下，分发完成事件到不同的处理函数。</p>
+<p>这里举一个 HTTP 服务请求的例子来说明：</p>
+<ol>
+<li>客户端发起一个 GET 请求；</li>
+<li>这个 GET 请求对应的字节流被内核读取完成，内核将这个完成事件放置到一个队列中；</li>
+<li>event loop 线程，也就是 Poractor 从这个队列里获取事件，根据事件类型，分发到不同的处理函数上，比如一个 http handle 的 onMessage 解析函数；</li>
+<li>HTTP request 解析函数完成报文解析；</li>
+<li>业务逻辑处理，比如读取数据库的记录；</li>
+<li>业务逻辑处理完成，开始 encode，完成之后，发起一个异步写操作；</li>
+<li>这个异步写操作被内核执行，完成之后这个异步写操作被放置到内核的队列中；</li>
+<li>Proactor 线程获取这个完成事件，分发到 HTTP handler 的 onWriteCompled 方法执行。</li>
+</ol>
+<p>从这个例子可以看出，由于系统内核提供了真正的“异步”操作，Proactor 不会再像 Reactor 一样，每次感知事件后再调用 read、write 方法完成数据的读写，它只负责感知事件完成，并由对应的 handler 发起异步读写请求，I/O 读写操作本身是由系统内核完成的。和前面看到的 aio 的例子一样，这里需要传入数据缓冲区的地址等信息，这样，系统内核才可以自动帮我们把数据的读写工作完成。</p>
+<p>无论是 Reactor 模式，还是 Proactor 模式，都是一种基于事件分发的网络编程模式。<strong>Reactor 模式是基于待完成的 I/O 事件，而 Proactor 模式则是基于已完成的 I/O 事件</strong>，两者的本质，都是借由事件分发的思想，设计出可兼容、可扩展、接口友好的一套程序框架。</p>
+<h2 id="总结">总结</h2>
+<p>和同步 I/O 相比，异步 I/O 的读写动作由内核自动完成，不过，在 Linux 下目前仅仅支持简单的基于本地文件的 aio 异步操作，这也使得我们在编写高性能网络程序时，首选 Reactor 模式，借助 epoll 这样的 I/O 分发技术完成开发；而 Windows 下的 IOCP 则是一种异步 I/O 的技术，并由此产生了和 Reactor 齐名的 Proactor 模式，借助这种模式，可以完成 Windows 下高性能网络程序设计。</p>
+<h2 id="思考题">思考题</h2>
+<p>和往常一样，给大家布置两道思考题：</p>
+<ol>
+<li>你可以查一查 Linux 的资料，看看为了在内核层面支持完全的异步 I/O，Linux 的世界里都发生了什么？</li>
+<li>在例子程序里，aio_error 一直处于占用 CPU 轮询异步操作的状态，有没有别的方法可以改进一下，比如挂起调用者、设置超时时间等？</li>
+</ol>
+<p>欢迎你在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流进步一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/30__%E6%80%8E%E4%B9%88%E9%87%8D%E8%AE%BE%E6%B6%88%E8%B4%B9%E8%80%85%E7%BB%84%E4%BD%8D%E7%A7%BB/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">30__怎么重设消费者组位移？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/30__%E8%A3%85%E9%A5%B0%E5%99%A8%E6%A8%A1%E5%BC%8F%E5%A6%82%E4%BD%95%E4%BC%98%E5%8C%96%E7%94%B5%E5%95%86%E7%B3%BB%E7%BB%9F%E4%B8%AD%E5%A4%8D%E6%9D%82%E7%9A%84%E5%95%86%E5%93%81%E4%BB%B7%E6%A0%BC%E7%AD%96%E7%95%A5/">
+            <span class="next-text nav-default">30__装饰器模式：如何优化电商系统中复杂的商品价格策略？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

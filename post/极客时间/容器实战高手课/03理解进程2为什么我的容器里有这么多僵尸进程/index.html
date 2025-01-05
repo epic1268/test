@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>03｜理解进程（2）：为什么我的容器里有这么多僵尸进程？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。今天我们来聊一聊容器里僵尸进程这个问题。
+说起僵尸进程，相信你并不陌生。很多面试官经常会问到这个知识点，用来考察候选人的操作系统背景。通过这个问题，可以了解候选人对 Linux 进程管理和信号处理这些基础知识的理解程度，他的基本功扎不扎实。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/03%E7%90%86%E8%A7%A3%E8%BF%9B%E7%A8%8B2%E4%B8%BA%E4%BB%80%E4%B9%88%E6%88%91%E7%9A%84%E5%AE%B9%E5%99%A8%E9%87%8C%E6%9C%89%E8%BF%99%E4%B9%88%E5%A4%9A%E5%83%B5%E5%B0%B8%E8%BF%9B%E7%A8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/03%E7%90%86%E8%A7%A3%E8%BF%9B%E7%A8%8B2%E4%B8%BA%E4%BB%80%E4%B9%88%E6%88%91%E7%9A%84%E5%AE%B9%E5%99%A8%E9%87%8C%E6%9C%89%E8%BF%99%E4%B9%88%E5%A4%9A%E5%83%B5%E5%B0%B8%E8%BF%9B%E7%A8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="03｜理解进程（2）：为什么我的容器里有这么多僵尸进程？">
+  <meta property="og:description" content="你好，我是程远。今天我们来聊一聊容器里僵尸进程这个问题。
+说起僵尸进程，相信你并不陌生。很多面试官经常会问到这个知识点，用来考察候选人的操作系统背景。通过这个问题，可以了解候选人对 Linux 进程管理和信号处理这些基础知识的理解程度，他的基本功扎不扎实。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="03｜理解进程（2）：为什么我的容器里有这么多僵尸进程？">
+  <meta itemprop="description" content="你好，我是程远。今天我们来聊一聊容器里僵尸进程这个问题。
+说起僵尸进程，相信你并不陌生。很多面试官经常会问到这个知识点，用来考察候选人的操作系统背景。通过这个问题，可以了解候选人对 Linux 进程管理和信号处理这些基础知识的理解程度，他的基本功扎不扎实。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4462">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="03｜理解进程（2）：为什么我的容器里有这么多僵尸进程？">
+  <meta name="twitter:description" content="你好，我是程远。今天我们来聊一聊容器里僵尸进程这个问题。
+说起僵尸进程，相信你并不陌生。很多面试官经常会问到这个知识点，用来考察候选人的操作系统背景。通过这个问题，可以了解候选人对 Linux 进程管理和信号处理这些基础知识的理解程度，他的基本功扎不扎实。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">03｜理解进程（2）：为什么我的容器里有这么多僵尸进程？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4462 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题再现">问题再现</a></li>
+      </ul>
+    </li>
+    <li><a href="#docker-run---name-zombie-proc--d-registryzombie-procv1">docker run &ndash;name zombie-proc -d registry/zombie-proc:v1</a></li>
+    <li><a href="#docker-exec--it-zombie-proc-bash">docker exec -it zombie-proc bash</a></li>
+    <li><a href="#ps-aux">ps aux</a></li>
+    <li><a href="#top">top</a>
+      <ul>
+        <li><a href="#知识详解">知识详解</a>
+          <ul>
+            <li><a href="#linux-的进程状态">Linux 的进程状态</a></li>
+            <li><a href="#限制容器中进程数目">限制容器中进程数目</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#pwd">pwd</a></li>
+    <li><a href="#df-">df ./</a></li>
+    <li><a href="#docker-ps">docker ps</a></li>
+    <li><a href="#pwd-1">pwd</a></li>
+    <li><a href="#ls">ls</a></li>
+    <li><a href="#echo-1002--pidsmax">echo 1002 &gt; pids.max</a></li>
+    <li><a href="#cat-pidsmax">cat pids.max</a>
+      <ul>
+        <li><a href="#解决问题">解决问题</a></li>
+      </ul>
+    </li>
+    <li><a href="#cat-proc6cmdline">cat /proc/6/cmdline</a></li>
+    <li><a href="#cat-proc6smaps">cat /proc/6/smaps</a></li>
+    <li><a href="#cat-proc6maps">cat /proc/6/maps</a></li>
+    <li><a href="#ls-proc6fd">ls /proc/6/fd</a></li>
+    <li><a href="#kill--15-6">kill -15 6</a></li>
+    <li><a href="#kill--9-6">kill -9 6</a></li>
+    <li><a href="#ps--ef--grep-6">ps -ef | grep 6</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#on-host">On host</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#docker-ps-1">docker ps</a></li>
+    <li><a href="#pwd-2">pwd</a></li>
+    <li><a href="#cat-pidsmax-1">cat pids.max</a></li>
+    <li><a href="#cat-pidscurrent">cat pids.current</a>
+      <ul>
+        <li>
+          <ul>
+            <li><a href="#on-container">On Container</a></li>
+          </ul>
+        </li>
+        <li><a href="#重点总结">重点总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。今天我们来聊一聊容器里僵尸进程这个问题。</p>
+<p>说起僵尸进程，相信你并不陌生。很多面试官经常会问到这个知识点，用来考察候选人的操作系统背景。通过这个问题，可以了解候选人对 Linux 进程管理和信号处理这些基础知识的理解程度，他的基本功扎不扎实。</p>
+<p>所以，今天我们就一起来看看容器里为什么会产生僵尸进程，然后去分析如何怎么解决。</p>
+<p>通过这一讲，你就会对僵尸进程的产生原理有一个清晰的认识，也会更深入地理解容器 init 进程的特性。</p>
+<h2 id="问题再现">问题再现</h2>
+<p>我们平时用容器的时候，有的同学会发现，自己的容器运行久了之后，运行 ps 命令会看到一些进程，进程名后面加了 <defunct> 标识。那么你自然会有这样的疑问，这些是什么进程呢？</p>
+<p>你可以自己做个容器镜像来模拟一下，我们先下载这个例子，运行 <code>make image</code> 之后，再启动容器。</p>
+<p>在容器里我们可以看到，1 号进程 fork 出 1000 个子进程。当这些子进程运行结束后，它们的进程名字后面都加了标识。</p>
+<p>从它们的 Z stat（进程状态）中我们可以知道，这些都是僵尸进程（Zombie Process）。运行 top 命令，我们也可以看到输出的内容显示有 <code>1000 zombie</code> 进程。</p>
+<h1 id="docker-run---name-zombie-proc--d-registryzombie-procv1">docker run &ndash;name zombie-proc -d registry/zombie-proc:v1</h1>
+<p>02dec161a9e8b18922bd3599b922dbd087a2ad60c9b34afccde7c91a463bde8a</p>
+<h1 id="docker-exec--it-zombie-proc-bash">docker exec -it zombie-proc bash</h1>
+<h1 id="ps-aux">ps aux</h1>
+<p>USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND<br>
+root         1  0.0  0.0   4324  1436 ?        Ss   01:23   0:00 /app-test 1000<br>
+root         6  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root         7  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root         8  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root         9  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root        10  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct></p>
+<p>…</p>
+<p>root       999  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1000  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1001  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1002  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1003  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1004  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1005  0.0  0.0      0     0 ?        Z    01:23   0:00 [app-test] <defunct><br>
+root      1023  0.0  0.0  12020  3392 pts/0    Ss   01:39   0:00 bash</p>
+<h1 id="top">top</h1>
+<p>top - 02:18:57 up 31 days, 15:17,  0 users,  load average: 0.00, 0.01, 0.00<br>
+Tasks: 1003 total,   1 running,   2 sleeping,   0 stopped, 1000 zombie<br>
+…</p>
+<p>那么问题来了，什么是僵尸进程？它们是怎么产生的？僵尸进程太多会导致什么问题？想要回答这些问题，我们就要从进程状态的源头学习，看看僵尸进程到底处于进程整个生命周期里的哪一环。</p>
+<h2 id="知识详解">知识详解</h2>
+<h3 id="linux-的进程状态">Linux 的进程状态</h3>
+<p>无论进程还是线程，在 Linux 内核里其实都是用 <strong>task_struct{}这个结构</strong>来表示的。它其实就是任务（task），也就是 Linux 里基本的调度单位。为了方便讲解，我们在这里暂且称它为进程。</p>
+<p>那一个进程从创建（fork）到退出（exit），这个过程中的状态转化还是很简单的。</p>
+<p>下面这个图是《Linux Kernel Development》这本书里的 Linux 进程状态转化图。</p>
+<p>我们从这张图中可以看出来，在进程“活着”的时候就只有两个状态：运行态（TASK_RUNNING）和睡眠态（TASK_INTERRUPTIBLE，TASK_UNINTERRUPTIBLE）。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/19ff7857b6ab8570f638ed5378840ec3.png" alt=""></p>
+<p>那运行态和睡眠态这两种状态分别是什么意思呢？</p>
+<p>运行态的意思是，无论进程是正在运行中（也就是获得了 CPU 资源），还是进程在 run queue 队列里随时可以运行，都处于这个状态。</p>
+<p>我们想要查看进程是不是处于运行态，其实也很简单，比如使用 ps 命令，可以看到处于这个状态的进程显示的是 R stat。</p>
+<p>睡眠态是指，进程需要等待某个资源而进入的状态，要等待的资源可以是一个信号量（Semaphore）, 或者是磁盘 I/O，这个状态的进程会被放入到 wait queue 队列里。</p>
+<p>这个睡眠态具体还包括两个子状态：一个是可以被打断的（TASK_INTERRUPTIBLE），我们用 ps 查看到的进程，显示为 S stat。还有一个是不可被打断的（TASK_UNINTERRUPTIBLE），用 ps 查看进程，就显示为 D stat。</p>
+<p>这两个子状态，我们在后面的课程里碰到新的问题时，会再做详细介绍，这里你只要知道这些就行了。</p>
+<p>除了上面进程在活的时候的两个状态，进程在调用 do_exit() 退出的时候，还有两个状态。</p>
+<p>一个是 EXIT_DEAD，也就是进程在真正结束退出的那一瞬间的状态；第二个是 <strong>EXIT_ZOMBIE 状态，这是进程在 EXIT_DEAD 前的一个状态，而我们今天讨论的僵尸进程，也就是处于这个状态中。</strong></p>
+<h3 id="限制容器中进程数目">限制容器中进程数目</h3>
+<p>理解了 Linux 进程状态之后，我们还需要知道，在 Linux 系统中怎么限制进程数目。因为弄清楚这个问题，我们才能更深入地去理解僵尸进程的危害。</p>
+<p>一台 Linux 机器上的进程总数目是有限制的。如果超过这个最大值，那么系统就无法创建出新的进程了，比如你想 SSH 登录到这台机器上就不行了。</p>
+<p>这个最大值可以我们在 /proc/sys/kernel/pid_max 这个参数中看到。</p>
+<p>Linux 内核在初始化系统的时候，会根据机器 CPU 的数目来设置 pid_max 的值。</p>
+<p>比如说，如果机器中 CPU 数目小于等于 32，那么 pid_max 就会被设置为 32768（32K）；如果机器中的 CPU 数目大于 32，那么 pid_max 就被设置为 N*1204（N 就是 CPU 数目）。</p>
+<p>对于 Linux 系统而言，容器就是一组进程的集合。如果容器中的应用创建过多的进程或者出现 bug，就会产生类似 fork bomb 的行为。</p>
+<p>这个 fork bomb 就是指在计算机中，通过不断建立新进程来消耗系统中的进程资源，它是一种黑客攻击方式。这样，容器中的进程数就会把整个节点的可用进程总数给消耗完。</p>
+<p>这样，不但会使同一个节点上的其他容器无法工作，还会让宿主机本身也无法工作。所以对于每个容器来说，我们都需要限制它的最大进程数目，而这个功能由 pids Cgroup 这个子系统来完成。</p>
+<p>而这个功能的实现方法是这样的：pids Cgroup 通过 Cgroup 文件系统的方式向用户提供操作接口，一般它的 Cgroup 文件系统挂载点在 /sys/fs/cgroup/pids。</p>
+<p>在一个容器建立之后，创建容器的服务会在 /sys/fs/cgroup/pids 下建立一个子目录，就是一个控制组，控制组里<strong>最关键的一个文件就是 pids.max</strong>。我们可以向这个文件写入数值，而这个值就是这个容器中允许的最大进程数目。</p>
+<p>我们对这个值做好限制，容器就不会因为创建出过多进程而影响到其他容器和宿主机了。思路讲完了，接下来我们就实际上手试一试。</p>
+<p>下面是对一个 Docker 容器的 pids Cgroup 的操作，你可以跟着操作一下。</p>
+<h1 id="pwd">pwd</h1>
+<p>/sys/fs/cgroup/pids</p>
+<h1 id="df-">df ./</h1>
+<p>Filesystem     1K-blocks  Used Available Use% Mounted on<br>
+cgroup                 0     0         0    - /sys/fs/cgroup/pids</p>
+<h1 id="docker-ps">docker ps</h1>
+<p>CONTAINER ID        IMAGE                      COMMAND                  CREATED             STATUS              PORTS               NAMES<br>
+7ecd3aa7fdc1        registry/zombie-proc:v1   &ldquo;/app-test 1000&rdquo;         37 hours ago        Up 37 hours                             frosty_yalow</p>
+<h1 id="pwd-1">pwd</h1>
+<p>/sys/fs/cgroup/pids/system.slice/docker-7ecd3aa7fdc15a1e183813b1899d5d939beafb11833ad6c8b0432536e5b9871c.scope</p>
+<h1 id="ls">ls</h1>
+<p>cgroup.clone_children  cgroup.procs  notify_on_release  pids.current  pids.events  pids.max  tasks</p>
+<h1 id="echo-1002--pidsmax">echo 1002 &gt; pids.max</h1>
+<h1 id="cat-pidsmax">cat pids.max</h1>
+<p>1002</p>
+<h2 id="解决问题">解决问题</h2>
+<p>刚才我给你解释了两个基本概念，进程状态和进程数目限制，那我们现在就可以解决容器中的僵尸进程问题了。</p>
+<p>在前面 Linux 进程状态的介绍里，我们知道了，僵尸进程是 Linux 进程退出状态的一种。</p>
+<p>从内核进程的 do_exit() 函数我们也可以看到，这时候进程 task_struct 里的 mm/shm/sem/files 等文件资源都已经释放了，只留下了一个 stask_struct instance 空壳。</p>
+<p>就像下面这段代码显示的一样，从进程对应的 /proc/<pid> 文件目录下，我们也可以看出来，对应的资源都已经没有了。</p>
+<h1 id="cat-proc6cmdline">cat /proc/6/cmdline</h1>
+<h1 id="cat-proc6smaps">cat /proc/6/smaps</h1>
+<h1 id="cat-proc6maps">cat /proc/6/maps</h1>
+<h1 id="ls-proc6fd">ls /proc/6/fd</h1>
+<p>并且，这个进程也已经不响应任何的信号了，无论 SIGTERM(15) 还是 SIGKILL(9)。例如上面 pid 6 的僵尸进程，这两个信号都已经被响应了。</p>
+<h1 id="kill--15-6">kill -15 6</h1>
+<h1 id="kill--9-6">kill -9 6</h1>
+<h1 id="ps--ef--grep-6">ps -ef | grep 6</h1>
+<p>root         6     1  0 13:59 ?        00:00:00 [app-test] <defunct></p>
+<p>当多个容器运行在同一个宿主机上的时候，为了避免一个容器消耗完我们整个宿主机进程号资源，我们会配置 pids Cgroup 来限制每个容器的最大进程数目。也就是说，进程数目在每个容器中也是有限的，是一种很宝贵的资源。</p>
+<p>既然进程号资源在宿主机上是有限的，显然残留的僵尸进程多了以后，给系统带来最大问题就是它占用了进程号。<strong>这就意味着，残留的僵尸进程，在容器里仍然占据着进程号资源，很有可能会导致新的进程不能运转。</strong></p>
+<p>这里我再次借用开头的那个例子，也就是一个产生了 1000 个僵尸进程的容器，带你理解一下这个例子中进程数的上限。我们可以看一下，1 个 init 进程 +1000 个僵尸进程 +1 个 bash 进程，总共就是 1002 个进程。</p>
+<p>如果 pids Cgroup 也限制了这个容器的最大进程号的数量，限制为 1002 的话，我们在 pids Cgroup 里可以看到，pids.current == pids.max，也就是已经达到了容器进程号数的上限。</p>
+<p>这时候，如果我们在容器里想再启动一个进程，例如运行一下 ls 命令，就会看到 <code>Resource temporarily unavailable</code> 的错误消息。已经退出的无用进程，却阻碍了有用进程的启动，显然这样是不合理的。</p>
+<p>具体代码如下：</p>
+<h3 id="on-host">On host</h3>
+<h1 id="docker-ps-1">docker ps</h1>
+<p>CONTAINER ID        IMAGE                      COMMAND             CREATED             STATUS              PORTS               NAMES<br>
+09e6e8e16346        registry/zombie-proc:v1   &ldquo;/app-test 1000&rdquo;    29 minutes ago      Up 29 minutes                           peaceful_ritchie</p>
+<h1 id="pwd-2">pwd</h1>
+<p>/sys/fs/cgroup/pids/system.slice/docker-09e6e8e1634612580a03dd3496d2efed2cf2a510b9688160b414ce1d1ea3e4ae.scope</p>
+<h1 id="cat-pidsmax-1">cat pids.max</h1>
+<p>1002</p>
+<h1 id="cat-pidscurrent">cat pids.current</h1>
+<p>1002</p>
+<h3 id="on-container">On Container</h3>
+<p>[root@09e6e8e16346 /]# ls<br>
+bash: fork: retry: Resource temporarily unavailable<br>
+bash: fork: retry: Resource temporarily unavailable</p>
+<p>所以，接下来我们还要看看这些僵尸进程到底是怎么产生的。因为只有理解它的产生机制，我们才能想明白怎么避免僵尸进程的出现。</p>
+<p>我们先看一下刚才模拟僵尸进程的那段小程序。这段程序里，<strong>父进程在创建完子进程之后就不管了，这就是造成子进程变成僵尸进程的原因。</strong></p>
+<p>#include &lt;stdio.h&gt;<br>
+#include &lt;stdlib.h&gt;<br>
+#include &lt;sys/types.h&gt;<br>
+#include &lt;sys/wait.h&gt;<br>
+#include &lt;unistd.h&gt;</p>
+<p>int main(int argc, char *argv[])<br>
+{<br>
+int i;<br>
+int total;</p>
+<pre><code>   if (argc &lt; 2) {  
+          total = 1;  
+   } else {  
+          total = atoi(argv[1]);  
+   }  
+
+   printf(&quot;To create %d processes\n&quot;, total);  
+
+   for (i = 0; i &lt; total; i++) {  
+          pid_t pid = fork();  
+
+          if (pid == 0) {  
+                  printf(&quot;Child =&gt; PPID: %d PID: %d\n&quot;, getppid(),  
+                         getpid());  
+                  sleep(60);  
+                  printf(&quot;Child process exits\n&quot;);  
+                  exit(EXIT_SUCCESS);  
+          } else if (pid &gt; 0) {  
+                  printf(&quot;Parent created child %d\n&quot;, i);  
+          } else {  
+                  printf(&quot;Unable to create child process. %d\n&quot;, i);  
+                  break;  
+          }  
+   }  
+
+   printf(&quot;Paraent is sleeping\n&quot;);  
+   while (1) {  
+          sleep(100);  
+   }  
+
+   return EXIT_SUCCESS;  
+</code></pre>
+<p>}</p>
+<p>前面我们通过分析，发现子进程变成僵尸进程的原因在于父进程“不负责”，那找到原因后，我们再想想，如何来解决。</p>
+<p>其实解决思路很好理解，就好像熊孩子犯了事儿，你要去找他家长来管教，那子进程在容器里“赖着不走”，我们就需要让父进程出面处理了。</p>
+<p>所以，在 Linux 中的进程退出之后，如果进入僵尸状态，我们就需要父进程调用 wait() 这个系统调用，去回收僵尸进程的最后的那些系统资源，比如进程号资源。</p>
+<p>那么，我们在刚才那段代码里，主进程进入 sleep(100) 之前，加上一段 wait() 函数调用，就不会出现僵尸进程的残留了。</p>
+<pre><code>  for (i = 0; i &lt; total; i++) {  
+        int status;  
+        wait(&amp;status);  
+  }
+</code></pre>
+<p>而容器中所有进程的最终父进程，就是我们所说的 init 进程，由它负责生成容器中的所有其他进程。因此，容器的 init 进程有责任回收容器中的所有僵尸进程。</p>
+<p>前面我们知道了 wait() 系统调用可以回收僵尸进程，但是 wait() 系统调用有一个问题，需要你注意。</p>
+<p>wait() 系统调用是一个阻塞的调用，也就是说，如果没有子进程是僵尸进程的话，这个调用就一直不会返回，那么整个进程就会被阻塞住，而不能去做别的事了。</p>
+<p>不过这也没有关系，我们还有另一个方法处理。Linux 还提供了一个类似的系统调用 waitpid()，这个调用的参数更多。</p>
+<p>其中就有一个参数 WNOHANG，它的含义就是，如果在调用的时候没有僵尸进程，那么函数就马上返回了，而不会像 wait() 调用那样一直等待在那里。</p>
+<p>比如社区的一个容器 init 项目 tini。在这个例子中，它的主进程里，就是不断在调用带 WNOHANG 参数的 waitpid()，通过这个方式清理容器中所有的僵尸进程。</p>
+<p>int reap_zombies(const pid_t child_pid, int* const child_exitcode_ptr) {<br>
+pid_t current_pid;<br>
+int current_status;</p>
+<pre><code>    while (1) {  
+            current_pid = waitpid(-1, &amp;current_status, WNOHANG);  
+
+            switch (current_pid) {  
+                    case -1:  
+                            if (errno == ECHILD) {  
+                                    PRINT_TRACE(&quot;No child to wait&quot;);  
+                                    break;  
+                            }  
+</code></pre>
+<p>…</p>
+<h2 id="重点总结">重点总结</h2>
+<p>今天我们讨论的问题是容器中的僵尸进程。</p>
+<p>首先，我们先用代码来模拟了这个情况，还原了在一个容器中大量的僵尸进程是如何产生的。为了理解它的产生原理和危害，我们先要掌握两个知识点：</p>
+<ol>
+<li>Linux 进程状态中，僵尸进程处于 EXIT_ZOMBIE 这个状态；</li>
+<li>容器需要对最大进程数做限制。具体方法是这样的，我们可以向 Cgroup 中 <strong>pids.max</strong> 这个文件写入数值（这个值就是这个容器中允许的最大进程数目）。</li>
+</ol>
+<p>掌握了基本概念之后，我们找到了僵尸进程的产生原因。父进程在创建完子进程之后就不管了。</p>
+<p>所以，我们需要父进程调用 wait() 或者 waitpid() 系统调用来避免僵尸进程产生。</p>
+<p>关于本节内容，你只要记住下面三个主要的知识点就可以了：</p>
+<ol>
+<li>每一个 Linux 进程在退出的时候都会进入一个僵尸状态（EXIT_ZOMBIE）；</li>
+<li>僵尸进程如果不清理，就会消耗系统中的进程数资源，最坏的情况是导致新的进程无法启动；</li>
+<li>僵尸进程一定需要父进程调用 wait() 或者 waitpid() 系统调用来清理，这也是容器中 init 进程必须具备的一个功能。</li>
+</ol>
+<h2 id="思考题">思考题</h2>
+<p>如果容器的 init 进程创建了子进程 B，B 又创建了自己的子进程 C。如果 C 运行完之后，退出成了僵尸进程，B 进程还在运行，而容器的 init 进程还在不断地调用 waitpid()，那 C 这个僵尸进程可以被回收吗？</p>
+<p>欢迎留言和我分享你的想法。如果你的朋友也被僵尸进程占用资源而困扰，欢迎你把这篇文章分享给他，也许就能帮他解决一个问题。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%9B%BE%E8%A7%A3googlev8/03%E5%BF%AB%E5%B1%9E%E6%80%A7%E5%92%8C%E6%85%A2%E5%B1%9E%E6%80%A7v8%E9%87%87%E7%94%A8%E4%BA%86%E5%93%AA%E4%BA%9B%E7%AD%96%E7%95%A5%E6%8F%90%E5%8D%87%E4%BA%86%E5%AF%B9%E8%B1%A1%E5%B1%9E%E6%80%A7%E7%9A%84%E8%AE%BF%E9%97%AE%E9%80%9F%E5%BA%A6/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">03｜快属性和慢属性：V8采用了哪些策略提升了对象属性的访问速度？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%81%8B%E7%88%B1%E5%BF%85%E4%BF%AE%E8%AF%BE/03%E5%86%92%E7%8A%AF%E6%9C%89%E6%97%B6%E6%98%AF%E5%BF%85%E8%A6%81%E7%9A%84%E5%A6%82%E4%BD%95%E5%BC%80%E5%90%AF%E4%B8%80%E6%AE%B5%E4%BA%B2%E5%AF%86%E5%85%B3%E7%B3%BB/">
+            <span class="next-text nav-default">03｜冒犯有时是必要的：如何开启一段亲密关系？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

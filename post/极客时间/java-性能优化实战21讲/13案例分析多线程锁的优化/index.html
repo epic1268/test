@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>13案例分析：多线程锁的优化 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content=" title: &ldquo;13案例分析：多线程锁的优化&rdquo; draft: false date: 2024-06-14 keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 我们在上一课时，了解到可以使用 ThreadLocal，来避免 SimpleDateFormat 在并发环境下引起的时间错乱问题。其实还有一种解决方式，就是通过对parse 方法进行加锁，也能保证日期处理类的正确运行，代码如下图（可见仓库）：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/13%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E5%A4%9A%E7%BA%BF%E7%A8%8B%E9%94%81%E7%9A%84%E4%BC%98%E5%8C%96/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/13%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E5%A4%9A%E7%BA%BF%E7%A8%8B%E9%94%81%E7%9A%84%E4%BC%98%E5%8C%96/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="13案例分析：多线程锁的优化">
+  <meta property="og:description" content="title: “13案例分析：多线程锁的优化” draft: false date: 2024-06-14 keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 我们在上一课时，了解到可以使用 ThreadLocal，来避免 SimpleDateFormat 在并发环境下引起的时间错乱问题。其实还有一种解决方式，就是通过对parse 方法进行加锁，也能保证日期处理类的正确运行，代码如下图（可见仓库）：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java 性能优化实战21讲">
+
+  <meta itemprop="name" content="13案例分析：多线程锁的优化">
+  <meta itemprop="description" content="title: “13案例分析：多线程锁的优化” draft: false date: 2024-06-14 keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 我们在上一课时，了解到可以使用 ThreadLocal，来避免 SimpleDateFormat 在并发环境下引起的时间错乱问题。其实还有一种解决方式，就是通过对parse 方法进行加锁，也能保证日期处理类的正确运行，代码如下图（可见仓库）：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6388">
+  <meta itemprop="keywords" content="Java 性能优化实战21讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="13案例分析：多线程锁的优化">
+  <meta name="twitter:description" content="title: “13案例分析：多线程锁的优化” draft: false date: 2024-06-14 keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 我们在上一课时，了解到可以使用 ThreadLocal，来避免 SimpleDateFormat 在并发环境下引起的时间错乱问题。其实还有一种解决方式，就是通过对parse 方法进行加锁，也能保证日期处理类的正确运行，代码如下图（可见仓库）：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">13案例分析：多线程锁的优化</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6388 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#autocollapsetoc-true">title: &ldquo;13案例分析：多线程锁的优化&rdquo;
+draft: false
+date: 2024-06-14
+keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间]
+categories: [Java 性能优化实战21讲]
+tags: [极客时间]
+comment: true
+toc: true
+autoCollapseToc: true</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <hr>
+<h2 id="autocollapsetoc-true">title: &ldquo;13案例分析：多线程锁的优化&rdquo;
+draft: false
+date: 2024-06-14
+keywords: [13案例分析：多线程锁的优化, Java 性能优化实战21讲, 极客时间]
+categories: [Java 性能优化实战21讲]
+tags: [极客时间]
+comment: true
+toc: true
+autoCollapseToc: true</h2>
+<p>我们在上一课时，了解到可以使用 ThreadLocal，来避免 SimpleDateFormat 在并发环境下引起的时间错乱问题。其实还有一种解决方式，就是通过对parse 方法进行加锁，也能保证日期处理类的正确运行，代码如下图（可见仓库）：</p>
+<p>其实锁对性能的影响，是非常大的。因为对资源加锁以后，资源就被加锁的线程独占，其他的线程就只能排队等待这个锁，此时程序由并行执行，变相地成了顺序执行，执行速度自然就降低了。</p>
+<p>下面是开启了 50 个线程，使用 ThreadLocal 和同步锁方式性能的一个对比。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Benchmark                                 Mode  Cnt     Score      Error   Units
+</span></span><span class="line"><span class="cl">SynchronizedNormalBenchmark.sync         thrpt   10  2554.628 ± 5098.059  ops/ms
+</span></span><span class="line"><span class="cl">SynchronizedNormalBenchmark.threadLocal  thrpt   10  3750.902 ±  103.528  ops/ms
+</span></span><span class="line"><span class="cl">========去掉业务影响========
+</span></span><span class="line"><span class="cl">Benchmark                                 Mode  Cnt        Score        Error   Units
+</span></span><span class="line"><span class="cl">SynchronizedNormalBenchmark.sync         thrpt   10    26905.514 ±   1688.600  ops/ms
+</span></span><span class="line"><span class="cl">SynchronizedNormalBenchmark.threadLocal  thrpt   10  7041876.244 ± 355598.686  ops/ms
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，使用同步锁的方式，性能是比较低的。如果去掉业务本身逻辑的影响（删掉执行逻辑），这个差异会更大。代码执行的次数越多，锁的累加影响越大，对锁本身的速度优化，是非常重要的。</p>
+<p>我们都知道，Java 中有两种加锁的方式：一种就是常见的synchronized 关键字，另外一种，就是使用 concurrent 包里面的 Lock。针对这两种锁，JDK 自身做了很多的优化，它们的实现方式也是不同的。本课时将从这两种锁讲起，看一下对锁的一些优化方式。</p>
+<p>synchronied</p>
+<p>synchronized 关键字给代码或者方法上锁时，都有显示或者隐藏的上锁对象。当一个线程试图访问同步代码块时，它首先必须得到锁，而退出或抛出异常时必须释放锁。</p>
+<p>给普通方法加锁时，上锁的对象是 this；</p>
+<p>给静态方法加锁时，锁的是 class 对象；</p>
+<p>给代码块加锁，可以指定一个具体的对象作为锁。</p>
+<p>1.monitor 原理</p>
+<p>在面试中，面试官很可能会问你：synchronized 在字节码中，是怎么体现的呢？ 参照下面的代码，在命令行执行 javac，然后再执行 javap -v -p，就可以看到它具体的字节码。</p>
+<p>可以看到，在字节码的体现上，它只给方法加了一个 flag：ACC_SYNCHRONIZED。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">synchronized void syncMethod() {
+</span></span><span class="line"><span class="cl">        System.out.println(&#34;syncMethod&#34;);
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">======字节码=====
+</span></span><span class="line"><span class="cl">synchronized void syncMethod();
+</span></span><span class="line"><span class="cl">    descriptor: ()V
+</span></span><span class="line"><span class="cl">    flags: ACC_SYNCHRONIZED
+</span></span><span class="line"><span class="cl">    Code:
+</span></span><span class="line"><span class="cl">      stack=2, locals=1, args_size=1
+</span></span><span class="line"><span class="cl">         0: getstatic     #4
+</span></span><span class="line"><span class="cl">         3: ldc           #5
+</span></span><span class="line"><span class="cl">         5: invokevirtual #6
+</span></span><span class="line"><span class="cl">         8: return
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们再来看下同步代码块的字节码。可以看到，字节码是通过 monitorenter 和monitorexit 两个指令进行控制的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">void</span> <span class="n">syncBlock</span><span class="p">(){</span>
+</span></span><span class="line"><span class="cl">    <span class="n">synchronized</span> <span class="p">(</span><span class="n">Test</span><span class="o">.</span><span class="k">class</span><span class="p">){</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="o">======</span><span class="err">字节码</span><span class="o">======</span>
+</span></span><span class="line"><span class="cl"><span class="n">void</span> <span class="n">syncBlock</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">descriptor</span><span class="p">:</span> <span class="p">()</span><span class="n">V</span>
+</span></span><span class="line"><span class="cl">    <span class="n">flags</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="n">Code</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">      <span class="n">stack</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">locals</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">args_size</span><span class="o">=</span><span class="mi">1</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">0</span><span class="p">:</span> <span class="n">ldc</span>           <span class="c1">#2 </span>
+</span></span><span class="line"><span class="cl">         <span class="mi">2</span><span class="p">:</span> <span class="n">dup</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">3</span><span class="p">:</span> <span class="n">astore_1</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">4</span><span class="p">:</span> <span class="n">monitorenter</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">5</span><span class="p">:</span> <span class="n">aload_1</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">6</span><span class="p">:</span> <span class="n">monitorexit</span>
+</span></span><span class="line"><span class="cl">         <span class="mi">7</span><span class="p">:</span> <span class="n">goto</span>          <span class="mi">15</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">10</span><span class="p">:</span> <span class="n">astore_2</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">11</span><span class="p">:</span> <span class="n">aload_1</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">12</span><span class="p">:</span> <span class="n">monitorexit</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">13</span><span class="p">:</span> <span class="n">aload_2</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">14</span><span class="p">:</span> <span class="n">athrow</span>
+</span></span><span class="line"><span class="cl">        <span class="mi">15</span><span class="p">:</span> <span class="k">return</span>
+</span></span><span class="line"><span class="cl">      <span class="n">Exception</span> <span class="n">table</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">         <span class="n">from</span>    <span class="n">to</span>  <span class="n">target</span> <span class="n">type</span>
+</span></span><span class="line"><span class="cl">             <span class="mi">5</span>     <span class="mi">7</span>    <span class="mi">10</span>   <span class="n">any</span>
+</span></span><span class="line"><span class="cl">            <span class="mi">10</span>    <span class="mi">13</span>    <span class="mi">10</span>   <span class="n">any</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这两者虽然显示效果不同，但他们都是通过 monitor 来实现同步的。我们可以通过下面这张图，来看一下 monitor 的原理。</p>
+<p>注意了，下面是面试题目高发地。比如，你能描述一下 monitor 锁的实现原理吗？</p>
+<p>如上图所示，我们可以把运行时的对象锁抽象地分成三部分。其中，EntrySet 和 WaitSet 是两个队列，中间虚线部分是当前持有锁的线程，我们可以想象一下线程的执行过程。</p>
+<p>当第一个线程到来时，发现并没有线程持有对象锁，它会直接成为活动线程，进入 RUNNING 状态。</p>
+<p>接着又来了三个线程，要争抢对象锁。此时，这三个线程发现锁已经被占用了，就先进入 EntrySet 缓存起来，进入 BLOCKED 状态。此时，从 jstack 命令，可以看到他们展示的信息都是 waiting for monitor entry。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&#34;http-nio-8084-exec-120&#34; #143 daemon prio=5 os_prio=31 cpu=122.86ms elapsed=317.88s tid=0x00007fedd8381000 nid=0x1af03 waiting for monitor entry  [0x00007000150e1000]
+</span></span><span class="line"><span class="cl">   java.lang.Thread.State: BLOCKED (on object monitor)
+</span></span><span class="line"><span class="cl">    at java.io.BufferedInputStream.read(java.base@13.0.1/BufferedInputStream.java:263)
+</span></span><span class="line"><span class="cl">    - waiting to lock &lt;0x0000000782e1b590&gt; (a java.io.BufferedInputStream)
+</span></span><span class="line"><span class="cl">    at org.apache.commons.httpclient.HttpParser.readRawLine(HttpParser.java:78)
+</span></span><span class="line"><span class="cl">    at org.apache.commons.httpclient.HttpParser.readLine(HttpParser.java:106)
+</span></span><span class="line"><span class="cl">    at org.apache.commons.httpclient.HttpConnection.readLine(HttpConnection.java:1116)
+</span></span><span class="line"><span class="cl">    at org.apache.commons.httpclient.HttpMethodBase.readStatusLine(HttpMethodBase.java:1973)
+</span></span><span class="line"><span class="cl">    at org.apache.commons.httpclient.HttpMethodBase.readResponse(HttpMethodBase.java:1735)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>处于活动状态的线程，执行完毕退出了；或者由于某种原因执行了 wait 方法，释放了对象锁，进入了 WaitSet 队列，这就是在调用 wait 之前，需要先获得对象锁的原因。</p>
+<p>就像下面的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">synchronized (lock){
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">         lock.wait();
+</span></span><span class="line"><span class="cl">    } catch (InterruptedException e) {
+</span></span><span class="line"><span class="cl">        e.printStackTrace();
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>此时，jstack 显示的线程状态是 WAITING 状态，而原因是 in Object.wait()。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&#34;wait-demo&#34; #12 prio=5 os_prio=31 cpu=0.14ms elapsed=12.58s tid=0x00007fb66609e000 nid=0x6103 in Object.wait()  [0x000070000f2bd000]
+</span></span><span class="line"><span class="cl">   java.lang.Thread.State: WAITING (on object monitor)
+</span></span><span class="line"><span class="cl">    at java.lang.Object.wait(java.base@13.0.1/Native Method)
+</span></span><span class="line"><span class="cl">    - waiting on &lt;0x0000000787b48300&gt; (a java.lang.Object)
+</span></span><span class="line"><span class="cl">    at java.lang.Object.wait(java.base@13.0.1/Object.java:326)
+</span></span><span class="line"><span class="cl">    at WaitDemo.lambda$main$0(WaitDemo.java:7)
+</span></span><span class="line"><span class="cl">    - locked &lt;0x0000000787b48300&gt; (a java.lang.Object)
+</span></span><span class="line"><span class="cl">    at WaitDemo$$Lambda$14/0x0000000800b44840.run(Unknown Source)
+</span></span><span class="line"><span class="cl">    at java.lang.Thread.run(java.base@13.0.1/Thread.java:830)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>发生了这两种情况，都会造成对象锁的释放，进而导致 EntrySet 里的线程重新争抢对象锁，成功抢到锁的线程成为活动线程，这是一个循环的过程。</p>
+<p>那 WaitSet 中的线程是如何再次被激活的呢？接下来，在某个地方，执行了锁的 notify 或者 notifyAll 命令，会造成 WaitSet 中的线程，转移到 EntrySet 中，重新进行锁的争夺。</p>
+<p>如此周而复始，线程就可按顺序排队执行。</p>
+<p>2.分级锁</p>
+<p>在 JDK 1.8 中，synchronized 的速度已经有了显著的提升，它都做了哪些优化呢？答案就是分级锁。JVM 会根据使用情况，对 synchronized 的锁，进行升级，它大体可以按照下面的路径进行升级：偏向锁 — 轻量级锁 — 重量级锁。</p>
+<p>锁只能升级，不能降级，所以一旦升级为重量级锁，就只能依靠操作系统进行调度。</p>
+<p>要想了解锁升级的过程，需要先看一下对象在内存里的结构。</p>
+<p>如上图所示，对象分为 MarkWord、Class Pointer、Instance Data、Padding 四个部分。</p>
+<p>和锁升级关系最大的就是 MarkWord，它的长度是 24 位，我们着重介绍一下。它包含Thread ID（23bit）、Age（6bit）、Biased（1bit）、Tag（2bit） 四个部分，锁升级就是靠判断 Thread Id、Biased、Tag 等三个变量值来进行的。</p>
+<p>偏向锁</p>
+<p>在只有一个线程使用了锁的情况下，偏向锁能够保证更高的效率。</p>
+<p>具体过程是这样的：当第一个线程第一次访问同步块时，会先检测对象头 Mark Word 中的标志位 Tag 是否为 01，以此判断此时对象锁是否处于无锁状态或者偏向锁状态（匿名偏向锁）。</p>
+<p>01 也是锁默认的状态，线程一旦获取了这把锁，就会把自己的线程 ID 写到 MarkWord 中，在其他线程来获取这把锁之前，锁都处于偏向锁状态。</p>
+<p>当下一个线程参与到偏向锁竞争时，会先判断 MarkWord 中保存的线程 ID 是否与这个线程 ID 相等，如果不相等，会立即撤销偏向锁，升级为轻量级锁。</p>
+<p>轻量级锁</p>
+<p>轻量级锁的获取是怎么进行的呢？它们使用的是自旋方式。</p>
+<p>参与竞争的每个线程，会在自己的线程栈中生成一个 LockRecord ( LR )，然后每个线程通过 CAS（自旋）的方式，将锁对象头中的 MarkWord 设置为指向自己的 LR 的指针，哪个线程设置成功，就意味着哪个线程获得锁。</p>
+<p>当锁处于轻量级锁的状态时，就不能够再通过简单地对比 Tag 的值进行判断，每次对锁的获取，都需要通过自旋。</p>
+<p>当然，自旋也是面向不存在锁竞争的场景，比如一个线程运行完了，另外一个线程去获取这把锁；但如果自旋失败达到一定的次数，锁就会膨胀为重量级锁。</p>
+<p>重量级锁</p>
+<p>重量级锁，即我们对 synchronized 的直观认识，这种情况下，线程会挂起，进入到操作系统内核态，等待操作系统的调度，然后再映射回用户态。系统调用是昂贵的，所以重量级锁的名称由此而来。</p>
+<p>如果系统的共享变量竞争非常激烈，锁会迅速膨胀到重量级锁，这些优化就名存实亡。如果并发非常严重，可以通过参数 -XX:-UseBiasedLocking 禁用偏向锁，理论上会有一些性能提升，但实际上并不确定。</p>
+<p>Lock</p>
+<p>在 concurrent 包里，我们能够发现 ReentrantLock 和 ReentrantReadWriteLock 两个类。Reentrant 就是可重入的意思，它们和 synchronized 关键字一样，都是可重入锁。</p>
+<p>这里有必要解释一下**“可重入”这个概念，这是一个面试高频考点**。它的意思是，一个线程运行时，可以多次获取同一个对象锁，这是因为 Java 的锁是基于线程的，而不是基于调用的。</p>
+<p>比如下面这段代码，由于方法 a、b、c 锁的都是当前的 this，线程在调用 a 方法的时候，就不需要多次获取对象锁。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public synchronized void a(){
+</span></span><span class="line"><span class="cl">    b();
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">public synchronized void b(){
+</span></span><span class="line"><span class="cl">    c();
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">public synchronized void c(){
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>1.主要方法</p>
+<p>Lock 是基于 AQS（AbstractQueuedSynchronizer）实现的，而 AQS 是基于 volitale 和 CAS 实现的（关于CAS，我们将在下一课时讲解）。</p>
+<p>Lock 与 synchronized 的使用方法不同，它需要手动加锁，然后在 finally 中解锁。Lock 接口比 synchronized 灵活性要高，我们来看一下几个关键方法。</p>
+<p>Lock： Lock 方法和 synchronized 没什么区别，如果获取不到锁，都会被阻塞；</p>
+<p>tryLock： 此方法会尝试获取锁，不管能不能获取到锁，都会立即返回，不会阻塞，它是有返回值的，获取到锁就会返回 true；</p>
+<p>tryLock(long time, TimeUnit unit)： 与 tryLock 类似，但它在拿不到锁的情况下，会等待一段时间，直到超时；</p>
+<p>LockInterruptibly： 与 Lock 类似，但是可以锁等待，可以被中断，中断后返回 InterruptedException；</p>
+<p>一般情况下，使用 Lock 方法就可以；但如果业务请求要求响应及时，那使用带超时时间的tryLock是更好的选择：我们的业务可以直接返回失败，而不用进行阻塞等待。tryLock 这种优化手段，采用降低请求成功率的方式，来保证服务的可用性，在高并发场景下常被高频采用。</p>
+<p>2.读写锁</p>
+<p>但对于有些业务来说，使用 Lock 这种粗粒度的锁还是太慢了。比如，对于一个HashMap 来说，某个业务是读多写少的场景，这个时候，如果给读操作，也加上和写操作一样的锁的话，效率就会很慢。</p>
+<p>ReentrantReadWriteLock 是一种读写分离的锁，它允许多个读线程同时进行，但读和写、写和写是互斥的。</p>
+<p>使用方法如下所示，分别获取读写锁，对写操作加写锁，对读操作加读锁，并在 finally 里释放锁即可。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+</span></span><span class="line"><span class="cl">    Lock readLock = lock.readLock();
+</span></span><span class="line"><span class="cl">    Lock writeLock = lock.writeLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void put(K k, V v) {
+</span></span><span class="line"><span class="cl">        writeLock.lock();
+</span></span><span class="line"><span class="cl">        try {
+</span></span><span class="line"><span class="cl">            map.put(k, v);
+</span></span><span class="line"><span class="cl">        } finally {
+</span></span><span class="line"><span class="cl">            writeLock.unlock();
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里留一个课后作业：除了 ReadWriteLock，我们能有更快的读写分离模式吗？JDK 1.8 加入了哪个 API？（欢迎你在留言区作答，我将与你们一一交流）</p>
+<p>3.公平锁与非公平锁</p>
+<p>非公平锁</p>
+<p>我们平常用到的锁，都是非公平锁，可以回过头来看一下 monitor 的原理。当持有锁的线程释放锁的时候，EntrySet 里的线程就会争抢这把锁，这个争抢过程，是随机的，也就是说你并不知道哪个线程会获取对象锁，谁抢到了就算谁的。</p>
+<p>这就有一定的概率会发生，某个线程总是抢不到锁的情况。比如，某个线程通过 setPriority 设置得比较低的优先级，这个抢不到锁的线程，就一直处于饥饿状态，这就是线程饥饿的概念。</p>
+<p>公平锁</p>
+<p>而公平锁通过把随机变成有序，可以解决这个问题，synchronized 没有这个功能，在Lock 中可以通过构造参数设置成公平锁，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public ReentrantReadWriteLock(boolean fair) {
+</span></span><span class="line"><span class="cl">        sync = fair ? new FairSync() : new NonfairSync();
+</span></span><span class="line"><span class="cl">        readerLock = new ReadLock(this);
+</span></span><span class="line"><span class="cl">        writerLock = new WriteLock(this);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于所有的线程都需要排队，需要在多核的场景下维护一个同步队列，在多个线程争抢锁的时候，吞吐量就很低。</p>
+<p>下面是 20 个并发之下，锁的 JMH 测试结果，可以看到，非公平锁比公平锁的性能高出两个数量级。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Benchmark                      Mode  Cnt      Score      Error   Units
+</span></span><span class="line"><span class="cl">FairVSNoFairBenchmark.fair    thrpt   10    186.144 ±   27.462  ops/ms
+</span></span><span class="line"><span class="cl">FairVSNoFairBenchmark.nofair  thrpt   10  35195.649 ± 6503.375  ops/ms
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>锁的优化技巧</p>
+<p>1.死锁</p>
+<p>我们可以先看一下锁冲突最严重的一种情况：死锁。下面这段示例代码，两个线程分别持有对方所需要的锁，并进入了相互等待的状态，那么它们就进入了死锁。</p>
+<p>在面试中，经常会要求被面试者手写下面这段代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public class DeadLockDemo {
+</span></span><span class="line"><span class="cl">    public static void main(String[] args) {
+</span></span><span class="line"><span class="cl">        Object object1 = new Object();
+</span></span><span class="line"><span class="cl">        Object object2 = new Object();
+</span></span><span class="line"><span class="cl">        Thread t1 = new Thread(() -&gt; {
+</span></span><span class="line"><span class="cl">            synchronized (object1) {
+</span></span><span class="line"><span class="cl">                try {
+</span></span><span class="line"><span class="cl">                    Thread.sleep(200);
+</span></span><span class="line"><span class="cl">                } catch (InterruptedException e) {
+</span></span><span class="line"><span class="cl">                    e.printStackTrace();
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">                synchronized (object2) {
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        }, &#34;deadlock-demo-1&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        t1.start();
+</span></span><span class="line"><span class="cl">        Thread t2 = new Thread(() -&gt; {
+</span></span><span class="line"><span class="cl">            synchronized (object2) {
+</span></span><span class="line"><span class="cl">                try {
+</span></span><span class="line"><span class="cl">                    Thread.sleep(200);
+</span></span><span class="line"><span class="cl">                } catch (InterruptedException e) {
+</span></span><span class="line"><span class="cl">                    e.printStackTrace();
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">                synchronized (object1) {
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">        }, &#34;deadlock-demo-2&#34;);
+</span></span><span class="line"><span class="cl">        t2.start();
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>代码创建了两把对象锁，线程1 首先拿到了 object1 的对象锁，200ms 后尝试获取 object2 的对象锁。但这个时候，object2 的对象锁已经被线程2 获取了。这两个线程进入了相互等待的状态，产生了死锁。</p>
+<p>使用我们上面提到的，带超时时间的 tryLock 方法，有一方超时让步，可以一定程度上避免死锁。</p>
+<p>2.优化技巧</p>
+<p>锁的优化理论其实很简单，那就是减少锁的冲突。无论是锁的读写分离，还是分段锁，本质上都是为了避免多个线程同时获取同一把锁。</p>
+<p>所以我们可以总结一下优化的一般思路：减少锁的粒度、减少锁持有的时间、锁分级、锁分离 、锁消除、乐观锁、无锁等。</p>
+<p>减少锁粒度</p>
+<p>通过减小锁的粒度，可以将冲突分散，减少冲突的可能，从而提高并发量。简单来说，就是把资源进行抽象，针对每类资源使用单独的锁进行保护。</p>
+<p>比如下面的代码，由于 list 1 和 list 2 属于两类资源，就没必要使用同一个对象锁进行处理。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public class LockLessDemo {
+</span></span><span class="line"><span class="cl">    List&lt;String&gt; list1 = new ArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    List&lt;String&gt; list2 = new ArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    public synchronized void addList1(String v){
+</span></span><span class="line"><span class="cl">        this.list1.add(v);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    public synchronized void addList2(String v){
+</span></span><span class="line"><span class="cl">        this.list2.add(v);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以创建两个不同的锁，改善情况如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public class LockLessDemo {
+</span></span><span class="line"><span class="cl">    List&lt;String&gt; list1 = new ArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    List&lt;String&gt; list2 = new ArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    final Object lock1 = new Object();
+</span></span><span class="line"><span class="cl">    final Object lock2 = new Object();
+</span></span><span class="line"><span class="cl">    public void addList1(String v) {
+</span></span><span class="line"><span class="cl">        synchronized (lock1) {
+</span></span><span class="line"><span class="cl">            this.list1.add(v);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    public void addList2(String v) {
+</span></span><span class="line"><span class="cl">        synchronized (lock2) {
+</span></span><span class="line"><span class="cl">            this.list2.add(v);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>减少锁持有时间</p>
+<p>通过让锁资源尽快地释放，减少锁持有的时间，其他线程可更迅速地获取锁资源，进行其他业务的处理。</p>
+<p>考虑到下面的代码，由于 slowMethod 不在锁的范围内，占用的时间又比较长，可以把它移动到 Synchronized 代码块外面，加速锁的释放。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public class LockTimeDemo {
+</span></span><span class="line"><span class="cl">    List&lt;String&gt; list = new ArrayList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    final Object lock = new Object();
+</span></span><span class="line"><span class="cl">    public void addList(String v) {
+</span></span><span class="line"><span class="cl">        synchronized (lock) {
+</span></span><span class="line"><span class="cl">            slowMethod();
+</span></span><span class="line"><span class="cl">            this.list.add(v);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    public void slowMethod(){
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>锁分级</p>
+<p>锁分级，指的是我们文章开始讲解的 Synchronied 锁的锁升级，属于 JVM 的内部优化，它从偏向锁开始，逐渐升级为轻量级锁、重量级锁，这个过程是不可逆的。</p>
+<p>锁分离</p>
+<p>我们在上面提到的读写锁，就是锁分离技术。这是因为，读操作一般是不会对资源产生影响的，可以并发执行；写操作和其他操作是互斥的，只能排队执行。所以读写锁适合读多写少的场景。</p>
+<p>锁消除</p>
+<p>通过 JIT 编译器，JVM 可以消除某些对象的加锁操作。举个例子，大家都知道StringBuffer 和 StringBuilder 都是做字符串拼接的，而且前者是线程安全的。</p>
+<p>但其实，如果这两个字符串拼接对象用在函数内，JVM 通过逃逸分析这个对象的作用范围就是在本函数中，就会把锁的影响给消除掉。</p>
+<p>比如下面这段代码，它和 StringBuilder 的效果是一样的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">String m1(){
+</span></span><span class="line"><span class="cl">    StringBuffer sb = new StringBuffer();
+</span></span><span class="line"><span class="cl">    sb.append(&#34;&#34;);
+</span></span><span class="line"><span class="cl">    return sb.toString();
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然，对于读多写少的互联网场景，最有效的做法，是使用乐观锁，甚至无锁，这部分我们会在下一课时《14 | 案例分析：乐观锁和无锁》中介绍。</p>
+<p>小结</p>
+<p>Java 中有两种加锁方式：一种是使用 Synchronized 关键字，另外一种是 concurrent 包下面的 Lock。</p>
+<p>本课时，我们详细地了解了它们的一些特性，包括实现原理，其对比如下：</p>
+<p>类别</p>
+<p>Synchronized</p>
+<p>Lock</p>
+<p>实现方式</p>
+<p>monitor</p>
+<p>AQS</p>
+<p>底层细节</p>
+<p>JVM优化</p>
+<p>Java API</p>
+<p>分级锁</p>
+<p>是</p>
+<p>否</p>
+<p>功能特性</p>
+<p>单一</p>
+<p>丰富</p>
+<p>锁分离</p>
+<p>无</p>
+<p>读写锁</p>
+<p>锁超时</p>
+<p>无</p>
+<p>带超时时间的 tryLock</p>
+<p>可中断</p>
+<p>否</p>
+<p>lockInterruptibly</p>
+<p>Lock 的功能是比 Synchronized 多的，能够对线程行为进行更细粒度的控制。</p>
+<p>但如果只是用最简单的锁互斥功能，建议直接使用 Synchronized，有两个原因：</p>
+<p>Synchronized 的编程模型更加简单，更易于使用</p>
+<p>Synchronized 引入了偏向锁，轻量级锁等功能，能够从 JVM 层进行优化，同时JIT 编译器也会对它执行一些锁消除动作。</p>
+<p>我们还了解了公平锁与非公平锁，以及可重入锁的概念，以及一些通用的优化技巧。有冲突，才会有优化空间，那么无锁队列是怎么回事呢？它又是怎么实现的呢？下一课时《14 | 案例分析：乐观锁和无锁》，我们会来解答这些问题。</p>
+<p>-&ndash; ### 精选评论 ##### **风： &gt; JDK1.8 加了一个StampedLock，具体的不同在于提供了乐观锁1.获取乐观读锁(会获取一个校验码)2.读取一些值3.根据步骤1的校验码再次校验，看看是否有被动过4.如果没有被动过就结束了4.如果被动过，转为读锁(接下来就和readwritelock一致了) ######     讲师回复： &gt;     总结的很好，加油 ##### **威： &gt; 清晰又有深度 牛逼 ##### **6114： &gt; CopyOnWrite容器 也算是一种锁的优化吧（只是一个局部的优化，但是在我们使用资源，尤其是缓存的资源使用时，可以去掉锁的使用了）。 ######     讲师回复： &gt;     可以这么理解，是对于读多写少场景的优化；如果是写多读少，这种优化的效果就是反向的 ##### **耀： &gt; Markword是24位？ ######     讲师回复： &gt;     markword的定义文件见：http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/markOop.hpp 32位系统：长度32bit 4byte 64位系统：长度64bit 8byte，但是由于压缩指针的存在，也有可能是32Bit （UseCompressedOops） ##### Albert： &gt; 老师，锁好像可以在gc安全点降级 ######     讲师回复： &gt;     降级这个概念有点模糊，效率也不高，可以参考一下 <a href="http://openjdk.java.net/jeps/8183909">http://openjdk.java.net/jeps/8183909</a> ##### **升： &gt; 对象头mark word里面age应该是4个bit吧？ ######     讲师回复： &gt;     你说的对。具体大小如下： // 32 bits: // &mdash;&mdash;&ndash; // hash:25 &mdash;&mdash;&mdash;&mdash;&gt;| age:4 biased_lock:1 lock:2 (normal object) // JavaThread*:23 epoch:2 age:4 biased_lock:1 lock:2 (biased object) // size:32 &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&gt;| (CMS free block) // PromotedObject*:29 &mdash;&mdash;&mdash;-&gt;| promo_bits:3 &mdash;&ndash;&gt;| (CMS promoted object) // // 64 bits: // &mdash;&mdash;&ndash; // unused:25 hash:31 &ndash;&gt;| unused:1 age:4 biased_lock:1 lock:2 (normal object) // JavaThread*:54 epoch:2 unused:1 age:4 biased_lock:1 lock:2 (biased object) // PromotedObject*:61 &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&gt;| promo_bits:3 &mdash;&ndash;&gt;| (CMS promoted object) // size:64 &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&ndash;&gt;| (CMS free block) // // unused:25 hash:31 &ndash;&gt;| cms_free:1 age:4 biased_lock:1 lock:2 (COOPs &amp;&amp; normal object) // JavaThread*:54 epoch:2 cms_free:1 age:4 biased_lock:1 lock:2 (COOPs &amp;&amp; biased object) // narrowOop:32 unused:24 cms_free:1 unused:4 promo_bits:3 &mdash;&ndash;&gt;| (COOPs &amp;&amp; CMS promoted object) // unused:21 size:35 &ndash;&gt;| cms_free:1 unused:7 &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&gt;| (COOPs &amp;&amp; CMS free block) ##### **青： &gt; Stamplock</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/">Java 性能优化实战21讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/13%E6%A1%88%E4%BE%8B%E5%A6%82%E4%BD%95%E5%9F%BA%E4%BA%8Econul%E7%BB%99%E5%BE%AE%E6%9C%8D%E5%8A%A1%E6%B7%BB%E5%8A%A0%E6%9C%8D%E5%8A%A1%E6%B3%A8%E5%86%8C%E4%B8%8E%E5%8F%91%E7%8E%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">13案例：如何基于Conul给微服务添加服务注册与发现？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/13%E6%9C%8D%E5%8A%A1%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%A6%82%E4%BD%95%E5%9C%A8kubernete%E4%B8%AD%E8%BF%90%E8%A1%8Cdaemonset%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B/">
+            <span class="next-text nav-default">13服务守护进程：如何在Kubernete中运行DaemonSet守护进程？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

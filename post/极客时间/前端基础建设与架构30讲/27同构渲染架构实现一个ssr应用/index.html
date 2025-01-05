@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>27同构渲染架构：实现一个SSR应用 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="从这一讲开始，我们正式进入 Node.js 主题学习。作为 Node.js 技术的重要应用场景，同构渲染 SSR 应用尤其重要。不管是服务端渲染还是服务端渲染衍生出的同构应用，现在来看已经并不新鲜了，实现起来也并不困难。可是有的开发者认为：同构应用不就是调用一个 renderToString （React 中）类似的 API 吗？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/27%E5%90%8C%E6%9E%84%E6%B8%B2%E6%9F%93%E6%9E%B6%E6%9E%84%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AAssr%E5%BA%94%E7%94%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/27%E5%90%8C%E6%9E%84%E6%B8%B2%E6%9F%93%E6%9E%B6%E6%9E%84%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AAssr%E5%BA%94%E7%94%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="27同构渲染架构：实现一个SSR应用">
+  <meta property="og:description" content="从这一讲开始，我们正式进入 Node.js 主题学习。作为 Node.js 技术的重要应用场景，同构渲染 SSR 应用尤其重要。不管是服务端渲染还是服务端渲染衍生出的同构应用，现在来看已经并不新鲜了，实现起来也并不困难。可是有的开发者认为：同构应用不就是调用一个 renderToString （React 中）类似的 API 吗？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="前端基础建设与架构30讲">
+
+  <meta itemprop="name" content="27同构渲染架构：实现一个SSR应用">
+  <meta itemprop="description" content="从这一讲开始，我们正式进入 Node.js 主题学习。作为 Node.js 技术的重要应用场景，同构渲染 SSR 应用尤其重要。不管是服务端渲染还是服务端渲染衍生出的同构应用，现在来看已经并不新鲜了，实现起来也并不困难。可是有的开发者认为：同构应用不就是调用一个 renderToString （React 中）类似的 API 吗？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3857">
+  <meta itemprop="keywords" content="前端基础建设与架构30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="27同构渲染架构：实现一个SSR应用">
+  <meta name="twitter:description" content="从这一讲开始，我们正式进入 Node.js 主题学习。作为 Node.js 技术的重要应用场景，同构渲染 SSR 应用尤其重要。不管是服务端渲染还是服务端渲染衍生出的同构应用，现在来看已经并不新鲜了，实现起来也并不困难。可是有的开发者认为：同构应用不就是调用一个 renderToString （React 中）类似的 API 吗？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">27同构渲染架构：实现一个SSR应用</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3857 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>从这一讲开始，我们正式进入 Node.js 主题学习。作为 Node.js 技术的重要应用场景，同构渲染 SSR 应用尤其重要。不管是服务端渲染还是服务端渲染衍生出的同构应用，现在来看已经并不新鲜了，实现起来也并不困难。可是有的开发者认为：同构应用不就是调用一个
+renderToString
+（React 中）类似的 API 吗？</p>
+<p>讲道理，确实如此，但同构应用也不只是这么简单。就拿面试来说，同构应用的考察点不是“纸上谈兵”的理论，而是实际实施时的细节。这一讲我们就来一步步实现一个 SSR 应用，并分析 SSR 应用的重点环节。相关内容你可以参考：实现一个简易 ssr。</p>
+<p>实现一个简易 SSR 应用</p>
+<p>SSR 渲染架构的优势已经非常明显了，不管是对SEO 友好还是性能提升，大部分开发者已经耳熟能详了。这一部分，我们以 React 技术栈为背景，实现一个 SSR 应用。</p>
+<p>首先启动项目：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">npm init --yes
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>配置 Babel 和Webpack，目的是将ESM 和React编译为 Node.js和浏览器能够理解的代码。相关
+.babelrc
+内容如下代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">  &#34;presets&#34;: [&#34;@babel/env&#34;, &#34;@babel/react&#34;]
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上代码，我们直接使用了
+@babel/env
+和
+@babel/react
+作为 presets。相关
+webpack.config.js
+内容如下代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="n">path</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;path&#39;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">module</span><span class="o">.</span><span class="n">exports</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">entry</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">client</span><span class="p">:</span> <span class="s1">&#39;./src/client.js&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="n">bundle</span><span class="p">:</span> <span class="s1">&#39;./src/bundle.js&#39;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="n">output</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">path</span><span class="p">:</span> <span class="n">path</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">__dirname</span><span class="p">,</span> <span class="s1">&#39;assets&#39;</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">        <span class="n">filename</span><span class="p">:</span> <span class="s2">&#34;[name].js&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">},</span>
+</span></span><span class="line"><span class="cl">    <span class="n">module</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">rules</span><span class="p">:</span> <span class="p">[</span>
+</span></span><span class="line"><span class="cl">            <span class="p">{</span> <span class="n">test</span><span class="p">:</span> <span class="o">/</span>\<span class="o">.</span><span class="n">js</span><span class="o">$/</span><span class="p">,</span> <span class="n">exclude</span><span class="p">:</span> <span class="o">/</span><span class="n">node_modules</span><span class="o">/</span><span class="p">,</span> <span class="n">loader</span><span class="p">:</span> <span class="s2">&#34;babel-loader&#34;</span> <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>配置入口文件为
+./src/client.js
+和
+./src/bundle.js
+，打包结果如下。</p>
+<p>assets/bundle.js
+：CSR 架构下浏览器端脚本。</p>
+<p>assets/client.js
+：SSR 架构下浏览器端脚本，衔接 SSR 部分。</p>
+<p>src/
+文件夹包含所有源码，Babel 将会编译该文件内代码到
+views/
+目录。这里需要你思考：为什么我们要编译源码呢？</p>
+<p>业务源码中，我们使用 ESM 编写 React 和 Redux 代码，对于低版本 Node.js来说，并不能直接支持 ESM 规范，因此需要使用 Babel 将
+src/
+文件夹内代码编译到
+views/
+目录中。相关命令如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&#34;babel&#34;: &#34;babel src -d views&#34;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们对项目目录进行说明：</p>
+<p>src/components
+中我们存放 React 组件；</p>
+<p>src/redux/
+中我们存放 Redux 相关代码；</p>
+<p>assets/
+和
+media/
+中我们存放样式文件及图片；</p>
+<p>src/server.js
+和
+src/template.js
+是 Node.js环境相关脚本。</p>
+<p>接下来，我们进入 Node.js相关的
+src/server.js
+和
+src/template.js
+脚本的编写。</p>
+<p>src/server.js
+如下代码所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">import</span> <span class="n">React</span> <span class="n">from</span> <span class="s1">&#39;react&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">renderToString</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-dom/server&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">Provider</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-redux&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">configureStore</span> <span class="n">from</span> <span class="s1">&#39;./redux/configureStore&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">App</span> <span class="n">from</span> <span class="s1">&#39;./components/app&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">module</span><span class="o">.</span><span class="n">exports</span> <span class="o">=</span> <span class="n">function</span> <span class="n">render</span><span class="p">(</span><span class="n">initialState</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="o">//</span> <span class="err">初始化</span> <span class="n">redux</span> <span class="n">store</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">store</span> <span class="o">=</span> <span class="n">configureStore</span><span class="p">(</span><span class="n">initialState</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">content</span> <span class="o">=</span> <span class="n">renderToString</span><span class="p">(</span><span class="o">&lt;</span><span class="n">Provider</span> <span class="n">store</span><span class="o">=</span><span class="p">{</span><span class="n">store</span><span class="p">}</span> <span class="o">&gt;&lt;</span><span class="n">App</span> <span class="o">/&gt;&lt;/</span><span class="n">Provider</span><span class="o">&gt;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">preloadedState</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">getState</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">content</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">preloadedState</span>
+</span></span><span class="line"><span class="cl">  <span class="p">};</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们展开具体分析：</p>
+<p>initialState
+作为参数传递给
+configureStore()
+方法，并实例化一个新的Store；</p>
+<p>调用
+renderToString()
+方法，得到服务端渲染的 HTML 字符串
+content
+；</p>
+<p>调用 Redux
+getState()
+方法，得到状态为
+preloadedState
+；</p>
+<p>返回 HTML 字符串
+content
+和 preloadedState。</p>
+<p>src/template.js
+代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">export</span> <span class="n">default</span> <span class="n">function</span> <span class="n">template</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">initialState</span> <span class="o">=</span> <span class="p">{},</span> <span class="n">content</span> <span class="o">=</span> <span class="s2">&#34;&#34;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">scripts</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">是否有</span> <span class="n">content</span> <span class="err">内容</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">content</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">scripts</span> <span class="o">=</span> <span class="err">`</span> <span class="o">&lt;</span><span class="n">script</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                   <span class="n">window</span><span class="o">.</span><span class="n">__STATE__</span> <span class="o">=</span> <span class="o">$</span><span class="p">{</span><span class="n">JSON</span><span class="o">.</span><span class="n">stringify</span><span class="p">(</span><span class="n">initialState</span><span class="p">)}</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;/</span><span class="n">script</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;</span><span class="n">script</span> <span class="n">src</span><span class="o">=</span><span class="s2">&#34;assets/client.js&#34;</span><span class="o">&gt;&lt;/</span><span class="n">script</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="err">`</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">scripts</span> <span class="o">=</span> <span class="err">`</span> <span class="o">&lt;</span><span class="n">script</span> <span class="n">src</span><span class="o">=</span><span class="s2">&#34;assets/bundle.js&#34;</span><span class="o">&gt;</span> <span class="o">&lt;/</span><span class="n">script</span><span class="o">&gt;</span> <span class="err">`</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">page</span> <span class="o">=</span> <span class="err">`</span><span class="o">&lt;!</span><span class="n">DOCTYPE</span> <span class="n">html</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">              <span class="o">&lt;</span><span class="n">html</span> <span class="n">lang</span><span class="o">=</span><span class="s2">&#34;en&#34;</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">              <span class="o">&lt;</span><span class="n">head</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;</span><span class="n">meta</span> <span class="n">charset</span><span class="o">=</span><span class="s2">&#34;utf-8&#34;</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;</span><span class="n">title</span><span class="o">&gt;</span> <span class="o">$</span><span class="p">{</span><span class="n">title</span><span class="p">}</span> <span class="o">&lt;/</span><span class="n">title</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;</span><span class="n">link</span> <span class="n">rel</span><span class="o">=</span><span class="s2">&#34;stylesheet&#34;</span> <span class="n">href</span><span class="o">=</span><span class="s2">&#34;assets/style.css&#34;</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">              <span class="o">&lt;/</span><span class="n">head</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">              <span class="o">&lt;</span><span class="n">body</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;</span><span class="n">div</span> <span class="k">class</span><span class="o">=</span><span class="s2">&#34;content&#34;</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                   <span class="o">&lt;</span><span class="n">div</span> <span class="n">id</span><span class="o">=</span><span class="s2">&#34;app&#34;</span> <span class="k">class</span><span class="o">=</span><span class="s2">&#34;wrap-inner&#34;</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                      <span class="o">$</span><span class="p">{</span><span class="n">content</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">                   <span class="o">&lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                <span class="o">&lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">                  <span class="o">$</span><span class="p">{</span><span class="n">scripts</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">              <span class="o">&lt;/</span><span class="n">body</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">              <span class="err">`</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">page</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们对上述代码进行解读：
+template
+函数接受
+title
+、
+state
+和
+content
+作为参数，拼凑成最终的 HTML 文档，并将
+state
+挂载到
+window.<strong>STATE</strong>
+中，作为 script 标签内联到 HTML 文档，同时将 SSR 架构下
+assets/client.js
+脚本或
+assets/bundle.js
+嵌入。</p>
+<p>下面，我们再聚焦同构部分的浏览器端脚本。</p>
+<p>在CSR 架构下，
+src/bundle.js
+代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">import</span> <span class="n">React</span> <span class="n">from</span> <span class="s1">&#39;react&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">render</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-dom&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">Provider</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-redux&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">configureStore</span> <span class="n">from</span> <span class="s1">&#39;./redux/configureStore&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">App</span> <span class="n">from</span> <span class="s1">&#39;./components/app&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">获取</span> <span class="n">store</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">store</span> <span class="o">=</span> <span class="n">configureStore</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="n">render</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">  <span class="o">&lt;</span><span class="n">Provider</span> <span class="n">store</span><span class="o">=</span><span class="p">{</span><span class="n">store</span><span class="p">}</span> <span class="o">&gt;</span> <span class="o">&lt;</span><span class="n">App</span> <span class="o">/&gt;</span> <span class="o">&lt;/</span><span class="n">Provider</span><span class="o">&gt;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="n">document</span><span class="o">.</span><span class="n">querySelector</span><span class="p">(</span><span class="s1">&#39;#app&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">);</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而 SSR 架构下，
+src/client.js
+代码类似：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">import</span> <span class="n">React</span> <span class="n">from</span> <span class="s1">&#39;react&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">hydrate</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-dom&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="p">{</span> <span class="n">Provider</span> <span class="p">}</span> <span class="n">from</span> <span class="s1">&#39;react-redux&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">configureStore</span> <span class="n">from</span> <span class="s1">&#39;./redux/configureStore&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">App</span> <span class="n">from</span> <span class="s1">&#39;./components/app&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">state</span> <span class="o">=</span> <span class="n">window</span><span class="o">.</span><span class="n">__STATE__</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">delete</span> <span class="n">window</span><span class="o">.</span><span class="n">__STATE__</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">store</span> <span class="o">=</span> <span class="n">configureStore</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">hydrate</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">  <span class="o">&lt;</span><span class="n">Provider</span> <span class="n">store</span><span class="o">=</span><span class="p">{</span><span class="n">store</span><span class="p">}</span> <span class="o">&gt;</span> <span class="o">&lt;</span><span class="n">App</span> <span class="o">/&gt;</span> <span class="o">&lt;/</span><span class="n">Provider</span><span class="o">&gt;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="n">document</span><span class="o">.</span><span class="n">querySelector</span><span class="p">(</span><span class="s1">&#39;#app&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">);</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>src/client.js
+对比
+src/bundle.js
+，比较关键的不同点在于使用了
+window.<strong>STATE</strong>.
+获取初始状态，同时使用了
+hydrate()
+方法代替了
+render()
+。</p>
+<p>至此，我们就实现了一个简易的 SSR 应用。虽然简单，但完全体现了 SSR 架构的原理。然而生产情况复杂多变，我们继续往下看。</p>
+<p>同构应用中你容易忽略的细节</p>
+<p>接下来，我们对几个更细节的问题加以分析。这些问题的处理，不再是代码层面的解决方案，更是工程化方向的设计。</p>
+<p>环境区分</p>
+<p>我们知道，同构应用实现了客户端代码和服务端代码的基本统一，我们只需要编写一种组件，就能生成适用于服务端和客户端的组件案例。可是你是否知道，大多数情况下服务端代码和客户端代码需要单独处理？下面我简单举几个例子。</p>
+<p>路由代码差别</p>
+<p>服务端需要根据请求路径，匹配页面组件；客户端需要通过浏览器中的地址，匹配页面组件。</p>
+<p>客户端代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">App</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">(</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">Provider</span> <span class="n">store</span><span class="o">=</span><span class="p">{</span><span class="n">store</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;</span><span class="n">BrowserRouter</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="o">&lt;</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">            <span class="o">&lt;</span><span class="n">Route</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;/&#39;</span> <span class="n">component</span><span class="o">=</span><span class="p">{</span><span class="n">Home</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">            <span class="o">&lt;</span><span class="n">Route</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;/product&#39;</span> <span class="n">component</span><span class="o">=</span><span class="p">{</span><span class="n">Product</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="o">&lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;/</span><span class="n">BrowserRouter</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;/</span><span class="n">Provider</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ReactDom</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="o">&lt;</span><span class="n">App</span><span class="o">/&gt;</span><span class="p">,</span> <span class="n">document</span><span class="o">.</span><span class="n">querySelector</span><span class="p">(</span><span class="s1">&#39;#root&#39;</span><span class="p">))</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>BrowserRouter 组件根据 window.location 以及 history API 实现页面切换，而服务端肯定是无法获取 window.location 的。</p>
+<p>服务端代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">App</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> 
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">Provider</span> <span class="n">store</span><span class="o">=</span><span class="p">{</span><span class="n">store</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;</span><span class="n">StaticRouter</span> <span class="n">location</span><span class="o">=</span><span class="p">{</span><span class="n">req</span><span class="o">.</span><span class="n">path</span><span class="p">}</span> <span class="n">context</span><span class="o">=</span><span class="p">{</span><span class="n">context</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="o">&lt;</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">            <span class="o">&lt;</span><span class="n">Route</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;/&#39;</span> <span class="n">component</span><span class="o">=</span><span class="p">{</span><span class="n">Home</span><span class="p">}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">          <span class="o">&lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;/</span><span class="n">StaticRouter</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;/</span><span class="n">Provider</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">Return</span> <span class="n">ReactDom</span><span class="o">.</span><span class="n">renderToString</span><span class="p">(</span><span class="o">&lt;</span><span class="n">App</span><span class="o">/&gt;</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在服务端，需要使用 StaticRouter 组件，并将请求地址和上下文信息作为 location 和 context 这两个props 传入 StaticRouter 中。</p>
+<p>打包差别</p>
+<p>服务端运行的代码如果需要依赖 Node 核心模块或者第三方模块，就不再需要把这些模块代码打包到最终代码中了。因为环境已经安装这些依赖，可以直接引用。这样一来，就需要我们在 Webpack 中配置 target：node，并借助 webpack-node-externals 插件，解决第三方依赖打包的问题。</p>
+<p>注水和脱水</p>
+<p>什么叫作注水和脱水呢？这个和同构应用中数据的获取有关：在服务器端渲染时，首先服务端请求接口拿到数据，并处理准备好数据状态（如果使用 Redux，就是进行Store 的更新），为了减少客户端的请求，我们需要保留住这个状态。</p>
+<p>一般做法是在服务器端返回 HTML 字符串的时候，将数据 JSON.stringify 一并返回，这个过程，叫作脱水（dehydrate）；在客户端，就不再需要进行数据的请求了，可以直接使用服务端下发下来的数据，这个过程叫注水（hydrate）。</p>
+<p>响应代码前面已经有所体现了，但是在服务端渲染时，服务端如何能够请求所有的 APIs，保障数据全部已经请求呢？</p>
+<p>一般有两种方法进行服务端请求。</p>
+<p>react-router 的解决方案是配置路由route-config，结合 matchRoutes，找到页面上相关组件所需的请求接口的方法并执行请求。这就要求开发者通过路由配置信息，显式地告知服务端请求内容。如下代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">routes</span> <span class="o">=</span> <span class="p">[</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">path</span><span class="p">:</span> <span class="s2">&#34;/&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">      <span class="n">component</span><span class="p">:</span> <span class="n">Root</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">      <span class="n">loadData</span><span class="p">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="n">getSomeData</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="n">etc</span><span class="o">.</span>
+</span></span><span class="line"><span class="cl">  <span class="p">]</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="n">import</span> <span class="p">{</span> <span class="n">routes</span> <span class="p">}</span> <span class="n">from</span> <span class="s2">&#34;./routes&#34;</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="n">function</span> <span class="n">App</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">(</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">Switch</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span><span class="n">routes</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">route</span> <span class="o">=&gt;</span> <span class="p">(</span>
+</span></span><span class="line"><span class="cl">          <span class="o">&lt;</span><span class="n">Route</span> <span class="p">{</span><span class="o">...</span><span class="n">route</span><span class="p">}</span> <span class="o">/&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">))}</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;/</span><span class="n">Switch</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在服务端代码中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">  <span class="n">import</span> <span class="p">{</span> <span class="n">matchPath</span> <span class="p">}</span> <span class="n">from</span> <span class="s2">&#34;react-router-dom&#34;</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">promises</span> <span class="o">=</span> <span class="p">[]</span>
+</span></span><span class="line"><span class="cl">  <span class="n">routes</span><span class="o">.</span><span class="n">some</span><span class="p">(</span><span class="n">route</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">match</span> <span class="o">=</span> <span class="n">matchPath</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">route</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span> <span class="n">promises</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">loadData</span><span class="p">(</span><span class="n">match</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">match</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="n">Promise</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">promises</span><span class="p">)</span><span class="o">.</span><span class="n">then</span><span class="p">(</span><span class="n">data</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">putTheDataSomewhereTheClientCanFindIt</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>另外一种思路类似 Next.js，我们需要在 React 组件上定义静态方法。比如定义静态 loadData 方法，在服务端渲染时，我们可以遍历所有组件的 loadData，获取需要请求的接口。</p>
+<p>安全问题</p>
+<p>安全问题非常关键，尤其是涉及服务端渲染，开发者要格外小心。这里提出一个点：我们前面提到了注水和脱水过程，其中的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">ctx.body = `
+</span></span><span class="line"><span class="cl">  &lt;!DOCTYPE html&gt;
+</span></span><span class="line"><span class="cl">  &lt;html lang=&#34;en&#34;&gt;
+</span></span><span class="line"><span class="cl">    &lt;head&gt;
+</span></span><span class="line"><span class="cl">      &lt;meta charset=&#34;UTF-8&#34;&gt;
+</span></span><span class="line"><span class="cl">    &lt;/head&gt;
+</span></span><span class="line"><span class="cl">    &lt;body&gt;
+</span></span><span class="line"><span class="cl">        &lt;script&gt;
+</span></span><span class="line"><span class="cl">        window.context = {
+</span></span><span class="line"><span class="cl">          initialState: ${JSON.stringify(store.getState())}
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">      &lt;/script&gt;
+</span></span><span class="line"><span class="cl">      &lt;div id=&#34;app&#34;&gt;
+</span></span><span class="line"><span class="cl">          // ...
+</span></span><span class="line"><span class="cl">      &lt;/div&gt;
+</span></span><span class="line"><span class="cl">    &lt;/body&gt;
+</span></span><span class="line"><span class="cl">  &lt;/html&gt;
+</span></span><span class="line"><span class="cl">`
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>非常容易遭受 XSS 攻击，JSON.stringify 可能会造成 script 注入。因此，我们需要严格清洗 JSON 字符串中的 HTML 标签和其他危险的字符。我习惯使用 serialize-javascript 库进行处理，这也是同构应用中最容易被忽视的细节。</p>
+<p>这里给大家留一个思考题，React
+dangerouslySetInnerHTML
+API 也有类似风险，React 是怎么处理这个安全隐患的呢？</p>
+<p>请求认证处理</p>
+<p>上面讲到服务端预先请求数据，那么请你思考这样一个场景：某个请求依赖 cookie 表明的用户信息，比如请求“我的学习计划列表”。这种情况下服务端请求是不同于客户端的，不会有浏览器添加 cookie 以及不含有其他相关的 header 信息。这个请求在服务端发送时，一定不会拿到预期的结果。</p>
+<p>解决办法也很简单：服务端请求时需要保留客户端页面请求的信息（一般是 cookie），并在 API 请求时携带并透传这个信息（cookie）。</p>
+<p>样式问题处理</p>
+<p>同构应用的样式处理容易被开发者忽视，而一旦忽略，就会掉到坑里。比如，我们不能再使用 style-loader 了，因为这个WebpackLoader 会在编译时将样式模块载入到 HTML header 中。但是在服务端渲染环境下，没有Window 对象，style-loader就会报错。一般我们使用 isomorphic-style-loader 来实现：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">test</span><span class="p">:</span> <span class="o">/</span>\<span class="o">.</span><span class="n">css</span><span class="o">$/</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">use</span><span class="p">:</span> <span class="p">[</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;isomorphic-style-loader&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;css-loader&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="s1">&#39;postcss-loader&#39;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">],</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>isomorphic-style-loader 的原理是什么呢？</p>
+<p>我们知道，对于Webpack 来说，所有的资源都是模块。WebpackLoader 在编译过程中可以将导入的 CSS 文件转换成对象，拿到样式信息。因此isomorphic-style-loader 可以获取页面中所有组件样式。为了实现得更加通用化，isomorphic-style-loader 利用 context API，在渲染页面组件时获取所有 React 组件的样式信息，最终插入 HTML 字符串中。</p>
+<p>在服务端渲染时，我们需要加入这样的逻辑：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">import</span> <span class="n">express</span> <span class="n">from</span> <span class="s1">&#39;express&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">React</span> <span class="n">from</span> <span class="s1">&#39;react&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">ReactDOM</span> <span class="n">from</span> <span class="s1">&#39;react-dom&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">StyleContext</span> <span class="n">from</span> <span class="s1">&#39;isomorphic-style-loader/StyleContext&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">App</span> <span class="n">from</span> <span class="s1">&#39;./App.js&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">server</span> <span class="o">=</span> <span class="n">express</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">port</span> <span class="o">=</span> <span class="n">process</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">PORT</span> <span class="o">||</span> <span class="mi">3000</span>
+</span></span><span class="line"><span class="cl"><span class="n">server</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">res</span><span class="p">,</span> <span class="n">next</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span>  <span class="n">css</span> <span class="n">Set</span> <span class="err">类型来存储页面所有的样式</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">css</span> <span class="o">=</span> <span class="n">new</span> <span class="n">Set</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">insertCss</span> <span class="o">=</span> <span class="p">(</span><span class="o">...</span><span class="n">styles</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="n">styles</span><span class="o">.</span><span class="n">forEach</span><span class="p">(</span><span class="n">style</span> <span class="o">=&gt;</span> <span class="n">css</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">style</span><span class="o">.</span><span class="n">_getCss</span><span class="p">()))</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">body</span> <span class="o">=</span> <span class="n">ReactDOM</span><span class="o">.</span><span class="n">renderToString</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="o">&lt;</span><span class="n">StyleContext</span><span class="o">.</span><span class="n">Provider</span> <span class="n">value</span><span class="o">=</span><span class="p">{{</span> <span class="n">insertCss</span> <span class="p">}}</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">App</span> <span class="o">/&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">&lt;/</span><span class="n">StyleContext</span><span class="o">.</span><span class="n">Provider</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">  <span class="p">)</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">html</span> <span class="o">=</span> <span class="err">`</span><span class="o">&lt;!</span><span class="n">doctype</span> <span class="n">html</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">&lt;</span><span class="n">html</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">head</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;</span><span class="n">script</span> <span class="n">src</span><span class="o">=</span><span class="s2">&#34;client.js&#34;</span> <span class="n">defer</span><span class="o">&gt;&lt;/</span><span class="n">script</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">//</span> <span class="err">将样式内连进</span> <span class="n">html</span> <span class="err">当中</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;</span><span class="n">style</span><span class="o">&gt;$</span><span class="p">{[</span><span class="o">...</span><span class="n">css</span><span class="p">]</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)}</span><span class="o">&lt;/</span><span class="n">style</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;/</span><span class="n">head</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;</span><span class="n">body</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">        <span class="o">&lt;</span><span class="n">div</span> <span class="n">id</span><span class="o">=</span><span class="s2">&#34;root&#34;</span><span class="o">&gt;$</span><span class="p">{</span><span class="n">body</span><span class="p">}</span><span class="o">&lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">      <span class="o">&lt;/</span><span class="n">body</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">&lt;/</span><span class="n">html</span><span class="o">&gt;</span><span class="err">`</span>
+</span></span><span class="line"><span class="cl">  <span class="n">res</span><span class="o">.</span><span class="n">status</span><span class="p">(</span><span class="mi">200</span><span class="p">)</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">html</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">})</span>
+</span></span><span class="line"><span class="cl"><span class="n">server</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">port</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="err">`</span><span class="ne">Node</span><span class="o">.</span><span class="n">js</span> <span class="n">app</span> <span class="n">is</span> <span class="n">running</span> <span class="n">at</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="o">$</span><span class="p">{</span><span class="n">port</span><span class="p">}</span><span class="o">/</span><span class="err">`</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">})</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>分析上面代码，我们定义了 css Set 类型来存储页面所有的样式，并定义了 insertCss 方法。该方法通过 context 传给每个 React 组件，这样每个组件就可以调用 insertCss 方法。该方法调用时，会将组件样式加入 css Set 当中。</p>
+<p>最后我们用
+[&hellip;css].join(&rsquo;&rsquo;)
+就可以获取页面的所有样式字符串。</p>
+<p>强调一下，isomorphic-style-loader 的源码目前已经更新，采用了最新的 ReactHooks API，我推荐给 React 开发者阅读，相信你一定收获很多！</p>
+<p>总结</p>
+<p>本小节前半部分我们“手把手”教你实现服务端渲染的同构应用，因为这些知识并不困难，社区上资料也很多。后半部分我们从更高的角度出发，剖析同构应用中那些关键的细节点和疑难问题的解决方案，这些经验源于真刀真枪的线上案例，即使你没有开发过同构应用，也能从中全方位地了解关键信息，一旦掌握了这些细节，同构应用的实现就会更稳、更可靠。</p>
+<p>本讲内容总结如下：</p>
+<p>同构应用其实远比理论复杂，绝对不是几个 APIs 和几台服务器就能完成的，希望大家多思考、多动手，一定会更有体会。下一讲，我们进入 CI/CD 流程，设计一个性能守卫系统，以此帮助你了解：Node.js 除了同构直出、数据聚合以外，还能做一些重要的，且有趣的服务。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/">前端基础建设与架构30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/27%E5%A6%82%E4%BD%95%E7%9C%8B%E6%87%82%E8%82%A1%E4%BB%B7%E6%8C%87%E6%95%B0%E5%88%A4%E6%96%AD%E8%82%A1%E5%B8%82%E8%B5%B0%E5%8A%BF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">27如何看懂股价指数，判断股市走势？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/28__canvassvg%E4%B8%8Ewebgl%E5%9C%A8%E6%80%A7%E8%83%BD%E4%B8%8A%E7%9A%84%E4%BC%98%E5%8A%BF%E4%B8%8E%E5%8A%A3%E5%8A%BF/">
+            <span class="next-text nav-default">28__Canvas、SVG与WebGL在性能上的优势与劣势</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

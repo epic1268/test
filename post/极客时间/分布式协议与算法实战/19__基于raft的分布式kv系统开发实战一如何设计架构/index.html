@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>19__基于Raft的分布式KV系统开发实战（一）：如何设计架构？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是韩健。
+学完前面 2 讲之后，相信你已经大致了解了 Raft 算法的代码实现（Hashcorp Raft），也掌握了常用 API 接口的用法，对 Raft 算法的理解也更深刻了。那么，是不是掌握这些，就能得心应手的处理实际场景的问题了呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/19__%E5%9F%BA%E4%BA%8Eraft%E7%9A%84%E5%88%86%E5%B8%83%E5%BC%8Fkv%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98%E4%B8%80%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E6%9E%B6%E6%9E%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/19__%E5%9F%BA%E4%BA%8Eraft%E7%9A%84%E5%88%86%E5%B8%83%E5%BC%8Fkv%E7%B3%BB%E7%BB%9F%E5%BC%80%E5%8F%91%E5%AE%9E%E6%88%98%E4%B8%80%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E6%9E%B6%E6%9E%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="19__基于Raft的分布式KV系统开发实战（一）：如何设计架构？">
+  <meta property="og:description" content="你好，我是韩健。
+学完前面 2 讲之后，相信你已经大致了解了 Raft 算法的代码实现（Hashcorp Raft），也掌握了常用 API 接口的用法，对 Raft 算法的理解也更深刻了。那么，是不是掌握这些，就能得心应手的处理实际场景的问题了呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="分布式协议与算法实战">
+
+  <meta itemprop="name" content="19__基于Raft的分布式KV系统开发实战（一）：如何设计架构？">
+  <meta itemprop="description" content="你好，我是韩健。
+学完前面 2 讲之后，相信你已经大致了解了 Raft 算法的代码实现（Hashcorp Raft），也掌握了常用 API 接口的用法，对 Raft 算法的理解也更深刻了。那么，是不是掌握这些，就能得心应手的处理实际场景的问题了呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4599">
+  <meta itemprop="keywords" content="分布式协议与算法实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="19__基于Raft的分布式KV系统开发实战（一）：如何设计架构？">
+  <meta name="twitter:description" content="你好，我是韩健。
+学完前面 2 讲之后，相信你已经大致了解了 Raft 算法的代码实现（Hashcorp Raft），也掌握了常用 API 接口的用法，对 Raft 算法的理解也更深刻了。那么，是不是掌握这些，就能得心应手的处理实际场景的问题了呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">19__基于Raft的分布式KV系统开发实战（一）：如何设计架构？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4599 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何设计接入协议">如何设计接入协议？</a></li>
+        <li><a href="#如何设计-kv-操作">如何设计 KV 操作？</a></li>
+        <li><a href="#如何实现分布式集群">如何实现分布式集群？</a></li>
+        <li><a href="#内容小结">内容小结</a></li>
+        <li><a href="#课堂思考">课堂思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是韩健。</p>
+<p>学完前面 2 讲之后，相信你已经大致了解了 Raft 算法的代码实现（Hashcorp Raft），也掌握了常用 API 接口的用法，对 Raft 算法的理解也更深刻了。那么，是不是掌握这些，就能得心应手的处理实际场景的问题了呢？</p>
+<p>在我看来，掌握的还不够，因为 Raft 算法的实现只是工具。而掌握了工具的用法，和能使用工具得心应手地处理实际场景的问题，是两回事。也就是说，我们还需要掌握使用 Raft 算法开发分布式系统的实战能力，然后才能游刃有余的处理实际场景的问题。</p>
+<p>我从这个角度出发，在接下来的 2 节课中，我会分别从架构和代码实现的角度，以一个基本的分布式 KV 系统为例，具体说一说，如何基于 Raft 算法构建一个分布式 KV 系统。**那么我希望你能课下多动手，自己写一遍，不给自己留下盲区。**如果条件允许的话，你还可以按需开发实现需要的功能，并将这套系统作为自己的“配置中心”“名字路由”维护下去，不断在实战中加深自己对技术的理解。</p>
+<p>可能有同学会问：“老韩，为什么不以 Etcd 为例呢？它不是已经在生产环境中落地了吗？”</p>
+<p>我是这么考虑的，这个基本的分布式 KV 系统的代码比较少，相对纯粹聚焦在技术本身，涉及的 KV 业务层面的逻辑少，适合入门学习（比如你可以从零开始，动手编程实现），是一个很好的学习案例。</p>
+<p>另外，对一些有经验的开发者来说，这部分知识能够帮助你掌握 Raft 算法中，一些深层次的技术实现，比如如何实现多种读一致性模型，让你更加深刻地理解 Raft 算法。</p>
+<p>今天这节课，我会具体说一说如何设计一个基本的分布式 KV 系统，也就是需要实现哪些功能，以及在架构设计的时候，你需要考虑哪些点（比如跟随者是否要转发写请求给领导者？或者如何设计接入访问的 API？）</p>
+<p>好了，话不多说，一起进入今天的课程吧！</p>
+<p>在我看来，基于技术深度、开发工作量、学习复杂度等综合考虑，一个基本的分布式 KV 系统，至少需要具备这样几块功能，就像下图的样子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/dadfdffe4a0f8695fd32bb97a47e8f14.png" alt=""></p>
+<ol>
+<li>接入协议：供客户端访问系统的接入层 API，以及与客户端交互的通讯协议。</li>
+<li>KV 操作：我们需要支持的 KV 操作（比如赋值操作）。</li>
+<li>分布式集群：也就是说，我们要基于 Raft 算法实现一个分布式存储集群，用于存放 KV 数据。</li>
+</ol>
+<p>需要你注意的是，这 3 点就是分布式 KV 系统的核心功能，也就是我们需要编程实现的需求。</p>
+<p>在我看来，要实现一个基本的分布式 KV 系统，首先要做的第一件事，就是实现访问接入的通讯协议。因为如果用户想使用这套系统，对他而言的第一件事，就是如何访问这套系统。那么，如何实现访问接入的通讯协议呢？</p>
+<h2 id="如何设计接入协议">如何设计接入协议？</h2>
+<p>我想说的是，在早些时候，硬件性能低，服务也不是很多，开发系统的时候，主要矛盾是性能瓶颈，所以，更多的是基于性能的考虑，采用 UDP 协议和实现私有的二进制协议，比如，早期的 QQ 后台组件，就是这么做的。</p>
+<p>现在呢，硬件性能有了很大幅度的提升，后台服务器的 CPU 核数都近百了，开发系统的时候，主要的矛盾已经不是性能瓶颈了，而是快速增长的海量服务和开发效率，所以这时，基于开发效率和可维护性的考虑，我们就需要优先考虑标准的协议了（比如 HTTP）。</p>
+<p>如果使用 HTTP 协议，那么就需要设计 HTTP RESTful API，作为访问接口。具体怎么设计呢？</p>
+<p>我想说的是，因为我们设计实现的是 KV 系统，肯定要涉及到 KV 操作，那么我们就一定需要设计个 API（比如&quot;/key&quot;）来支持 KV 操作。也就是说，通过访问这个 API，我们能执行相关的 KV 操作了，就像下面的样子（查询指定 key（就是 foo）对应的值）。</p>
+<p>curl -XGET http://raft-cluster-host01:8091/key/foo</p>
+<p>另外，需要你注意的是，因为这是一个 Raft 集群系统，除了业务层面（KV 操作），我们还需要实现平台本身的一些操作的 API 接口，比如增加、移除集群节点等。我们现在只考虑增加节点操作的 API（比如&quot;/join&quot;），就像下面的样子。</p>
+<p>http://raft-cluster-host01:8091/join</p>
+<p>另外，在故障或缩容情况下，如何替换节点、移除节点，我建议你在线下对比着增加节点的操作，自主实现。</p>
+<p>除此之外，在我看来，实现 HTTP RESTful API，还有非常重要的一件事情要做，那就是在设计 API 时，考虑如何实现路由，为什么这么说呢？你这么想象一下，如果我们实现了多个 API，比如&quot;/key&quot;和&quot;/join&quot;，那么就需要将 API 对应的请求和它对应的处理函数一一映射起来。</p>
+<p>我想说的是，我们可以在 serveHTTP() 函数（Golang）中，通过检测 URL 路径，来设置请求对应处理函数，实现路由。大概的原理，就像下面的样子。</p>
+<p>func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {    // 设置 HTTP 请求对应的路由信息<br>
+if strings.HasPrefix(r.URL.Path, &ldquo;/key&rdquo;) {<br>
+s.handleKeyRequest(w, r)<br>
+} else if r.URL.Path == &ldquo;/join&rdquo; {<br>
+s.handleJoin(w, r)<br>
+} else {<br>
+w.WriteHeader(http.StatusNotFound)<br>
+}<br>
+}</p>
+<p>从上面代码中，我们可以看到，当检测到 URL 路径为“/key”时，会调用 handleKeyRequest() 函数，来处理 KV 操作请求；当检测到 URL 路径为&quot;/join&quot;时，会调用 handleJoin() 函数，将指定节点加入到集群中。</p>
+<p>你看，通过&quot;/key&quot;和&quot;/join&quot;2 个 API，我们就能满足这个基本的分布式 KV 系统的运行要求了，既能支持来自客户端的 KV 操作，也能新增节点并将集群运行起来。</p>
+<p>当客户端通过通讯协议访问到系统后，它最终的目标，还是执行 KV 操作。那么，我们该如何设计 KV 操作呢？</p>
+<h2 id="如何设计-kv-操作">如何设计 KV 操作？</h2>
+<p>我想说的是，常见的 KV 操作是赋值、查询、删除，也就是说，我们实现这三个操作就可以了，其他的操作可以先不考虑。具体可以这么实现。</p>
+<ol>
+<li>**赋值操作：**我们可以通过 HTTP POST 请求，来对指定 key 进行赋值，就像下面的样子。</li>
+</ol>
+<p>curl -XPOST http://raft-cluster-host01:8091/key -d &lsquo;{&ldquo;foo&rdquo;: &ldquo;bar&rdquo;}&rsquo;</p>
+<ol>
+<li>**查询操作：**我们可以通过 HTTP GET 请求，来查询指定 key 的值，就像下面的样子。</li>
+</ol>
+<p>curl -XGET http://raft-cluster-host01:8091/key/foo</p>
+<ol>
+<li>**删除操作：**我们可以通过 HTTP DELETE 请求，来删除指定 key 和 key 对应的值，就像下面的样子。</li>
+</ol>
+<p>curl -XDELETE http://raft-cluster-host01:8091/key/foo</p>
+<p>在这里，尤其需要你注意的是，操作需要具有幂等性。幂等性这个词儿你估计不会陌生，你可以这样理解它：同一个操作，不管执行多少次，最终的结果都是一样的，也就是，这个操作是可以重复执行的，而是重复执行不会对系统产生预期外的影响。</p>
+<p>为什么操作要具有冥等性呢？</p>
+<p>因为共识算法能保证达成共识后的值（也就是指令）就不再改变了，但不能保证值只被提交一次，也就是说，共识算法是一个“at least once”的指令执行模型，是可能会出现同一个指令被重复提交的情况，为什么呢？我以 Raft 算法为例，具体说一说。</p>
+<p>比如，如果客户端接收到 Raft 的超时响应后，也就是这时日志项还没有提交成功，如果此时它重试，发送一个新的请求，那么这个时候 Raft 会创建一个新的日志项，并最终将新旧 2 个日志项都提交了，出现了指令重复执行的情况。</p>
+<p>在这里我想强调的是，你一定要注意到这样的情况，在使用 Raft 等共识算法时，要充分评估操作是否具有幂等性，避免对系统造成预期外的影响，比如，直接使用“Add”操作，就会因重复提交，导致最终的执行结果不准了，影响到业务。这就可能会出现，用户购买了 100Q 币，系统却给他充值了 500Q 币，肯定不行了。</p>
+<p>说完如何设计 KV 操作后，因为我们的最终目标是实现分布式 KV 系统，那么，就让我们回到分布式系统最本源的一个问题上，如何实现分布式集群？</p>
+<h2 id="如何实现分布式集群">如何实现分布式集群？</h2>
+<p>我想说的是，正如在 09 讲中提到的，我推荐使用 Raft 算法实现分布式集群。而实现一个 Raft 集群，我们首先要考虑的是如何创建集群，为了简单起见，我们暂时不考虑节点的移除和替换等。</p>
+<p><strong>创建集群</strong></p>
+<p>在 Raft 算法中，我们可以这样创建集群。</p>
+<ol>
+<li>先将第一个节点，通过 Bootstrap 的方式启动，并作为领导者节点。</li>
+<li>其他节点与领导者节点通讯，将自己的配置信息发送给领导者节点，然后领导者节点调用 AddVoter() 函数，将新节点加入到集群中。</li>
+</ol>
+<p>创建了集群后，在集群运行中，因为 Raft 集群的领导者不是固定不变的，而写请求是必须要在领导者节点上处理的，那么如何实现写操作，来保证写请求都会发给领导者呢？</p>
+<p><strong>写操作</strong></p>
+<p>一般而言，有 2 种方法来实现写操作。我来具体说说。</p>
+<p>**方法 1：**跟随者接收到客户端的写请求后，拒绝处理这个请求，并将领导者的地址信息返回给客户端，然后客户端直接访问领导者节点，直到该领导者退位，就像下图的样子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/667fc249e5d7438c16f0a222e4a53d8b.png" alt=""></p>
+<p>**方法 2：**跟随者接收到客户端的写请求后，将写请求转发给领导者，并将领导者处理后的结果返回给客户端，也就是说，这时跟随者在扮演“代理”的角色，就像下图的样子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/9ae5f21b498193b9d3719b91383a15b9.png" alt=""></p>
+<p>在我看来，虽然第一种方法需要客户端的配合，但实现起来复杂度不高；另外，第二种方法，虽然能降低客户端的复杂度，客户端像访问一个黑盒一样，访问系统，对领导者变更完全无感知。</p>
+<p>但是这个方法会引入一个中间节点（跟随者），增加了问题分析排查的复杂度。而且，一般情况下，在绝大部分的时间内（比如 Google Chubby 团队观察到的值是数天），领导者是处于稳定状态的，某个节点一直是领导者，那么引入中间节点，就会增加大量的不必要的消息和性能消耗。所以，综合考虑，我推荐方法 1。</p>
+<p>学习了 Raft 算法后，我们知道，相比写操作（只要在领导者节点执行就可以了）而言，读操作要复杂些，因为如何实现读操作，关乎着一致性的实现，也就是说，怎么实现读操作，决定了客户端是否会读取到旧数据。那么如何实现读操作呢？</p>
+<p><strong>读操作</strong></p>
+<p>其实，在实际系统中，并不是实现了强一致性就是最好的，因为实现了强一致性，必然会限制集群的整体性能。也就是说，我们需要根据实际场景特点进行权衡折中，这样，才能设计出最适合该场景特点的读操作。比如，我们可以实现类似 Consul 的 3 种读一致性模型。</p>
+<ol>
+<li>default：偶尔读到旧数据。</li>
+<li>consistent：一定不会读到旧数据。</li>
+<li>stale：会读到旧数据。</li>
+</ol>
+<p>如果你不记得这 3 种模型的含义了，你可以去 09 讲回顾下，在这里，我就不啰嗦了。</p>
+<p>也就是说，我们可以实现多种读一致性模型，将最终的一致性选择权交给用户，让用户去选择，就像下面的样子。</p>
+<p>curl -XGET http://raft-cluster-host02:8091/key/foo?level=consistent  -L</p>
+<h2 id="内容小结">内容小结</h2>
+<p>本节课我主要带你了解了一个基本的分布式 KV 系统的架构，和需要权衡折中的技术细节，我希望你明确的重点如下。</p>
+<p>1. 在设计 KV 操作时，更确切的说，在实现 Raft 指令时，一定要考虑冥等性，因为 Raf 指令是可能会被重复提交和执行。</p>
+<p>2. 推荐你采用这种方式来实现写操作：跟随者接收到客户端的写请求时，拒绝该请求并返回领导者的地址信息给客户端，然后客户端直接访问领导者。</p>
+<p>3. 在 Raft 集群中，如何实现读操作，关乎一致性的实现，推荐实现 default、consistent、stale 三种一致性模型，将一致性的选择权交给用户，让用户根据实际业务特点，按需选择，灵活使用。</p>
+<p>最后，我想说的是，这个基本的分布式 KV 系统，除了适合入门学习外，也比较适合配置中心、名字服务等小数据量的系统。另外我想补充一下，对于数据层组件，不仅性能重要，成本也很重要，而决定数据层组件的成本的最关键的一个理念是冷热分离，一般而言，可以这么设计三级缓存：</p>
+<ol>
+<li>热数据：经常被访问到的数据，我们可以将它们放在内存中，提升访问效率。</li>
+<li>冷数据：有时会被访问到的数据，我们可以将它们放在 SSD 硬盘上，访问起来也比较快。</li>
+<li>陈旧数据：偶尔会被访问到的数据，我们可以将它们放在普通磁盘上，节省存储成本。</li>
+</ol>
+<p>在实际系统中，你可以统计热数据的命中率，并根据命中率来动态调整冷热模型。在这里，我想强调的是，冷热分离理念在设计海量数据存储系统时尤为重要，比如，自研 KV 存储的成本仅为 Redis 数十分之一，其中系统设计时非常重要的一个理念就是冷热分离。希望你能重视这个理念，在实际场景中活学活用。</p>
+<h2 id="课堂思考">课堂思考</h2>
+<p>我提到了其他节点与领导者节点通讯，将自己的配置信息发送给领导者节点，然后领导者节点调用 addVoter() 函数，将新节点加入到集群中，那么，你不妨思考一下，当节点故障时，如何替换一个节点呢？欢迎在留言区分享你的看法，与我一同讨论。</p>
+<p>最后，感谢你的阅读，如果这篇文章让你有所收获，也欢迎你将它分享给更多的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/">分布式协议与算法实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%91%84%E5%BD%B1%E5%85%A5%E9%97%A8%E8%AF%BE/19__%E5%9F%BA%E7%A1%80%E6%89%8B%E6%9C%BA%E5%90%8E%E6%9C%9F%E4%B8%8Bsnapseed_%E4%BD%BF%E7%94%A8%E6%94%BB%E7%95%A5@%E9%9A%8F%E4%BD%A0%E4%BB%AC%E5%8E%BB/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">19__基础手机后期（下）：Snapseed_使用攻略（@随你们去）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BB%84%E6%88%90%E5%8E%9F%E7%90%86/19__%E5%BB%BA%E7%AB%8B%E6%95%B0%E6%8D%AE%E9%80%9A%E8%B7%AF%E4%B8%8B%E6%8C%87%E4%BB%A4&#43;%E8%BF%90%E7%AE%97cpu/">
+            <span class="next-text nav-default">19__建立数据通路（下）：指令&#43;运算=CPU</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

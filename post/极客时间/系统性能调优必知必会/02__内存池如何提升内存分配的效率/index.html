@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>02__内存池：如何提升内存分配的效率？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是陶辉。
+上一讲我们提到，高频地命中 CPU 缓存可以提升性能。这一讲我们把关注点从 CPU 转移到内存，看看如何提升内存分配的效率。
+或许有同学会认为，我又不写底层框架，内存分配也依赖虚拟机，并不需要应用开发者了解。如果你也这么认为，我们不妨看看这个例子：在 Linux 系统中，用 Xmx 设置 JVM 的最大堆内存为 8GB，但在近百个并发线程下，观察到 Java 进程占用了 14GB 的内存。为什么会这样呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/02__%E5%86%85%E5%AD%98%E6%B1%A0%E5%A6%82%E4%BD%95%E6%8F%90%E5%8D%87%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E7%9A%84%E6%95%88%E7%8E%87/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/02__%E5%86%85%E5%AD%98%E6%B1%A0%E5%A6%82%E4%BD%95%E6%8F%90%E5%8D%87%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E7%9A%84%E6%95%88%E7%8E%87/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="02__内存池：如何提升内存分配的效率？">
+  <meta property="og:description" content="你好，我是陶辉。
+上一讲我们提到，高频地命中 CPU 缓存可以提升性能。这一讲我们把关注点从 CPU 转移到内存，看看如何提升内存分配的效率。
+或许有同学会认为，我又不写底层框架，内存分配也依赖虚拟机，并不需要应用开发者了解。如果你也这么认为，我们不妨看看这个例子：在 Linux 系统中，用 Xmx 设置 JVM 的最大堆内存为 8GB，但在近百个并发线程下，观察到 Java 进程占用了 14GB 的内存。为什么会这样呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="系统性能调优必知必会">
+
+  <meta itemprop="name" content="02__内存池：如何提升内存分配的效率？">
+  <meta itemprop="description" content="你好，我是陶辉。
+上一讲我们提到，高频地命中 CPU 缓存可以提升性能。这一讲我们把关注点从 CPU 转移到内存，看看如何提升内存分配的效率。
+或许有同学会认为，我又不写底层框架，内存分配也依赖虚拟机，并不需要应用开发者了解。如果你也这么认为，我们不妨看看这个例子：在 Linux 系统中，用 Xmx 设置 JVM 的最大堆内存为 8GB，但在近百个并发线程下，观察到 Java 进程占用了 14GB 的内存。为什么会这样呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4143">
+  <meta itemprop="keywords" content="系统性能调优必知必会">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="02__内存池：如何提升内存分配的效率？">
+  <meta name="twitter:description" content="你好，我是陶辉。
+上一讲我们提到，高频地命中 CPU 缓存可以提升性能。这一讲我们把关注点从 CPU 转移到内存，看看如何提升内存分配的效率。
+或许有同学会认为，我又不写底层框架，内存分配也依赖虚拟机，并不需要应用开发者了解。如果你也这么认为，我们不妨看看这个例子：在 Linux 系统中，用 Xmx 设置 JVM 的最大堆内存为 8GB，但在近百个并发线程下，观察到 Java 进程占用了 14GB 的内存。为什么会这样呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">02__内存池：如何提升内存分配的效率？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4143 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#隐藏的内存池">隐藏的内存池</a></li>
+      </ul>
+    </li>
+    <li><a href="#cat-proc2891maps--grep-heap">cat /proc/2891/maps | grep heap</a>
+      <ul>
+        <li><a href="#选择-ptmalloc2-还是-tcmalloc">选择 Ptmalloc2 还是 TCMalloc？</a></li>
+        <li><a href="#从堆还是栈上分配内存">从堆还是栈上分配内存？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是陶辉。</p>
+<p>上一讲我们提到，高频地命中 CPU 缓存可以提升性能。这一讲我们把关注点从 CPU 转移到内存，看看如何提升内存分配的效率。</p>
+<p>或许有同学会认为，我又不写底层框架，内存分配也依赖虚拟机，并不需要应用开发者了解。如果你也这么认为，我们不妨看看这个例子：在 Linux 系统中，用 Xmx 设置 JVM 的最大堆内存为 8GB，但在近百个并发线程下，观察到 Java 进程占用了 14GB 的内存。为什么会这样呢？</p>
+<p>这是因为，绝大部分高级语言都是用 C 语言编写的，包括 Java，申请内存必须经过 C 库，而 C 库通过预分配更大的空间作为内存池，来加快后续申请内存的速度。这样，预分配的 6GB 的 C 库内存池就与 JVM 中预分配的 8G 内存池叠加在一起，造成了 Java 进程的内存占用超出了预期。</p>
+<p>掌握内存池的特性，既可以避免写程序时内存占用过大，导致服务器性能下降或者进程 OOM（Out Of Memory，内存溢出）被系统杀死，还可以加快内存分配的速度。在系统空闲时申请内存花费不了多少时间，但是对于分布式环境下繁忙的多线程服务，获取内存的时间会上升几十倍。</p>
+<p>另一方面，内存池是非常底层的技术，当我们理解它后，可以更换适合应用场景的内存池。在多种编程语言共存的分布式系统中，内存池有很广泛的应用，优化内存池带来的任何微小的性能提升，都将被分布式集群巨大的主机规模放大，从而带来整体上非常可观的收益。</p>
+<p>接下来，我们就通过对内存池的学习，看看如何提升内存分配的效率。</p>
+<h2 id="隐藏的内存池">隐藏的内存池</h2>
+<p>实际上，在你的业务代码与系统内核间，往往有两层内存池容易被忽略，尤其是其中的 C 库内存池。</p>
+<p>当代码申请内存时，首先会到达应用层内存池，如果应用层内存池有足够的可用内存，就会直接返回给业务代码，否则，它会向更底层的 C 库内存池申请内存。比如，如果你在 Apache、Nginx 等服务之上做模块开发，这些服务中就有独立的内存池。当然，Java 中也有内存池，当通过启动参数 Xmx 指定 JVM 的堆内存为 8GB 时，就设定了 JVM 堆内存池的大小。</p>
+<p>你可能听说过 Google 的 TCMalloc 和 FaceBook 的 JEMalloc，它们也是 C 库内存池。当 C 库内存池无法满足内存申请时，才会向操作系统内核申请分配内存。如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/702642632e13739c815ab822dae96876.png" alt=""></p>
+<p>回到文章开头的问题，Java 已经有了应用层内存池，为什么还会受到 C 库内存池的影响呢？这是因为，除了 JVM 负责管理的堆内存外，Java 还拥有一些堆外内存，由于它不使用 JVM 的垃圾回收机制，所以更稳定、持久，处理 IO 的速度也更快。这些堆外内存就会由 C 库内存池负责分配，这是 Java 受到 C 库内存池影响的原因。</p>
+<p>其实不只是 Java，几乎所有程序都在使用 C 库内存池分配出的内存。C 库内存池影响着系统下依赖它的所有进程。我们就以 Linux 系统的默认 C 库内存池 Ptmalloc2 来具体分析，看看它到底对性能发挥着怎样的作用。</p>
+<p>C 库内存池工作时，会预分配比你申请的字节数更大的空间作为内存池。比如说，当主进程下申请 1 字节的内存时，Ptmalloc2 会预分配 132K 字节的内存（Ptmalloc2 中叫 Main Arena），应用代码再申请内存时，会从这已经申请到的 132KB 中继续分配。</p>
+<p>如下所示（你可以在这里找到示例程序，注意地址的单位是 16 进制）：</p>
+<h1 id="cat-proc2891maps--grep-heap">cat /proc/2891/maps | grep heap</h1>
+<p>01643000-01664000 rw-p 00000000 00:00 0     [heap]</p>
+<p>当我们释放这 1 字节时，Ptmalloc2 也不会把内存归还给操作系统。Ptmalloc2 认为，与其把这 1 字节释放给操作系统，不如先缓存着放进内存池里，仍然当作用户态内存留下来，进程再次申请 1 字节的内存时就可以直接复用，这样速度快了很多。</p>
+<p>你可能会想，132KB 不多呀？为什么这一讲开头提到的 Java 进程，会被分配了几个 GB 的内存池呢？这是因为<strong>多线程与单线程的预分配策略并不相同</strong>。</p>
+<p>每个<strong>子线程预分配的内存是 64MB</strong>（Ptmalloc2 中被称为 Thread Arena，32 位系统下为 1MB，64 位系统下为 64MB）。如果有 100 个线程，就将有 6GB 的内存都会被内存池占用。当然，并不是设置了 1000 个线程，就会预分配 60GB 的内存，子线程内存池最多只能到 8 倍的 CPU 核数，比如在 32 核的服务器上，最多只会有 256 个子线程内存池，但这也非常夸张了，16GB（64MB * 256 = 16GB）的内存将一直被 Ptmalloc2 占用。</p>
+<p>回到本文开头的问题，Linux 下的 JVM 编译时默认使用了 Ptmalloc2 内存池，因此每个线程都预分配了 64MB 的内存，这造成含有上百个 Java 线程的 JVM 多使用了 6GB 的内存。在多数情况下，这些预分配出来的内存池，可以提升后续内存分配的性能。</p>
+<p>然而，Java 中的 JVM 内存池已经管理了绝大部分内存，确实不能接受莫名多出来 6GB 的内存，那该怎么办呢？既然我们知道了 Ptmalloc2 内存池的存在，就有两种解决办法。</p>
+<p>首先可以调整 Ptmalloc2 的工作方式。<strong>通过设置 MALLOC_ARENA_MAX 环境变量，可以限制线程内存池的最大数量</strong>，当然，线程内存池的数量减少后，会影响 Ptmalloc2 分配内存的速度。不过由于 Java 主要使用 JVM 内存池来管理对象，这点影响并不重要。</p>
+<p>其次可以更换掉 Ptmalloc2 内存池，选择一个预分配内存更少的内存池，比如 Google 的 TCMalloc。</p>
+<p>这并不是说 Google 出品的 TCMalloc 性能更好，而是在特定的场景中的选择不同。而且，盲目地选择 TCMalloc 很可能会降低性能，否则 Linux 系统早把默认的内存池改为 TCMalloc 了。</p>
+<p>TCMalloc 和 Ptmalloc2 是目前最主流的两个内存池，接下来我带你通过对比 TCMalloc 与 Ptmalloc2 内存池，看看到底该如何选择内存池。</p>
+<h2 id="选择-ptmalloc2-还是-tcmalloc">选择 Ptmalloc2 还是 TCMalloc？</h2>
+<p>先来看 TCMalloc 适用的场景，<strong>它对多线程下小内存的分配特别友好。</strong></p>
+<p>比如，在 2GHz 的 CPU 上分配、释放 256K 字节的内存，Ptmalloc2 耗时 32 纳秒，而 TCMalloc 仅耗时 10 纳秒（测试代码参见这里）。**差距超过了 3 倍，为什么呢？**这是因为，Ptmalloc2 假定，如果线程 A 申请并释放了的内存，线程 B 可能也会申请类似的内存，所以它允许内存池在线程间复用以提升性能。</p>
+<p>因此，每次分配内存，Ptmalloc2 一定要加锁，才能解决共享资源的互斥问题。然而，加锁的消耗并不小。如果你监控分配速度的话，会发现单线程服务调整为 100 个线程，Ptmalloc2 申请内存的速度会变慢 10 倍。TCMalloc 针对小内存做了很多优化，每个线程独立分配内存，无须加锁，所以速度更快！</p>
+<p>而且，**线程数越多，Ptmalloc2 出现锁竞争的概率就越高。**比如我们用 40 个线程做同样的测试，TCMalloc 只是从 10 纳秒上升到 25 纳秒，只增长了 1.5 倍，而 Ptmalloc2 则从 32 纳秒上升到 137 纳秒，增长了 3 倍以上。</p>
+<p>下图是 TCMalloc 作者给出的性能测试数据，可以看到线程数越多，二者的速度差距越大。所以，<strong>当应用场景涉及大量的并发线程时，换成 TCMalloc 库也更有优势！</strong></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/7dd2b1742ae1e65e9470e6ad5b70442c.png" alt=""></p>
+<p>图片来源：TCMalloc : Thread-Caching Malloc</p>
+<p>那么，为什么 GlibC 不把默认的 Ptmalloc2 内存池换成 TCMalloc 呢？<strong>因为 Ptmalloc2 更擅长大内存的分配。</strong></p>
+<p>比如，单线程下分配 257K 字节的内存，Ptmalloc2 的耗时不变仍然是 32 纳秒，但 TCMalloc 就由 10 纳秒上升到 64 纳秒，增长了 5 倍以上！**现在 TCMalloc 反过来比 Ptmalloc2 慢了 1 倍！**这是因为 TCMalloc 特意针对小内存做了优化。</p>
+<p>多少字节叫小内存呢？TCMalloc 把内存分为 3 个档次，小于等于 256KB 的称为小内存，从 256KB 到 1M 称为中等内存，大于 1MB 的叫做大内存。TCMalloc 对中等内存、大内存的分配速度很慢，比如我们用单线程分配 2M 的内存，Ptmalloc2 耗时仍然稳定在 32 纳秒，但 TCMalloc 已经上升到 86 纳秒，增长了 7 倍以上。</p>
+<p>所以，<strong>如果主要分配 256KB 以下的内存，特别是在多线程环境下，应当选择 TCMalloc；否则应使用 Ptmalloc2，它的通用性更好。</strong></p>
+<h2 id="从堆还是栈上分配内存">从堆还是栈上分配内存？</h2>
+<p>不知道你发现没有，刚刚讨论的内存池中分配出的都是堆内存，如果你把在堆中分配的对象改为在栈上分配，速度还会再快上 1 倍（具体测试代码可以在这里找到）！为什么？</p>
+<p>可能有同学还不清楚堆和栈内存是如何分配的，我先简单介绍一下。</p>
+<p>如果你使用的是静态类型语言，那么，不使用 new 关键字分配的对象大都是在栈中的。比如：</p>
+<p>C/C++/Java 语言：int a = 10;</p>
+<p>否则，通过 new 或者 malloc 关键字分配的对象则是在堆中的：</p>
+<p>C 语言：int * a = (int*) malloc(sizeof(int));<br>
+C++ 语言：int * a = new int;<br>
+Java 语言：int a = new Integer(10);</p>
+<p>另外，对于动态类型语言，无论是否使用 new 关键字，内存都是从堆中分配的。</p>
+<p>了解了这一点之后，我们再来看看，为什么从栈中分配内存会更快。</p>
+<p>这是因为，由于每个线程都有独立的栈，所以分配内存时不需要加锁保护，而且栈上对象的尺寸在编译阶段就已经写入可执行文件了，执行效率更高！性能至上的 Golang 语言就是按照这个逻辑设计的，即使你用 new 关键字分配了堆内存，但编译器如果认为在栈中分配不影响功能语义时，会自动改为在栈中分配。</p>
+<p>当然，在栈中分配内存也有缺点，它有功能上的限制。一是，栈内存生命周期有限，它会随着函数调用结束后自动释放。在堆中分配的内存，并不随着分配时所在函数调用的结束而释放，它的生命周期足够使用；二是，栈的容量有限，如 CentOS 7 中是 8MB 字节，如果你申请的内存超过限制会造成栈溢出错误（比如，递归函数调用很容易造成这种问题），而堆则没有容量限制。</p>
+<p><strong>所以，当我们分配内存时，如果在满足功能的情况下，可以在栈中分配的话，就选择栈。</strong></p>
+<h2 id="小结">小结</h2>
+<p>最后我们对这一讲做个小结。</p>
+<p>进程申请内存的速度，以及总内存空间都受到内存池的影响。知道这些隐藏内存池的存在，是提升分配内存效率的前提。</p>
+<p>隐藏着的 C 库内存池，对进程的内存开销有很大的影响。当进程的占用空间超出预期时，你需要清楚你正在使用的是什么内存池，它对每个线程预分配了多大的空间。</p>
+<p>不同的 C 库内存池，都有它们最适合的应用场景，例如 TCMalloc 对多线程下的小内存分配特别友好，而 Ptmalloc2 则对各类尺寸的内存申请都有稳定的表现，更加通用。</p>
+<p>内存池管理着堆内存，它的分配速度比不上在栈中分配内存。只是栈中分配的内存受到生命周期和容量大小的限制，应用场景更为有限。然而，如果有可能的话，尽量在栈中分配内存，它比内存池中的堆内存分配速度快很多！</p>
+<p>OK，今天我们从内存分配的角度聊了分布式系统性能提升的内容，希望学习过今天的内容后，你知道如何最快速地申请到内存，了解你正在使用的内存池，并清楚它对进程最终内存大小的影响。即使对第三方组件，我们也可以通过 LP_PRELOAD 环境变量，在程序启动时更换最适合的 C 库内存池（Linux 中通过 LD_PRELOAD 修改动态库来更换内存池，参见示例代码）。</p>
+<p>内存分配时间虽然不起眼，但时刻用最快的方法申请内存，正是高手与初学者的区别，相似算法的性能差距就体现在这些编码细节上，希望你能够重视它。</p>
+<h2 id="思考题">思考题</h2>
+<p>最后，留给你一个思考题。分配对象时，除了分配内存，还需要初始化对象的数据结构。内存池对于初始化对象有什么帮助吗？欢迎你在留言区与大家一起探讨。</p>
+<p>感谢阅读，如果你觉得这篇文章对你有一些启发，也欢迎把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/">系统性能调优必知必会</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/02__%E5%91%BD%E4%BB%A4%E6%BA%90%E7%A0%81%E6%96%87%E4%BB%B6/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">02__命令源码文件</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%86%E8%A7%89%E7%AC%94%E8%AE%B0%E5%85%A5%E9%97%A8%E8%AF%BE/02__%E4%BA%BA%E7%89%A9%E5%A6%82%E4%BD%95%E7%94%BB%E5%87%BA%E5%BC%95%E4%BA%BA%E6%B3%A8%E7%9B%AE%E7%9A%84%E4%B8%BB%E8%A7%92/">
+            <span class="next-text nav-default">02__人物：如何画出引人注目的主角？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>34__Worker_Thread模式：如何避免重复创建线程？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上一篇文章中，我们介绍了一种最简单的分工模式——Thread-Per-Message 模式，对应到现实世界，其实就是委托代办。这种分工模式如果用 Java Thread 实现，频繁地创建、销毁线程非常影响性能，同时无限制地创建线程还可能导致 OOM，所以在 Java 领域使用场景就受限了。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/34__worker_thread%E6%A8%A1%E5%BC%8F%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E9%87%8D%E5%A4%8D%E5%88%9B%E5%BB%BA%E7%BA%BF%E7%A8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/34__worker_thread%E6%A8%A1%E5%BC%8F%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E9%87%8D%E5%A4%8D%E5%88%9B%E5%BB%BA%E7%BA%BF%E7%A8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="34__Worker_Thread模式：如何避免重复创建线程？">
+  <meta property="og:description" content="在上一篇文章中，我们介绍了一种最简单的分工模式——Thread-Per-Message 模式，对应到现实世界，其实就是委托代办。这种分工模式如果用 Java Thread 实现，频繁地创建、销毁线程非常影响性能，同时无限制地创建线程还可能导致 OOM，所以在 Java 领域使用场景就受限了。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java并发编程实战">
+
+  <meta itemprop="name" content="34__Worker_Thread模式：如何避免重复创建线程？">
+  <meta itemprop="description" content="在上一篇文章中，我们介绍了一种最简单的分工模式——Thread-Per-Message 模式，对应到现实世界，其实就是委托代办。这种分工模式如果用 Java Thread 实现，频繁地创建、销毁线程非常影响性能，同时无限制地创建线程还可能导致 OOM，所以在 Java 领域使用场景就受限了。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2776">
+  <meta itemprop="keywords" content="Java并发编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="34__Worker_Thread模式：如何避免重复创建线程？">
+  <meta name="twitter:description" content="在上一篇文章中，我们介绍了一种最简单的分工模式——Thread-Per-Message 模式，对应到现实世界，其实就是委托代办。这种分工模式如果用 Java Thread 实现，频繁地创建、销毁线程非常影响性能，同时无限制地创建线程还可能导致 OOM，所以在 Java 领域使用场景就受限了。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">34__Worker_Thread模式：如何避免重复创建线程？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2776 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#worker-thread-模式及其实现">Worker Thread 模式及其实现</a></li>
+        <li><a href="#正确地创建线程池">正确地创建线程池</a></li>
+        <li><a href="#避免线程死锁">避免线程死锁</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考">课后思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在<a href="./95098.md">上一篇文章</a>中，我们介绍了一种最简单的分工模式——Thread-Per-Message 模式，对应到现实世界，其实就是委托代办。这种分工模式如果用 Java Thread 实现，频繁地创建、销毁线程非常影响性能，同时无限制地创建线程还可能导致 OOM，所以在 Java 领域使用场景就受限了。</p>
+<p>要想有效避免线程的频繁创建、销毁以及 OOM 问题，就不得不提今天我们要细聊的，也是 Java 领域使用最多的 Worker Thread 模式。</p>
+<h2 id="worker-thread-模式及其实现">Worker Thread 模式及其实现</h2>
+<p>Worker Thread 模式可以类比现实世界里车间的工作模式：车间里的工人，有活儿了，大家一起干，没活儿了就聊聊天等着。你可以参考下面的示意图来理解，Worker Thread 模式中<strong>Worker Thread 对应到现实世界里，其实指的就是车间里的工人</strong>。不过这里需要注意的是，车间里的工人数量往往是确定的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/76a0c1ac82a6ea20a6a17e1e3df57ab4.png" alt=""></p>
+<p>车间工作示意图</p>
+<p>那在编程领域该如何模拟车间的这种工作模式呢？或者说如何去实现 Worker Thread 模式呢？通过上面的图，你很容易就能想到用阻塞队列做任务池，然后创建固定数量的线程消费阻塞队列中的任务。其实你仔细想会发现，这个方案就是 Java 语言提供的线程池。</p>
+<p>线程池有很多优点，例如能够避免重复创建、销毁线程，同时能够限制创建线程的上限等等。学习完上一篇文章后你已经知道，用 Java 的 Thread 实现 Thread-Per-Message 模式难以应对高并发场景，原因就在于频繁创建、销毁 Java 线程的成本有点高，而且无限制地创建线程还可能导致应用 OOM。线程池，则恰好能解决这些问题。</p>
+<p>那我们还是以 echo 程序为例，看看如何用线程池来实现。</p>
+<p>下面的示例代码是用线程池实现的 echo 服务端，相比于 Thread-Per-Message 模式的实现，改动非常少，仅仅是创建了一个最多线程数为 500 的线程池 es，然后通过 es.execute() 方法将请求处理的任务提交给线程池处理。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ExecutorService es = Executors
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  .newFixedThreadPool(500);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final ServerSocketChannel ssc = 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ServerSocketChannel.open().bind(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    new InetSocketAddress(8080));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 处理请求    
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  while (true) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 接收请求
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    SocketChannel sc = ssc.accept();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 将请求处理任务提交给线程池
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    es.execute(()-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 读 Socket
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ByteBuffer rb = ByteBuffer
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          .allocateDirect(1024);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        sc.read(rb);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 模拟处理请求
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        Thread.sleep(2000);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 写 Socket
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ByteBuffer wb = 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          (ByteBuffer)rb.flip();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        sc.write(wb);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 关闭 Socket
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        sc.close();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }catch(Exception e){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        throw new UncheckedIOException(e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ssc.close();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  es.shutdown();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}   
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="正确地创建线程池">正确地创建线程池</h2>
+<p>Java 的线程池既能够避免无限制地<strong>创建线程</strong>导致 OOM，也能避免无限制地<strong>接收任务</strong>导致 OOM。只不过后者经常容易被我们忽略，例如在上面的实现中，就被我们忽略了。所以强烈建议你<strong>用创建有界的队列来接收任务</strong>。</p>
+<p>当请求量大于有界队列的容量时，就需要合理地拒绝请求。如何合理地拒绝呢？这需要你结合具体的业务场景来制定，即便线程池默认的拒绝策略能够满足你的需求，也同样建议你<strong>在创建线程池时，清晰地指明拒绝策略</strong>。</p>
+<p>同时，为了便于调试和诊断问题，我也强烈建议你<strong>在实际工作中给线程赋予一个业务相关的名字</strong>。</p>
+<p>综合以上这三点建议，echo 程序中创建线程可以使用下面的示例代码。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ExecutorService es = new ThreadPoolExecutor(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  50, 500,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  60L, TimeUnit.SECONDS,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 注意要创建有界队列
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  new LinkedBlockingQueue&lt;Runnable&gt;(2000),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 建议根据业务需求实现 ThreadFactory
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  r-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return new Thread(r, &#34;echo-&#34;+ r.hashCode());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  },
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 建议根据业务需求实现 RejectedExecutionHandler
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  new ThreadPoolExecutor.CallerRunsPolicy());
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="避免线程死锁">避免线程死锁</h2>
+<p>使用线程池过程中，还要注意一种<strong>线程死锁</strong>的场景。如果提交到相同线程池的任务不是相互独立的，而是有依赖关系的，那么就有可能导致线程死锁。实际工作中，我就亲历过这种线程死锁的场景。具体现象是<strong>应用每运行一段时间偶尔就会处于无响应的状态，监控数据看上去一切都正常，但是实际上已经不能正常工作了</strong>。</p>
+<p>这个出问题的应用，相关的逻辑精简之后，如下图所示，该应用将一个大型的计算任务分成两个阶段，第一个阶段的任务会等待第二阶段的子任务完成。在这个应用里，每一个阶段都使用了线程池，而且两个阶段使用的还是同一个线程池。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/50b6956dde6fd5ecbba1fb650adb504b.png" alt=""></p>
+<p>应用业务逻辑示意图</p>
+<p>我们可以用下面的示例代码来模拟该应用，如果你执行下面的这段代码，会发现它永远执行不到最后一行。执行过程中没有任何异常，但是应用已经停止响应了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//L1、L2 阶段共用的线程池
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ExecutorService es = Executors.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  newFixedThreadPool(2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//L1 阶段的闭锁    
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">CountDownLatch l1=new CountDownLatch(2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">for (int i=0; i&lt;2; i++){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  System.out.println(&#34;L1&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 执行 L1 阶段任务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  es.execute(()-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //L2 阶段的闭锁 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    CountDownLatch l2=new CountDownLatch(2);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 执行 L2 阶段子任务
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (int j=0; j&lt;2; j++){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      es.execute(()-&gt;{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        System.out.println(&#34;L2&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        l2.countDown();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 等待 L2 阶段任务执行完
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    l2.await();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    l1.countDown();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  });
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 等着 L1 阶段任务执行完
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">l1.await();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">System.out.println(&#34;end&#34;);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当应用出现类似问题时，首选的诊断方法是查看线程栈。下图是上面示例代码停止响应后的线程栈，你会发现线程池中的两个线程全部都阻塞在 <code>l2.await();</code> 这行代码上了，也就是说，线程池里所有的线程都在等待 L2 阶段的任务执行完，那 L2 阶段的子任务什么时候能够执行完呢？永远都没那一天了，为什么呢？因为线程池里的线程都阻塞了，没有空闲的线程执行 L2 阶段的任务了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/0e30a3d840da72fac3301a96069679f5.png" alt=""></p>
+<p>原因找到了，那如何解决就简单了，最简单粗暴的办法就是将线程池的最大线程数调大，如果能够确定任务的数量不是非常多的话，这个办法也是可行的，否则这个办法就行不通了。其实<strong>这种问题通用的解决方案是为不同的任务创建不同的线程池</strong>。对于上面的这个应用，L1 阶段的任务和 L2 阶段的任务如果各自都有自己的线程池，就不会出现这种问题了。</p>
+<p>最后再次强调一下：<strong>提交到相同线程池中的任务一定是相互独立的，否则就一定要慎重</strong>。</p>
+<h2 id="总结">总结</h2>
+<p>我们曾经说过，解决并发编程里的分工问题，最好的办法是和现实世界做对比。对比现实世界构建编程领域的模型，能够让模型更容易理解。上一篇我们介绍的 Thread-Per-Message 模式，类似于现实世界里的委托他人办理，而今天介绍的 Worker Thread 模式则类似于车间里工人的工作模式。如果你在设计阶段，发现对业务模型建模之后，模型非常类似于车间的工作模式，那基本上就能确定可以在实现阶段采用 Worker Thread 模式来实现。</p>
+<p>Worker Thread 模式和 Thread-Per-Message 模式的区别有哪些呢？从现实世界的角度看，你委托代办人做事，往往是和代办人直接沟通的；对应到编程领域，其实现也是主线程直接创建了一个子线程，主子线程之间是可以直接通信的。而车间工人的工作方式则是完全围绕任务展开的，一个具体的任务被哪个工人执行，预先是无法知道的；对应到编程领域，则是主线程提交任务到线程池，但主线程并不关心任务被哪个线程执行。</p>
+<p>Worker Thread 模式能避免线程频繁创建、销毁的问题，而且能够限制线程的最大数量。Java 语言里可以直接使用线程池来实现 Worker Thread 模式，线程池是一个非常基础和优秀的工具类，甚至有些大厂的编码规范都不允许用 new Thread() 来创建线程的，必须使用线程池。</p>
+<p>不过使用线程池还是需要格外谨慎的，除了今天重点讲到的如何正确创建线程池、如何避免线程死锁问题，还需要注意前面我们曾经提到的 ThreadLocal 内存泄露问题。同时对于提交到线程池的任务，还要做好异常处理，避免异常的任务从眼前溜走，从业务的角度看，有时没有发现异常的任务后果往往都很严重。</p>
+<h2 id="课后思考">课后思考</h2>
+<p>小灰同学写了如下的代码，本义是异步地打印字符串“QQ”，请问他的实现是否有问题呢？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ExecutorService pool = Executors
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  .newSingleThreadExecutor();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">pool.submit(() -&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    String qq=pool.submit(()-&gt;&#34;QQ&#34;).get();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    System.out.println(qq);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  } catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">});
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>欢迎在留言区与我分享你的想法，也欢迎你在留言区记录你的思考过程。感谢阅读，如果你觉得这篇文章对你有帮助的话，也欢迎把它分享给更多的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">Java并发编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%BB%84%E5%8B%87%E7%9A%84okr%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/34__okr%E5%A4%A7%E5%92%96%E8%AF%B4%E4%B8%BA%E4%BD%95%E6%9C%89%E4%BA%9B%E6%96%87%E5%8C%96%E7%9A%84%E5%9B%A0%E7%BB%93%E4%B8%8D%E5%87%BAokr%E7%9A%84%E6%9E%9C/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">34__OKR大咖说：为何有些文化的因，结不出OKR的果？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%B7%A6%E8%80%B3%E5%90%AC%E9%A3%8E/34__%E7%BC%96%E7%A8%8B%E8%8C%83%E5%BC%8F%E6%B8%B8%E8%AE%B05-_%E4%BF%AE%E9%A5%B0%E5%99%A8%E6%A8%A1%E5%BC%8F/">
+            <span class="next-text nav-default">34__编程范式游记（5）-_修饰器模式</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

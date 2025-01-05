@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>加餐2：手写Promie、ayncawait - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="Promise、async/await 已经逐渐成为主流的异步处理方式，所以了解其实现原理非常重要。这一课时我们就来讲讲 Promise 和 async/await 的实现。
+Promise/A&#43; 规范
+在编写 Promise 之前，我们必须了解 Promise/A&#43; 规范。由于内容较长，下面我总结了几点，更详细的内容可以查阅 Promise/A&#43; 规范。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/%E5%8A%A0%E9%A4%902%E6%89%8B%E5%86%99promieayncawait/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/%E5%8A%A0%E9%A4%902%E6%89%8B%E5%86%99promieayncawait/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="加餐2：手写Promie、ayncawait">
+  <meta property="og:description" content="Promise、async/await 已经逐渐成为主流的异步处理方式，所以了解其实现原理非常重要。这一课时我们就来讲讲 Promise 和 async/await 的实现。
+Promise/A&#43; 规范
+在编写 Promise 之前，我们必须了解 Promise/A&#43; 规范。由于内容较长，下面我总结了几点，更详细的内容可以查阅 Promise/A&#43; 规范。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="前端高手进阶">
+
+  <meta itemprop="name" content="加餐2：手写Promie、ayncawait">
+  <meta itemprop="description" content="Promise、async/await 已经逐渐成为主流的异步处理方式，所以了解其实现原理非常重要。这一课时我们就来讲讲 Promise 和 async/await 的实现。
+Promise/A&#43; 规范
+在编写 Promise 之前，我们必须了解 Promise/A&#43; 规范。由于内容较长，下面我总结了几点，更详细的内容可以查阅 Promise/A&#43; 规范。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4301">
+  <meta itemprop="keywords" content="前端高手进阶">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="加餐2：手写Promie、ayncawait">
+  <meta name="twitter:description" content="Promise、async/await 已经逐渐成为主流的异步处理方式，所以了解其实现原理非常重要。这一课时我们就来讲讲 Promise 和 async/await 的实现。
+Promise/A&#43; 规范
+在编写 Promise 之前，我们必须了解 Promise/A&#43; 规范。由于内容较长，下面我总结了几点，更详细的内容可以查阅 Promise/A&#43; 规范。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">加餐2：手写Promie、ayncawait</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4301 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>Promise、async/await 已经逐渐成为主流的异步处理方式，所以了解其实现原理非常重要。这一课时我们就来讲讲 Promise 和 async/await 的实现。</p>
+<p>Promise/A+ 规范</p>
+<p>在编写 Promise 之前，我们必须了解 Promise/A+ 规范。由于内容较长，下面我总结了几点，更详细的内容可以查阅 Promise/A+ 规范。</p>
+<p>Promise 是一个对象或者函数，对外提供了一个 then 函数，内部拥有 3 个状态。</p>
+<p>then 函数</p>
+<p>then 函数接收两个函数作为可选参数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">promise.then(onFulfilled, onRejected)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>同时遵循下面几个规则：</p>
+<p>如果可选参数不为函数时应该被忽略；</p>
+<p>两个函数都应该是异步执行的，即放入事件队列等待下一轮 tick，而非立即执行；</p>
+<p>当调用 onFulfilled 函数时，会将当前 Promise 的值作为参数传入；</p>
+<p>当调用 onRejected 函数时，会将当前 Promise 的失败原因作为参数传入；</p>
+<p>then 函数的返回值为 Promise。</p>
+<p>Promise 状态</p>
+<p>Promise 的 3 个状态分别为 pending、fulfilled 和 rejected。</p>
+<p>pending：“等待”状态，可以转移到 fulfilled 或者 rejected 状态</p>
+<p>fulfilled：“执行”（或“履行”）状态，是 Promise 的最终态，表示执行成功，该状态下不可再改变。</p>
+<p>rejected：“拒绝”状态，是 Promise 的最终态，表示执行失败，该状态不可再改变。</p>
+<p>Promise 解决过程</p>
+<p>Promise 解决过程是一个抽象的操作，即接收一个 promise 和一个值 x，目的就是对 Promise 形式的执行结果进行统一处理。需要考虑以下 4 种情况。</p>
+<p>情况 1： x 等于 promise</p>
+<p>抛出一个 TypeError 错误，拒绝 promise。</p>
+<p>情况 2：x 为 Promise 的实例</p>
+<p>如果 x 处于等待状态，那么 promise 继续等待至 x 执行或拒绝，否则根据 x 的状态执行/拒绝 promise。</p>
+<p>情况 3：x 为对象或函数</p>
+<p>该情况的核心是取出 x.then 并调用，在调用的时候将 this 指向 x。将 then 回调函数中得到结果 y 传入新的 Promise 解决过程中，形成一个递归调用。其中，如果执行报错，则以对应的错误为原因拒绝 promise。</p>
+<p>这一步是处理拥有 then() 函数的对象或函数，这类对象或函数我们称之为“thenable”。注意，它只是拥有 then() 函数，并不是 Promise 实例。</p>
+<p>情况 4：如果 x 不为对象或函数</p>
+<p>以 x 作为值，执行 promise。</p>
+<p>Promise 实现</p>
+<p>下面我们就根据规范来逐步实现一个 Promise。</p>
+<p>Promise() 函数及状态</p>
+<p>由于 Promise 只有 3 个 状态，这里我们可以先创建 3 个“常量”来消除魔术字符串：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">var</span> <span class="n">PENDING</span> <span class="o">=</span> <span class="s1">&#39;pending&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">FULFILLED</span> <span class="o">=</span> <span class="s1">&#39;fulfilled&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">REJECTED</span> <span class="o">=</span> <span class="s1">&#39;rejected</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于 Promise 可以被实例化，所以可以定义成类或函数，这里为了增加难度，先考虑在 ES5 环境下实现，所以写成构造函数的形式。</p>
+<p>使用过 Promise 的人肯定知道，在创建 Promise 的时候会传入一个回调函数，该回调函数会接收两个参数，分别用来执行或拒绝当前 Promise。同时考虑到 Promise 在执行时可能会有返回值，在拒绝时会给出拒绝原因，我们分别用 value 和 reason 两个变量来表示。具体代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">Promise</span><span class="p">(</span><span class="n">execute</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">var</span> <span class="bp">self</span> <span class="o">=</span> <span class="n">this</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">PENDING</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">function</span> <span class="n">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">===</span> <span class="n">PENDING</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">FULFILLED</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">function</span> <span class="n">reject</span><span class="p">(</span><span class="n">reason</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">===</span> <span class="n">PENDING</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">REJECTED</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="bp">self</span><span class="o">.</span><span class="n">reason</span> <span class="o">=</span> <span class="n">reason</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">try</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">execute</span><span class="p">(</span><span class="n">resolve</span><span class="p">,</span> <span class="n">reject</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="n">catch</span> <span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">reject</span><span class="p">(</span><span class="n">e</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们在第 09 课时中提过，Promise 是单次执行的，所以需要判断状态为 PENDING 的时候再执行函数 resolve() 或函数 reject() 。同时 Promise 的内部异常不能直接抛出，所以要进行异常捕获。</p>
+<p>then() 函数</p>
+<p>每个 Promise 实例都有一个 then() 函数，该函数会访问 Promise 内部的值或拒绝原因，所以通过函数原型 prototype 来实现。then() 函数接收两个回调函数作为参数，于是写成下面的形式：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Promise.prototype.then = function (onFulfilled, onRejected) {
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>根据第 1 条原则，如果可选参数不为函数时应该被忽略，所以在函数 then() 内部加上对参数的判断：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">onFulfilled = typeof onFulfilled === &#34;function&#34; ? onFulfilled : function (x) {
+</span></span><span class="line"><span class="cl">  return x
+</span></span><span class="line"><span class="cl">};
+</span></span><span class="line"><span class="cl">onRejected = typeof onRejected === &#34;function&#34; ? onRejected : function (e) {
+</span></span><span class="line"><span class="cl">  throw e
+</span></span><span class="line"><span class="cl">};
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>根据第 2 条规则，传入的回调函数是异步执行的。要模拟异步，可以通过 setTimeout 来延迟执行。再根据第 3 条和第 4 条规则，应根据 Promise 的状态来执行对应的回调，执行状态下调用 onFulfilled() 函数，拒绝状态下调用 onRejected() 函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">var</span> <span class="bp">self</span> <span class="o">=</span> <span class="n">this</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">switch</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">case</span> <span class="n">FULFILLED</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="n">setTimeout</span><span class="p">(</span><span class="n">function</span> <span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">onFulfilled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">})</span>
+</span></span><span class="line"><span class="cl">    <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="k">case</span> <span class="n">REJECTED</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="n">setTimeout</span><span class="p">(</span><span class="n">function</span> <span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">onRejected</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reason</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">})</span>
+</span></span><span class="line"><span class="cl">    <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="k">case</span> <span class="n">PENDING</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="n">todo</span>
+</span></span><span class="line"><span class="cl">    <span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>等待状态下就有些麻烦了，需要等到 Promise 状态转变时才能调用。</p>
+<p>按照常规处理方式，可以建立一个监听，监听 Promise 的状态值改变。由于浏览器环境和 Node.js 环境的事件监听不一样，考虑兼容性，这种实现会比较复杂。</p>
+<p>换个角度来看，在不考虑异常的情况下 Promise 的状态改变只依赖于构造函数中的 resolve() 函数和 reject() 函数执行。所以可考虑将 onFulfilled() 和 onRejected() 函数先保存到 Promise 属性 onFulfilledFn 和 onRejectedFn 中，等到状态改变时再调用。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">case PENDING:
+</span></span><span class="line"><span class="cl">  self.onFulfilledFn = function () {
+</span></span><span class="line"><span class="cl">    onFulfilled(self.value);
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">  self.onRejectedFn = function () {
+</span></span><span class="line"><span class="cl">    onRejected(self.reason);
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">  break;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最后看第 5 条规则，then() 被调用时应该返回一个新的 Promise，所以在上面的 3 种状态的处理逻辑中，都应该创建并返回一个 Promise 实例。以执行状态为例，可以改成下面的样子。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">case FULFILLED:
+</span></span><span class="line"><span class="cl">  promise = new Promise(function (resolve, reject) {
+</span></span><span class="line"><span class="cl">    setTimeout(function () {
+</span></span><span class="line"><span class="cl">      try {
+</span></span><span class="line"><span class="cl">        onFulfilled(self.value);
+</span></span><span class="line"><span class="cl">      } catch (e) {
+</span></span><span class="line"><span class="cl">        reject(e)
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">    })
+</span></span><span class="line"><span class="cl">  });
+</span></span><span class="line"><span class="cl">  break;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>同时，它带来的另一个效果是支持链式调用。在链式调用的情况下，如果 Promise 实例处于等待状态，那么需要保存多个 resolve() 或 reject() 函数，所以 onFulfilledFn 和 onRejectedFn 应该改成数组。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">case PENDING:
+</span></span><span class="line"><span class="cl">  promise = new Promise(function (resolve, reject) {
+</span></span><span class="line"><span class="cl">    self.onFulfilledFn.push(function () {
+</span></span><span class="line"><span class="cl">      try {
+</span></span><span class="line"><span class="cl">        onFulfilled(self.value);
+</span></span><span class="line"><span class="cl">      } catch (e) {
+</span></span><span class="line"><span class="cl">        reject(e)
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">    self.onRejectedFn.push(function () {
+</span></span><span class="line"><span class="cl">      try {
+</span></span><span class="line"><span class="cl">        onRejected(self.reason);
+</span></span><span class="line"><span class="cl">      } catch (e) {
+</span></span><span class="line"><span class="cl">        reject(e)
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">    })
+</span></span><span class="line"><span class="cl">  });
+</span></span><span class="line"><span class="cl">  break;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对应的，Promise 构造函数中应该初始化属性 onFulfilledFn 和 onRejectedFn 为数组，同时 resolve() 和 reject() 函数在改变状态时应该调用这个数组中的函数，并且这个调用过程应该是异步的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">function Promise(execute) {
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">  self.onFulfilledFn = [];
+</span></span><span class="line"><span class="cl">  self.onRejectedFn = [];
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">  function resolve(value) {
+</span></span><span class="line"><span class="cl">    setTimeout(function() {
+</span></span><span class="line"><span class="cl">      ...
+</span></span><span class="line"><span class="cl">      self.onFulfilledFn.forEach(function (f) {
+</span></span><span class="line"><span class="cl">        f(self.value)
+</span></span><span class="line"><span class="cl">      })
+</span></span><span class="line"><span class="cl">    })
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">  function reject(reason) {
+</span></span><span class="line"><span class="cl">    setTimeout(function() {
+</span></span><span class="line"><span class="cl">      ...
+</span></span><span class="line"><span class="cl">      self.onRejectedFn.forEach(function (f) {
+</span></span><span class="line"><span class="cl">        f(self.reason)
+</span></span><span class="line"><span class="cl">      })
+</span></span><span class="line"><span class="cl">    })
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>resolvePromise() 函数</p>
+<p>前面提到解决过程函数有两个参数及 3 种情况，先来考虑第 1 种情况，promise 与 x 相等，应该直接抛出 TypeError 错误：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">function resolvePromise(promise, x) {
+</span></span><span class="line"><span class="cl">  if (promise === x) {
+</span></span><span class="line"><span class="cl">    return reject(new TypeError(&#34;x 不能与 promise 相等&#34;));
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>情况 2，x 为 Promise 的实例，应该尝试让 promise 接受 x 的状态，怎么接受呢？</p>
+<p>直接改变 promise 状态肯定是不可取的，首先状态信息属于内部变量，其次也无法调用属性 onResolvedFn 和 onFulfilledFn 中的待执行函数。所以必须要通过调用 promise 在构造时的函数 resolve() 和 reject() 来改变。</p>
+<p>如果 x 处于等待状态，那么 promise 继续保持等待状态，等待解决过程函数 resolvePromise() 执行，否则应该用相同的值执行或拒绝 promise。我们无法从外部拒绝或执行一个 Promise 实例，只能通过调用构造函数传入的 resolve() 和 reject() 函数来实现。所以还需要把这两个函数作为参数传递到 resolvePromise 函数中。</p>
+<p>在函数 resolvePromise() 内部加上情况 2 的判断，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">function resolvePromise(promise, x, resolve, reject) {
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">  if (x instanceof Promise) {
+</span></span><span class="line"><span class="cl">    if (x.state === FULFILLED) {
+</span></span><span class="line"><span class="cl">      resolve(x.value)
+</span></span><span class="line"><span class="cl">    } else if (x.state === REJECTED) {
+</span></span><span class="line"><span class="cl">      reject(x.reason)
+</span></span><span class="line"><span class="cl">    } else {
+</span></span><span class="line"><span class="cl">      x.then(function (y) {
+</span></span><span class="line"><span class="cl">        resolvePromise(promise, y, resolve, reject)
+</span></span><span class="line"><span class="cl">      }, reject)
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再来实现情况 3，将 x.then 取出然后执行，并将执行结果放入解决过程函数 resolvePromise() 中。 考虑到 x 可能只是一个 thenable 而非真正的 Promise，所以在调用 then() 函数的时候要设置一个变量 excuted 避免重复调用。同时记得在执行时添加异常捕获并及时拒绝当前 promise。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">if</span> <span class="p">((</span><span class="n">x</span> <span class="o">!==</span> <span class="n">null</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="nb">typeof</span> <span class="n">x</span> <span class="o">===</span> <span class="s1">&#39;object&#39;</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="nb">typeof</span> <span class="n">x</span> <span class="o">===</span> <span class="s1">&#39;function&#39;</span><span class="p">)))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">var</span> <span class="n">executed</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">try</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">var</span> <span class="n">then</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">then</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="nb">typeof</span> <span class="n">then</span> <span class="o">===</span> <span class="s2">&#34;function&#34;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">then</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">function</span> <span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">executed</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">executed</span> <span class="o">=</span> <span class="bp">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">resolvePromise</span><span class="p">(</span><span class="n">promise</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">resolve</span><span class="p">,</span> <span class="n">reject</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="p">},</span> <span class="n">function</span> <span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">executed</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">executed</span> <span class="o">=</span> <span class="bp">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">reject</span><span class="p">(</span><span class="n">e</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="p">})</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">resolve</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="n">catch</span> <span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">executed</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">executed</span> <span class="o">=</span> <span class="bp">true</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">reject</span><span class="p">(</span><span class="n">e</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>情况 4 就很简单了，直接把 x 作为值执行。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">resolve(x);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Promise 测试</p>
+<p>编写测试代码永远是一个好习惯，为了验证编写的 Promise 正确性，引用一个专门用来测试 Promise 规范性的模块 promises-aplus-tests，该模块内置了数百个测试案例，支持命令行一键测试。只是在导出模块的时候需要遵循 CommonJS 规范，并且按照要求导出对应的函数。最终代码地址请点击这里获取。</p>
+<p>测试结果如下图所示：</p>
+<p>async/await</p>
+<p>async 是 ES2017 标准推出的用于处理异步操作的关键字，从本质上来说，它就是 Generator 函数的语法糖。</p>
+<p>什么是 Generator 函数？</p>
+<p>Generator 函数是 ES6 提出的除 Promise 之外的另一种异步解决方案，不同于常见的异步回调，它的用法有些“奇怪”。这里我们只简单介绍一下它的主要用法。</p>
+<p>当声明一个 Generator 函数时，需要在 function 关键字与函数名之间加上一个星号，像下面这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">function* fn() {
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当调用 Generator 函数后，函数并不会立即执行，而是返回一个迭代器对象。</p>
+<p>函数体内部使用 yield 表达式，定义不同的内部状态。</p>
+<p>当函数体外部调用迭代器的 next() 函数时，函数会执行到下一个 yield 表达式的位置，并返回一个对象，该对象包含属性 value 和 done，value 是调用 next() 函数时传入的参数，done 为布尔值表示是否执行完成。</p>
+<p>下面是一个将异步回调函数改写成 Generator 函数的示例代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">asyncFn</span><span class="p">(</span><span class="n">cb</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">setTimeout</span><span class="p">(</span><span class="n">cb</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">function</span><span class="o">*</span> <span class="n">fn</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">var</span> <span class="n">result</span> <span class="o">=</span> <span class="nb">yield</span> <span class="n">asyncFn</span><span class="p">(</span><span class="n">function</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">it</span><span class="o">.</span><span class="n">next</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})</span>
+</span></span><span class="line"><span class="cl">  <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>  <span class="o">//</span> <span class="mi">1</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">it</span> <span class="o">=</span> <span class="n">fn</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl"><span class="n">it</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面讲讲这段代码的执行逻辑。</p>
+<p>asyncFn() 是一个自定义的异步回调函数，1 秒后返回数值 1。</p>
+<p>先调用 Generator 函数得到迭代器 it，但此时函数并没有执行，需要执行迭代器的 next() 函数才能调用函数 fn() 。</p>
+<p>Generator 函数 fn() 内部调用异步函数 asyncFn 时使用了 yield 关键字，代表此处暂停执行，等到异步函数 asyncFn 执行完成后再执行后面的代码。</p>
+<p>1 秒后，匿名回调函数内部得到的返回值 1，通过 it.next() 函数返回这个值，并告诉迭代器继续执行后面的 console.log。</p>
+<p>async/await 原理</p>
+<p>虽然说 Generator 函数号称是解决异步回调问题，但却带来了一些麻烦，比如函数外部无法捕获异常，比如多个 yield 会导致调试困难。所以相较之下 Promise 是更优秀的异步解决方案。</p>
+<p>async/await 做的事情就是将 Generator 函数转换成 Promise。下面代码描述的是 async 的实现逻辑：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">generator2promise</span><span class="p">(</span><span class="n">generatorFn</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">function</span> <span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">var</span> <span class="n">gen</span> <span class="o">=</span> <span class="n">generatorFn</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">arguments</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">new</span> <span class="n">Promise</span><span class="p">(</span><span class="n">function</span> <span class="p">(</span><span class="n">resolve</span><span class="p">,</span> <span class="n">reject</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">function</span> <span class="n">step</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">arg</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">try</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="k">var</span> <span class="n">info</span> <span class="o">=</span> <span class="n">gen</span><span class="p">[</span><span class="n">key</span><span class="p">](</span><span class="n">arg</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="k">var</span> <span class="n">value</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span> <span class="n">catch</span> <span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">reject</span><span class="p">(</span><span class="n">error</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">done</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="k">return</span> <span class="n">Promise</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">then</span><span class="p">(</span><span class="n">function</span> <span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">step</span><span class="p">(</span><span class="s2">&#34;next&#34;</span><span class="p">,</span> <span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="p">},</span> <span class="n">function</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">step</span><span class="p">(</span><span class="s2">&#34;throw&#34;</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="p">});</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="n">step</span><span class="p">(</span><span class="s2">&#34;next&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">  <span class="p">};</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>它将 Generator 函数包装成了一个新的匿名函数，调用这个匿名函数时返回一个 Promise。在这个 Promise 内部会创建一个 step() 函数，该函数负责递归调用 Generator 函数对应的迭代器，当迭代器执行完成时执行当前的 Promise，失败时则拒绝 Promise。</p>
+<p>总结</p>
+<p>本课时通过代码实例深入分析了 Promise/A+ 规范以及 async/await 的实现原理。对于手写 Promise 的过程，重点不在于实现结果，而在于实现过程，即先理解清楚规范，然后根据规范一步一步地去实现和优化。对于 async/await 语法糖，结合 Generator 函数，理解其封装原理即可。</p>
+<p>最后布置一道练习题：学完本课时内容后，试着自己动手写一个 Promise，看看能否通过测试用例。</p>
+<p>-&ndash; ### 精选评论 ##### *晨： &gt; Promise 解决过程是一个抽象的操作，即接收一个 promise 和一个值 x，目的就是对 Promise 形式的执行结果进行统一处理。需要考虑以下 3 种情况。在这里讲到的一个值 x是什么意思呀？？这块儿的看的不是很明白 ######     讲师回复： &gt;     可以简单地理解为 Promise 执行成功的返回值。 ##### **翔： &gt; self.onFulfilledFn.forEach(function (f) { f(self.value) &ldquo;&gt;self.onFulfilledFn.push(function () { &ldquo;&gt;try { &ldquo;&gt;catch (e) { reject(e) } }) 老师这里的self.value参数可以不传的吧？我看后面也没用到呢 ######     讲师回复： &gt;     嗯，也可以~ ##### **池： &gt; 虽然说 Generator 函数号称是解决异步回调问题，但却带来了一些麻烦，比如函数外部无法捕获异常，比如多个 yield 会导致调试困难。所以相较之下 Promise 是更优秀的异步解决方案。老师可以举例一下yield调试上的困难主要体现在什么地方吗？🙌 ######     讲师回复： &gt;     你可以把两个异步回调函数改成类似 Promise.all 的形式进行调用试试~ ##### *蕾： &gt; 在决议程序中的情况判断是不是可以不写，情况3中已经包含了这种判断 ######     讲师回复： &gt;     同学，建议你试一下去掉你认为多余的判断，并执行一下测试代码~ ##### 123： &gt; 写的很清晰 ##### *晨： &gt; x 为对象或函数 为什么会有then？ ######     讲师回复： &gt;     比如 x = {then() {&hellip;}}，这就是一个拥有 then 函数的对象</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%89%8D%E7%AB%AF%E9%AB%98%E6%89%8B%E8%BF%9B%E9%98%B6/">前端高手进阶</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E6%95%88%E6%95%8F%E6%8D%B7%E6%B5%8B%E8%AF%9549%E8%AE%B2/%E5%8A%A0%E9%A4%902%E6%95%8F%E6%8D%B7%E6%B5%8B%E8%AF%95%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%A1%E5%88%92%E7%9A%84%E6%A1%88%E4%BE%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">加餐2：敏捷测试分析与计划的案例</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A6%82%E4%BD%95%E8%AF%BB%E6%87%82%E4%B8%80%E9%A6%96%E8%AF%97/%E5%8A%A0%E9%A4%902%E9%9D%A2%E8%AF%95%E9%97%AE%E9%A2%98%E5%8F%A4%E4%BA%BA%E6%80%8E%E4%B9%88%E5%90%91%E5%88%AB%E4%BA%BA%E6%8E%A8%E8%8D%90%E8%87%AA%E5%B7%B1/">
+            <span class="next-text nav-default">加餐2｜面试问题：古人怎么向别人推荐自己？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

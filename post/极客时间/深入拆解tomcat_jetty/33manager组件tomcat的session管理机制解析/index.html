@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>33Manager组件Tomcat的Session管理机制解析 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="32 | Manager组件：Tomcat的Session管理机制解析
+我们可以通过 Request 对象的 getSession 方法来获取 Session，并通过 Session 对象来读取和写入属性值。而 Session 的管理是由 Web 容器来完成的，主要是对 Session 的创建和销毁，除此之外 Web 容器还需要将 Session 状态的变化通知给监听者。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/33manager%E7%BB%84%E4%BB%B6tomcat%E7%9A%84session%E7%AE%A1%E7%90%86%E6%9C%BA%E5%88%B6%E8%A7%A3%E6%9E%90/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/33manager%E7%BB%84%E4%BB%B6tomcat%E7%9A%84session%E7%AE%A1%E7%90%86%E6%9C%BA%E5%88%B6%E8%A7%A3%E6%9E%90/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="33Manager组件Tomcat的Session管理机制解析">
+  <meta property="og:description" content="32 | Manager组件：Tomcat的Session管理机制解析
+我们可以通过 Request 对象的 getSession 方法来获取 Session，并通过 Session 对象来读取和写入属性值。而 Session 的管理是由 Web 容器来完成的，主要是对 Session 的创建和销毁，除此之外 Web 容器还需要将 Session 状态的变化通知给监听者。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入拆解Tomcat_Jetty">
+
+  <meta itemprop="name" content="33Manager组件Tomcat的Session管理机制解析">
+  <meta itemprop="description" content="32 | Manager组件：Tomcat的Session管理机制解析
+我们可以通过 Request 对象的 getSession 方法来获取 Session，并通过 Session 对象来读取和写入属性值。而 Session 的管理是由 Web 容器来完成的，主要是对 Session 的创建和销毁，除此之外 Web 容器还需要将 Session 状态的变化通知给监听者。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2890">
+  <meta itemprop="keywords" content="深入拆解Tomcat_Jetty">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="33Manager组件Tomcat的Session管理机制解析">
+  <meta name="twitter:description" content="32 | Manager组件：Tomcat的Session管理机制解析
+我们可以通过 Request 对象的 getSession 方法来获取 Session，并通过 Session 对象来读取和写入属性值。而 Session 的管理是由 Web 容器来完成的，主要是对 Session 的创建和销毁，除此之外 Web 容器还需要将 Session 状态的变化通知给监听者。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">33Manager组件Tomcat的Session管理机制解析</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2890 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>32 | Manager组件：Tomcat的Session管理机制解析</p>
+<p>我们可以通过 Request 对象的 getSession 方法来获取 Session，并通过 Session 对象来读取和写入属性值。而 Session 的管理是由 Web 容器来完成的，主要是对 Session 的创建和销毁，除此之外 Web 容器还需要将 Session 状态的变化通知给监听者。</p>
+<p>当然 Session 管理还可以交给 Spring 来做，好处是与特定的 Web 容器解耦，Spring Session 的核心原理是通过 Filter 拦截 Servlet 请求，将标准的 ServletRequest 包装一下，换成 Spring 的 Request 对象，这样当我们调用 Request 对象的 getSession 方法时，Spring 在背后为我们创建和管理 Session。</p>
+<p>那么 Tomcat 的 Session 管理机制我们还需要了解吗？我觉得还是有必要，因为只有了解这些原理，我们才能更好的理解 Spring Session，以及 Spring Session 为什么设计成这样。今天我们就从 Session 的创建、Session 的清理以及 Session 的事件通知这几个方面来了解 Tomcat 的 Session 管理机制。</p>
+<p>Session 的创建</p>
+<p>Tomcat 中主要由每个 Context 容器内的一个 Manager 对象来管理 Session。默认实现类为 StandardManager。下面我们通过它的接口来了解一下 StandardManager 的功能：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">public</span> <span class="n">interface</span> <span class="n">Manager</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">Context</span> <span class="n">getContext</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setContext</span><span class="p">(</span><span class="n">Context</span> <span class="n">context</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">SessionIdGenerator</span> <span class="n">getSessionIdGenerator</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setSessionIdGenerator</span><span class="p">(</span><span class="n">SessionIdGenerator</span> <span class="n">sessionIdGenerator</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">long</span> <span class="n">getSessionCounter</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setSessionCounter</span><span class="p">(</span><span class="n">long</span> <span class="n">sessionCounter</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getMaxActive</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setMaxActive</span><span class="p">(</span><span class="ne">int</span> <span class="n">maxActive</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getActiveSessions</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">long</span> <span class="n">getExpiredSessions</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setExpiredSessions</span><span class="p">(</span><span class="n">long</span> <span class="n">expiredSessions</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getRejectedSessions</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getSessionMaxAliveTime</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">setSessionMaxAliveTime</span><span class="p">(</span><span class="ne">int</span> <span class="n">sessionMaxAliveTime</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getSessionAverageAliveTime</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getSessionCreateRate</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">getSessionExpireRate</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">add</span><span class="p">(</span><span class="n">Session</span> <span class="n">session</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">changeSessionId</span><span class="p">(</span><span class="n">Session</span> <span class="n">session</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">changeSessionId</span><span class="p">(</span><span class="n">Session</span> <span class="n">session</span><span class="p">,</span> <span class="ne">String</span> <span class="n">newId</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">Session</span> <span class="n">createEmptySession</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">Session</span> <span class="n">createSession</span><span class="p">(</span><span class="ne">String</span> <span class="n">sessionId</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">Session</span> <span class="n">findSession</span><span class="p">(</span><span class="ne">String</span> <span class="n">id</span><span class="p">)</span> <span class="n">throws</span> <span class="n">IOException</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">Session</span><span class="p">[]</span> <span class="n">findSessions</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="nb">load</span><span class="p">()</span> <span class="n">throws</span> <span class="n">ClassNotFoundException</span><span class="p">,</span> <span class="n">IOException</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">remove</span><span class="p">(</span><span class="n">Session</span> <span class="n">session</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">remove</span><span class="p">(</span><span class="n">Session</span> <span class="n">session</span><span class="p">,</span> <span class="n">boolean</span> <span class="n">update</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">addPropertyChangeListener</span><span class="p">(</span><span class="n">PropertyChangeListener</span> <span class="n">listener</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">removePropertyChangeListener</span><span class="p">(</span><span class="n">PropertyChangeListener</span> <span class="n">listener</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">unload</span><span class="p">()</span> <span class="n">throws</span> <span class="n">IOException</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">backgroundProcess</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">boolean</span> <span class="n">willAttributeDistribute</span><span class="p">(</span><span class="ne">String</span> <span class="n">name</span><span class="p">,</span> <span class="ne">Object</span> <span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>不出意外我们在接口中看到了添加和删除 Session 的方法；另外还有 load 和 unload 方法，它们的作用是分别是将 Session 持久化到存储介质和从存储介质加载 Session。</p>
+<p>当我们调用
+HttpServletRequest.getSession(true)
+时，这个参数 true 的意思是“如果当前请求还没有 Session，就创建一个新的”。那 Tomcat 在背后为我们做了些什么呢？</p>
+<p>HttpServletRequest 是一个接口，Tomcat 实现了这个接口，具体实现类是：
+org.apache.catalina.connector.Request
+。</p>
+<p>但这并不是我们拿到的 Request，Tomcat 为了避免把一些实现细节暴露出来，还有基于安全上的考虑，定义了 Request 的包装类，叫作 RequestFacade，我们可以通过代码来理解一下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class Request implements HttpServletRequest {}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>public class RequestFacade implements HttpServletRequest {
+  protected Request request = null;</p>
+<p>  public HttpSession getSession(boolean create) {
+     return request.getSession(create);
+  }
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">因此我们拿到的 Request 类其实是 RequestFacade，RequestFacade 的 getSession 方法调用的是 Request 类的 getSession 方法，我们继续来看 Session 具体是如何创建的：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Context context = getContext();
+if (context == null) {
+    return null;
+}</p>
+<p>Manager manager = context.getManager();
+if (manager == null) {
+    return null;      
+}</p>
+<p>session = manager.createSession(sessionId);
+session.access();</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">从上面的代码可以看出，Request 对象中持有 Context 容器对象，而 Context 容器持有 Session 管理器 Manager，这样通过 Context 组件就能拿到 Manager 组件，最后由 Manager 组件来创建 Session。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">因此最后还是到了 StandardManager，StandardManager 的父类叫 ManagerBase，这个 createSession 方法定义在 ManagerBase 中，StandardManager 直接重用这个方法。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">接着我们来看 ManagerBase 的 createSession 是如何实现的：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>@Override
+public Session createSession(String sessionId) {
+    // 首先判断 Session 数量是不是到了最大值，最大 Session 数可以通过参数设置
+    if ((maxActiveSessions &gt;= 0) &amp;&amp;
+            (getActiveSessions() &gt;= maxActiveSessions)) {
+        rejectedSessions++;
+        throw new TooManyActiveSessionsException(
+                sm.getString(&ldquo;managerBase.createSession.ise&rdquo;),
+                maxActiveSessions);
+    }</p>
+<p>    // 重用或者创建一个新的 Session 对象，请注意在 Tomcat 中就是 StandardSession
+    // 它是 HttpSession 的具体实现类，而 HttpSession 是 Servlet 规范中定义的接口
+    Session session = createEmptySession();</p>
+<p>    // 初始化新 Session 的值
+    session.setNew(true);
+    session.setValid(true);
+    session.setCreationTime(System.currentTimeMillis());
+    session.setMaxInactiveInterval(getContext().getSessionTimeout() * 60);
+    String id = sessionId;
+    if (id == null) {
+        id = generateSessionId();
+    }
+    session.setId(id);// 这里会将 Session 添加到 ConcurrentHashMap 中
+    sessionCounter++;</p>
+<p>    // 将创建时间添加到 LinkedList 中，并且把最先添加的时间移除
+    // 主要还是方便清理过期 Session
+    SessionTiming timing = new SessionTiming(session.getCreationTime(), 0);
+    synchronized (sessionCreationTiming) {
+        sessionCreationTiming.add(timing);
+        sessionCreationTiming.poll();
+    }
+    return session
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">到此我们明白了 Session 是如何创建出来的，创建出来后 Session 会被保存到一个 ConcurrentHashMap 中：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>protected Map&lt;String, Session&gt; sessions = new ConcurrentHashMap&lt;&gt;();</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">请注意 Session 的具体实现类是 StandardSession，StandardSession 同时实现了
+</span></span><span class="line"><span class="cl">javax.servlet.http.HttpSession
+</span></span><span class="line"><span class="cl">和
+</span></span><span class="line"><span class="cl">org.apache.catalina.Session
+</span></span><span class="line"><span class="cl">接口，并且对程序员暴露的是 StandardSessionFacade 外观类，保证了 StandardSession 的安全，避免了程序员调用其内部方法进行不当操作。StandardSession 的核心成员变量如下：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>public class StandardSession implements HttpSession, Session, Serializable {
+    protected ConcurrentMap&lt;String, Object&gt; attributes = new ConcurrentHashMap&lt;&gt;();
+    protected long creationTime = 0L;
+    protected transient volatile boolean expiring = false;
+    protected transient StandardSessionFacade facade = null;
+    protected String id = null;
+    protected volatile long lastAccessedTime = creationTime;
+    protected transient ArrayList<SessionListener> listeners = new ArrayList&lt;&gt;();
+    protected transient Manager manager = null;
+    protected volatile int maxInactiveInterval = -1;
+    protected volatile boolean isNew = false;
+    protected volatile boolean isValid = false;
+    protected transient Map&lt;String, Object&gt; notes = new Hashtable&lt;&gt;();
+    protected transient Principal principal = null;
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Session 的清理
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">我们再来看看 Tomcat 是如何清理过期的 Session。在 Tomcat热加载和热部署的文章里，我讲到容器组件会开启一个 ContainerBackgroundProcessor 后台线程，调用自己以及子容器的 backgroundProcess 进行一些后台逻辑的处理，和 Lifecycle 一样，这个动作也是具有传递性的，也就是说子容器还会把这个动作传递给自己的子容器。你可以参考下图来理解这个过程。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">其中父容器会遍历所有的子容器并调用其 backgroundProcess 方法，而 StandardContext 重写了该方法，它会调用 StandardManager 的 backgroundProcess 进而完成 Session 的清理工作，下面是 StandardManager 的 backgroundProcess 方法的代码：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>public void backgroundProcess() {
+    // processExpiresFrequency 默认值为 6，而 backgroundProcess 默认每隔 10s 调用一次，也就是说除了任务执行的耗时，每隔 60s 执行一次
+    count = (count + 1) % processExpiresFrequency;
+    if (count == 0) // 默认每隔 60s 执行一次 Session 清理
+        processExpires();
+}</p>
+<p>/**
+ * 单线程处理，不存在线程安全问题
+ */
+public void processExpires() {</p>
+<p>    // 获取所有的 Session
+    Session sessions[] = findSessions();   
+    int expireHere = 0 ;
+    for (int i = 0; i &lt; sessions.length; i++) {
+        // Session 的过期是在 isValid() 方法里处理的
+        if (sessions[i]!=null &amp;&amp; !sessions[i].isValid()) {
+            expireHere++;
+        }
+    }
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">backgroundProcess 由 Tomcat 后台线程调用，默认是每隔 10 秒调用一次，但是 Session 的清理动作不能太频繁，因为需要遍历 Session 列表，会耗费 CPU 资源，所以在 backgroundProcess 方法中做了取模处理，backgroundProcess 调用 6 次，才执行一次 Session 清理，也就是说 Session 清理每 60 秒执行一次。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Session 事件通知
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">按照 Servlet 规范，在 Session 的生命周期过程中，要将事件通知监听者，Servlet 规范定义了 Session 的监听器接口：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>public interface HttpSessionListener extends EventListener {
+    //Session 创建时调用
+    public default void sessionCreated(HttpSessionEvent se) {
+    }</p>
+<p>    //Session 销毁时调用
+    public default void sessionDestroyed(HttpSessionEvent se) {
+    }
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">注意到这两个方法的参数都是 HttpSessionEvent，所以 Tomcat 需要先创建 HttpSessionEvent 对象，然后遍历 Context 内部的 LifecycleListener，并且判断是否为 HttpSessionListener 实例，如果是的话则调用 HttpSessionListener 的 sessionCreated 方法进行事件通知。这些事情都是在 Session 的 setId 方法中完成的：
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>session.setId(id);</p>
+<p>@Override
+public void setId(String id, boolean notify) {
+    // 如果这个 id 已经存在，先从 Manager 中删除
+    if ((this.id != null) &amp;&amp; (manager != null))
+        manager.remove(this);</p>
+<p>    this.id = id;</p>
+<p>    // 添加新的 Session
+    if (manager != null)
+        manager.add(this);</p>
+<p>    // 这里面完成了 HttpSessionListener 事件通知
+    if (notify) {
+        tellNew();
+    }
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">从代码我们看到 setId 方法调用了 tellNew 方法，那 tellNew 又是如何实现的呢？
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>public void tellNew() {</p>
+<p>    // 通知 org.apache.catalina.SessionListener
+    fireSessionEvent(Session.SESSION_CREATED_EVENT, null);</p>
+<p>    // 获取 Context 内部的 LifecycleListener 并判断是否为 HttpSessionListener
+    Context context = manager.getContext();
+    Object listeners[] = context.getApplicationLifecycleListeners();
+    if (listeners != null &amp;&amp; listeners.length &gt; 0) {</p>
+<p>        // 创建 HttpSessionEvent
+        HttpSessionEvent event = new HttpSessionEvent(getSession());
+        for (int i = 0; i &lt; listeners.length; i++) {
+            // 判断是否是 HttpSessionListener
+            if (!(listeners[i] instanceof HttpSessionListener))
+                continue;</p>
+<p>            HttpSessionListener listener = (HttpSessionListener) listeners[i];
+            // 注意这是容器内部事件
+            context.fireContainerEvent(&ldquo;beforeSessionCreated&rdquo;, listener);   
+            // 触发 Session Created 事件
+            listener.sessionCreated(event);</p>
+<p>            // 注意这也是容器内部事件
+            context.fireContainerEvent(&ldquo;afterSessionCreated&rdquo;, listener);</p>
+<p>        }
+    }
+}</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">上面代码的逻辑是，先通过 StandardContext 将 HttpSessionListener 类型的 Listener 取出，然后依次调用它们的 sessionCreated 方法。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">本期精华
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">今天我们从 Request 谈到了 Session 的创建、销毁和事件通知，里面涉及不少相关的类，下面我画了一张图帮你理解和消化一下这些类的关系：
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Servlet 规范中定义了 HttpServletRequest 和 HttpSession 接口，Tomcat 实现了这些接口，但具体实现细节并没有暴露给开发者，因此定义了两个包装类，RequestFacade 和 StandardSessionFacade。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Tomcat 是通过 Manager 来管理 Session 的，默认实现是 StandardManager。StandardContext 持有 StandardManager 的实例，并存放了 HttpSessionListener 集合，Session 在创建和销毁时，会通知监听器。
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">课后思考
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">TCP 连接的过期时间和 Session 的过期时间有什么区别？
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">不知道今天的内容你消化得如何？如果还有疑问，请大胆的在留言区提问，也欢迎你把你的课后思考和心得记录下来，与我和其他同学一起讨论。如果你觉得今天有所收获，欢迎你把它分享给你的朋友。
+</span></span></code></pre></td></tr></table>
+</div>
+</div>
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/">深入拆解Tomcat_Jetty</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E5%8E%82%E6%99%8B%E5%8D%87%E6%8C%87%E5%8D%97/335w1h8c1d%E5%88%86%E6%9E%90%E6%B3%95p5p6%E6%80%8E%E4%B9%88%E7%90%86%E8%A7%A3%E4%B8%9A%E5%8A%A1%E5%8A%9F%E8%83%BD/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">335W1H8C1D分析法P5P6怎么理解业务功能</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%82%B1%E5%B2%B3%E7%9A%84%E4%BA%A7%E5%93%81%E6%89%8B%E8%AE%B0/33%E4%BB%8E%E5%8F%97%E4%BC%97%E8%A7%84%E6%A8%A1%E9%9C%80%E6%B1%82%E9%A2%91%E7%8E%87%E5%92%8C%E5%BC%BA%E5%BA%A6%E5%87%BA%E5%8F%91%E6%8E%92%E5%AE%9A%E9%9C%80%E6%B1%82%E4%BC%98%E5%85%88%E7%BA%A7%E7%9A%84%E6%96%B9%E6%B3%95%E4%B8%8A/">
+            <span class="next-text nav-default">33从受众规模需求频率和强度出发排定需求优先级的方法上</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

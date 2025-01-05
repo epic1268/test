@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17Executor才是执行SQL语句的幕后推手（上） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="这一讲我们开始介绍 MyBatis 中的另一个核心接口—— Executor 接口。在 Executor 接口的实现过程中，MyBatis 使用了装饰器模式和模板方法模式这两种经典的设计模式，在前面的《09 | 基于 MyBatis 缓存分析装饰器模式的最佳实践》这一讲中，我们已经详细分析过装饰器模式的实现细节和优缺点，今天我们就一起来看一下模板方法模式的相关内容，这些都是理解 Executor 接口的基础。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90mybatis%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/17executor%E6%89%8D%E6%98%AF%E6%89%A7%E8%A1%8Csql%E8%AF%AD%E5%8F%A5%E7%9A%84%E5%B9%95%E5%90%8E%E6%8E%A8%E6%89%8B%E4%B8%8A/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90mybatis%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/17executor%E6%89%8D%E6%98%AF%E6%89%A7%E8%A1%8Csql%E8%AF%AD%E5%8F%A5%E7%9A%84%E5%B9%95%E5%90%8E%E6%8E%A8%E6%89%8B%E4%B8%8A/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17Executor才是执行SQL语句的幕后推手（上）">
+  <meta property="og:description" content="这一讲我们开始介绍 MyBatis 中的另一个核心接口—— Executor 接口。在 Executor 接口的实现过程中，MyBatis 使用了装饰器模式和模板方法模式这两种经典的设计模式，在前面的《09 | 基于 MyBatis 缓存分析装饰器模式的最佳实践》这一讲中，我们已经详细分析过装饰器模式的实现细节和优缺点，今天我们就一起来看一下模板方法模式的相关内容，这些都是理解 Executor 接口的基础。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入剖析MyBatis核心原理">
+
+  <meta itemprop="name" content="17Executor才是执行SQL语句的幕后推手（上）">
+  <meta itemprop="description" content="这一讲我们开始介绍 MyBatis 中的另一个核心接口—— Executor 接口。在 Executor 接口的实现过程中，MyBatis 使用了装饰器模式和模板方法模式这两种经典的设计模式，在前面的《09 | 基于 MyBatis 缓存分析装饰器模式的最佳实践》这一讲中，我们已经详细分析过装饰器模式的实现细节和优缺点，今天我们就一起来看一下模板方法模式的相关内容，这些都是理解 Executor 接口的基础。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3736">
+  <meta itemprop="keywords" content="深入剖析MyBatis核心原理">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17Executor才是执行SQL语句的幕后推手（上）">
+  <meta name="twitter:description" content="这一讲我们开始介绍 MyBatis 中的另一个核心接口—— Executor 接口。在 Executor 接口的实现过程中，MyBatis 使用了装饰器模式和模板方法模式这两种经典的设计模式，在前面的《09 | 基于 MyBatis 缓存分析装饰器模式的最佳实践》这一讲中，我们已经详细分析过装饰器模式的实现细节和优缺点，今天我们就一起来看一下模板方法模式的相关内容，这些都是理解 Executor 接口的基础。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17Executor才是执行SQL语句的幕后推手（上）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3736 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>这一讲我们开始介绍 MyBatis 中的另一个核心接口—— Executor 接口。在 Executor 接口的实现过程中，MyBatis 使用了装饰器模式和模板方法模式这两种经典的设计模式，在前面的《09 | 基于 MyBatis 缓存分析装饰器模式的最佳实践》这一讲中，我们已经详细分析过装饰器模式的实现细节和优缺点，今天我们就一起来看一下模板方法模式的相关内容，这些都是理解 Executor 接口的基础。</p>
+<p>模板方法模式</p>
+<p>在我们开发业务逻辑的时候，可能会遇到流程复杂的逻辑，而这个复杂逻辑本身是可以拆解成多个小的行为，这些小的行为本身可能根据业务场景的不同而有所变化。</p>
+<p>这里我们以转账流程为例，如下图所示，整个转账流程是固定的，但是“验证密码”“验证余额”和“扣除金额”这三步针对不同的银行卡，要调用不同银行的接口去完成。</p>
+<p>不同银行卡转账流程示意图</p>
+<p>为了让整个复杂流程的代码具有更好的扩展性，我们一般会使用模板方法模式来处理。</p>
+<p>在模板方法模式中，我们可以将复杂流程中每个步骤的边界确定下来，然后由一个“模板方法”定义每个步骤的执行流程，每个步骤对应着一个方法，这些方法也被称为“基本方法”。模板方法按照业务逻辑依次调用上述基本方法，来实现完整的复杂流程。</p>
+<p>模板方法模式会将模板方法以及不需要随业务场景变化的基本方法放到父类中实现，随业务场景变化的基本方法会被定义为抽象方法，由子类提供真正的实现。</p>
+<p>下图展示了模板方法模式的核心类，其中 template() 方法是我们上面描述的模板方法，part1() 方法和 part3() 方法是逻辑不变的基本方法实现，而 part2()、part4() 方法是两个随场景变化的基本方法。</p>
+<p>模板方法模式示意图</p>
+<p>我们可以通过模板方法控制整个流程的走向以及其中固定不变的步骤，子类来实现流程的某些变化细节，这就实现了“变化与不变”的解耦，也实现了“整个流程与单个步骤”的解耦。当业务需要改变流程中某些步骤的具体行为时，直接添加新的子类即可实现，这也非常符合“开放-封闭”原则。另外，模板方法模式能够充分利用面向对象的多态特性，在系统运行时再选择一种具体子类来执行完整的流程，这也从另一个角度提高了系统的灵活性。</p>
+<p>Executor 接口</p>
+<p>介绍完模板方法模式之后，我们开始介绍 Executor 这个核心接口。</p>
+<p>首先来看 Executor 接口定义的核心方法，如下图所示，Executor 接口定义了数据库操作的基本方法，其中 query*() 方法、update() 方法、flushStatement() 方法是执行 SQL 语句的基础方法，commit() 方法、rollback() 方法以及 getTransaction() 方法与事务的提交/回滚相关，clearLocalCache() 方法、createCacheKey() 方法与缓存有关。</p>
+<p>Executor 接口结构图</p>
+<p>MyBatis 中有多个 Executor 接口的实现类，如下图所示：</p>
+<p>Executor 接口继承关系图</p>
+<p>该图中的 CachingExecutor 是 Executor 的装饰器实现，在其他 Executor 实现的基础上添加了缓存的功能；BaseExecutor 实现了 Executor 接口的全部方法，主要定义了这些方法的核心流程（也就是模板方法），然后由子类进行具体实现。</p>
+<p>BaseExecutor</p>
+<p>BaseExecutor 使用模板方法模式实现了 Executor 接口中的方法，其中，不变的部分是事务管理和缓存管理两部分的内容，由 BaseExecutor 实现；变化的部分则是具体的数据库操作，由 BaseExecutor 子类实现，涉及 doUpdate()、doQuery()、doQueryCursor() 和 doFlushStatement() 这四个方法。</p>
+<p>下面我们会从缓存和事务两个角度来讲解 BaseExecutor 的核心实现。</p>
+<p>1. 一级缓存</p>
+<p>数据库作为 OLTP 系统中的核心资源之一，是性能优化的重点关注对象，在设计、开发以及后期运维时，我们都会采取多种手段减少数据库压力，其中使用缓存是一种比较常用且有效的优化数据库读写效率的手段。</p>
+<p>缓存方案之所以备受开发者青睐，主要是因为多数缓存都是基于内存或“内存+磁盘”的存储结构，数据读取效率远远高于数据库，在缓存有效的时候，能够帮助数据库分担大量读压力，从而降低数据库 QPS，提高整个系统性能。从可用性的角度来看，当数据库发生故障的时候，缓存因为保存全部或部分数据，可以继续响应部分读请求，这在某种意义上就提高了程序的可用性。</p>
+<p>很多持久层框架默认都提供了基于 JVM 堆内存的缓存实现，MyBatis 也不例外。MyBatis 缓存分为一级缓存和二级缓存，这里我们先重点来看一级缓存的内容。</p>
+<p>MyBatis 中的一级缓存是会话级缓存，创建一个 SqlSession 对象就表示开启一次与数据库的会话，会话生命周期与 SqlSession 的生命周期一致。在一次会话中，我们可能多次执行相同的查询语句，如果没有缓存，每次查询都会请求到数据库，这样就会浪费数据库资源。</p>
+<p>为了避免上述资源浪费问题，BaseExecutor 会给每个 SqlSession 对象关联一个 Cache 对象，也就是“一级缓存”。在使用 SqlSession 对象进行查询的时候，会先访问一级缓存，看看是否已经缓存了结果对象，如果存在，则直接返回一级缓存中的结果对象，这也就是我们常说的“命中缓存”。如果未命中缓存，则会击穿到数据库，一级缓存会将数据库返回的查询结果对象缓存起来，等待后续请求使用。MyBatis 中的一级缓存默认处于开启状态，也推荐用户开启一级缓存。</p>
+<p>下面来看 BaseExecutor 与一级缓存的相关实现。在 BaseExecutor 中维护了两个 PerpetualCache 对象，分别是 localCache 字段和 localOutputParameterCache 字段，其中 localOutputParameterCache 只用来缓存存储过程的输出参数，localCache 会用来缓存其他查询方式的结果对象。</p>
+<p>在 BaseExecutor.query() 方法中，定义了查询操作的核心流程，其中也包含了查询一级缓存和填充一级缓存的操作，其具体核心步骤如下。</p>
+<p>创建 CacheKey 对象，该部分逻辑在 createCacheKey() 方法中实现。这里创建的 CacheKey 对象主要包含五个部分：MappedStatement 的 id、RowBounds 中的 offset 和 limit 信息、SQL 语句（包含“?”占位符）、用户传递的实参信息以及 Environment ID。</p>
+<p>使用 CacheKey 查询一级缓存。如果缓存命中，则直接返回缓存的结果对象；如果缓存未命中，则调用 doQuery() 方法完成数据库查询操作，同时将结果对象记录到一级缓存中。</p>
+<p>除了上述查询缓存、数据库等操作之外，query() 方法最后还会处理嵌套查询的缓存。在这一步中，BaseExecutor 会遍历全部嵌套查询对应的 DeferredLoad 对象，并通过 load() 方法从 localCache 中获取嵌套查询的对象，填充到外层对象的相应属性中。</p>
+<p>下面来看 query() 方法的核心逻辑：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="o">&lt;</span><span class="n">E</span><span class="o">&gt;</span> <span class="n">List</span><span class="o">&lt;</span><span class="n">E</span><span class="o">&gt;</span> <span class="n">query</span><span class="p">(</span><span class="n">MappedStatement</span> <span class="n">ms</span><span class="p">,</span> <span class="ne">Object</span> <span class="n">parameter</span><span class="p">,</span> <span class="n">RowBounds</span> <span class="n">rowBounds</span><span class="p">,</span> <span class="n">ResultHandler</span> <span class="n">resultHandler</span><span class="p">,</span> <span class="n">CacheKey</span> <span class="n">key</span><span class="p">,</span> <span class="n">BoundSql</span> <span class="n">boundSql</span><span class="p">)</span> <span class="n">throws</span> <span class="n">SQLException</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">queryStack</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">ms</span><span class="o">.</span><span class="n">isFlushCacheRequired</span><span class="p">())</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">非嵌套查询，并且</span><span class="o">&lt;</span><span class="n">select</span><span class="o">&gt;</span><span class="err">标签配置的</span><span class="n">flushCache属性为true时</span><span class="err">，才会清空一级缓存</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">注意：</span><span class="n">flushCache配置项会影响一级缓存中结果对象存活时长</span>
+</span></span><span class="line"><span class="cl"><span class="n">clearLocalCache</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">List</span><span class="o">&lt;</span><span class="n">E</span><span class="o">&gt;</span> <span class="n">list</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">try</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="n">queryStack</span><span class="o">++</span><span class="p">;</span> <span class="o">//</span> <span class="err">增加查询层数</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">查询一级缓存</span>
+</span></span><span class="line"><span class="cl"><span class="n">list</span> <span class="o">=</span> <span class="n">resultHandler</span> <span class="o">==</span> <span class="n">null</span> <span class="err">?</span> <span class="p">(</span><span class="n">List</span><span class="o">&lt;</span><span class="n">E</span><span class="o">&gt;</span><span class="p">)</span> <span class="n">localCache</span><span class="o">.</span><span class="n">getObject</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="p">:</span> <span class="n">null</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">list</span> <span class="o">!=</span> <span class="n">null</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">对存储过程出参的处理：如果命中一级缓存，则获取缓存中保存的输出参数，</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">然后记录到用户传入的实参对象中</span>
+</span></span><span class="line"><span class="cl"><span class="n">handleLocallyCachedOutputParameters</span><span class="p">(</span><span class="n">ms</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">parameter</span><span class="p">,</span> <span class="n">boundSql</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="n">queryFromDatabase</span><span class="p">()</span><span class="err">方法内部首先会在</span><span class="n">localCache中设置一个占位符</span><span class="err">，然后调用</span><span class="n">doQuery</span><span class="p">()</span><span class="err">方法完成数据库查询，并得到映射后的结果对象</span><span class="p">,</span> <span class="n">doQuery</span><span class="p">()</span><span class="err">方法是</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">一个抽象方法，由</span><span class="n">BaseExecutor的子类具体实现</span>
+</span></span><span class="line"><span class="cl"><span class="n">list</span> <span class="o">=</span> <span class="n">queryFromDatabase</span><span class="p">(</span><span class="n">ms</span><span class="p">,</span> <span class="n">parameter</span><span class="p">,</span> <span class="n">rowBounds</span><span class="p">,</span> <span class="n">resultHandler</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">boundSql</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">finally</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="n">queryStack</span><span class="o">--</span><span class="p">;</span> <span class="o">//</span> <span class="err">当前查询完成，查询层数减少</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">queryStack</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>  <span class="o">//</span> <span class="err">完成嵌套查询的填充</span>
+</span></span><span class="line"><span class="cl"><span class="k">for</span> <span class="p">(</span><span class="n">DeferredLoad</span> <span class="n">deferredLoad</span> <span class="p">:</span> <span class="n">deferredLoads</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="n">deferredLoad</span><span class="o">.</span><span class="n">load</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">deferredLoads</span><span class="o">.</span><span class="n">clear</span><span class="p">();</span> <span class="o">//</span> <span class="err">清空</span><span class="n">deferredLoads集合</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">configuration</span><span class="o">.</span><span class="n">getLocalCacheScope</span><span class="p">()</span> <span class="o">==</span> <span class="n">LocalCacheScope</span><span class="o">.</span><span class="n">STATEMENT</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">根据配置决定是否清空</span><span class="n">localCache</span>
+</span></span><span class="line"><span class="cl"><span class="n">clearLocalCache</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">return</span> <span class="n">list</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过对 query() 这个核心方法的分析，我们可以看到其中有两处影响一级缓存中结果对象生命周期的配置：一个是
+<select>
+标签的 flushCache 配置，它决定了一条 select 语句执行之前是否会清除一级缓存；另一个是全局的 localCacheScope 配置，它决定了一级缓存的生命周期是语句级别的（STATEMENT）还是 SqlSession 级别的（SESSION），默认值是 SqlSession 级别的。</p>
+<p>除了上述两个配置会影响缓存数据的生命周期之外，修改操作也会清空缓存，涉及以下展示的 commit()、rollback()、update() 方法：</p>
+<p>clearLocalCache() 方法调用位置</p>
+<p>为了保持一级缓存与数据库的一致性，这些修改数据的操作需要清空一级缓存，因为执行修改操作之后，数据库中存储的数据已更新，如果一级缓存的内容不更新的话，就会与数据库中的数据不一致，成为“脏数据”。</p>
+<p>2. 事务管理</p>
+<p>现在我们知道 commit()、rollback() 方法在提交和回滚事务之前会清空一级缓存，那 BaseExecutor 是如何管理事务的呢？这里我们就简单介绍一下事务管理相关的内容。</p>
+<p>在 BaseExecutor 中维护了一个 Transaction 对象（transaction 字段）来控制事务。首先来看 getConnection() 方法，它底层会通过 Transaction.getConnection() 方法获取数据库连接，用于创建 Statement、PreparedStatement 等对象。</p>
+<p>再来看 commit() 方法和 rollback() 方法，分别依赖 Transaction.commit() 方法和 Transaction.rollback() 方法来提交和回滚事务。从 commit() 方法和 rollback() 方法中我们可以看到，在清理一级缓存和提交/回滚事务之间，BaseExecutor 还会执行 flushStatements() 方法，这个方法主要是处理批处理场景，其中会调用 doFlushStatements() 来处理通过 batch() 写入的多条 SQL 语句。</p>
+<p>总结</p>
+<p>在这一讲，我们首先一起学习了 Executor 接口使用到的模板方法模式的基础知识，然后介绍了 Executor 接口的核心方法以及它的继承结构，最后深入分析了 BaseExecutor 中各个模板方法是如何控制查询数据、修改数据等操作的流程，其中涉及了一级缓存以及事务管理的相关知识点。</p>
+<p>下一讲，我们将深入 BaseExecutor 各个实现类中，分析这些核心流程中各个基本方法是如何实现的，记得按时来听课。</p>
+<p>《Java 工程师高薪训练营》</p>
+<p>实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，点击链接，提升自己！</p>
+<p>-&ndash; ### 精选评论 ##### **威： &gt; 老师写的真好😊 ######     讲师回复： &gt;     感谢你的肯定</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90mybatis%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/">深入剖析MyBatis核心原理</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E7%9D%80%E9%AB%98%E6%89%8B%E5%AD%A6%E5%A4%8D%E7%9B%98/178-%E8%B7%9F%E7%9D%80%E9%AB%98%E6%89%8B%E5%AD%A6%E5%A4%8D%E7%9B%98/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">178-跟着高手学复盘</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/17grpc%E5%92%8Capachethrift%E4%B9%8B%E9%97%B4%E5%A6%82%E4%BD%95%E8%BF%9B%E8%A1%8C%E9%80%89%E5%9E%8B/">
+            <span class="next-text nav-default">17gRPC和ApacheThrift之间如何进行选型？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

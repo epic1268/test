@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20__超越_Web_服务器：特权进程和定时任务 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是温铭。
+前面我们介绍了 OpenResty API、共享字典缓存和 cosocket。它们实现的功能，都还在 Nginx 和 Web 服务器的范畴之内，算是提供了开发成本更低、更容易维护的一种实现，提供了可编程的 Web 服务器。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/20__%E8%B6%85%E8%B6%8A_web_%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%89%B9%E6%9D%83%E8%BF%9B%E7%A8%8B%E5%92%8C%E5%AE%9A%E6%97%B6%E4%BB%BB%E5%8A%A1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/20__%E8%B6%85%E8%B6%8A_web_%E6%9C%8D%E5%8A%A1%E5%99%A8%E7%89%B9%E6%9D%83%E8%BF%9B%E7%A8%8B%E5%92%8C%E5%AE%9A%E6%97%B6%E4%BB%BB%E5%8A%A1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20__超越_Web_服务器：特权进程和定时任务">
+  <meta property="og:description" content="你好，我是温铭。
+前面我们介绍了 OpenResty API、共享字典缓存和 cosocket。它们实现的功能，都还在 Nginx 和 Web 服务器的范畴之内，算是提供了开发成本更低、更容易维护的一种实现，提供了可编程的 Web 服务器。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="OpenResty从入门到实战">
+
+  <meta itemprop="name" content="20__超越_Web_服务器：特权进程和定时任务">
+  <meta itemprop="description" content="你好，我是温铭。
+前面我们介绍了 OpenResty API、共享字典缓存和 cosocket。它们实现的功能，都还在 Nginx 和 Web 服务器的范畴之内，算是提供了开发成本更低、更容易维护的一种实现，提供了可编程的 Web 服务器。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2886">
+  <meta itemprop="keywords" content="OpenResty从入门到实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20__超越_Web_服务器：特权进程和定时任务">
+  <meta name="twitter:description" content="你好，我是温铭。
+前面我们介绍了 OpenResty API、共享字典缓存和 cosocket。它们实现的功能，都还在 Nginx 和 Web 服务器的范畴之内，算是提供了开发成本更低、更容易维护的一种实现，提供了可编程的 Web 服务器。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20__超越_Web_服务器：特权进程和定时任务</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2886 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#定时任务">定时任务</a></li>
+        <li><a href="#特权进程">特权进程</a></li>
+        <li><a href="#非阻塞的-ngxpipe">非阻塞的 ngx.pipe</a></li>
+        <li><a href="#写在最后">写在最后</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是温铭。</p>
+<p>前面我们介绍了 OpenResty API、共享字典缓存和 cosocket。它们实现的功能，都还在 Nginx 和 Web 服务器的范畴之内，算是提供了开发成本更低、更容易维护的一种实现，提供了可编程的 Web 服务器。</p>
+<p>不过，OpenResty 并不满足于此。我们今天就挑选几个，OpenResty 中超越 Web 服务器的功能来介绍一下。它们分别是定时任务、特权进程和非阻塞的 ngx.pipe。</p>
+<h2 id="定时任务">定时任务</h2>
+<p>在 OpenResty 中，我们有时候需要在后台定期地执行某些任务，比如同步数据、清理日志等。如果让你来设计，你会怎么做呢？最容易想到的方法，便是对外提供一个 API 接口，在接口中完成这些任务；然后用系统的 crontab 定时调用 curl，来访问这个接口，进而曲线地实现这个需求。</p>
+<p>不过，这样一来不仅会有割裂感，也会给运维带来更高的复杂度。所以，OpenResty 提供了 <code>ngx.timer</code> 来解决这类需求。你可以把<code>ngx.timer</code> ，看作是 OpenResty 模拟的客户端请求，用以触发对应的回调函数。</p>
+<p>其实，OpenResty 的定时任务可以分为下面两种：</p>
+<ul>
+<li><code>ngx.timer.at</code>，用来执行一次性的定时任务；</li>
+<li><code>ngx.time.every</code>，用来执行固定周期的定时任务。</li>
+</ul>
+<p>还记得上节课最后我留下的思考题吗？问题是如何突破 <code>init_worker_by_lua</code> 中不能使用 cosocket 的限制，这个答案其实就是 <code>ngx.timer</code>。</p>
+<p>下面这段代码，就是启动了一个延时为 0 的定时任务。它启动了回调函数 <code>handler</code>，并在这个函数中，用 cosocket 去访问一个网站：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">init_worker_by_lua_block {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        local function handler()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            local sock = ngx.socket.tcp()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            local ok, err = sock:connect(“www.baidu.com&#34;, 80)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         local ok, err = ngx.timer.at(0, handler)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样，我们就绕过了 cosocket 在这个阶段不能使用的限制。</p>
+<p>再回到这部分开头时我们提到的的用户需求，<code>ngx.timer.at</code> 并没有解决周期性运行这个需求，在上面的代码示例中，它是一个一次性的任务。</p>
+<p>那么，又该如何做到周期性运行呢？表面上来看，基于 <code>ngx.timer.at</code> 这个 API 的话，你有两个选择：</p>
+<ul>
+<li>你可以在回调函数中，使用一个 while true 的死循环，执行完任务后 sleep 一段时间，自己来实现周期任务；</li>
+<li>你还可以在回调函数的最后，再创建另外一个新的 timer。</li>
+</ul>
+<p>不过，在做出选择之前，有一点我们需要先明确下：timer 的本质是一个请求，虽然这个请求不是终端发起的；而对于请求来讲，在完成自己的任务后它就要退出，不能一直常驻，否则很容易造成各种资源的泄漏。</p>
+<p>所以，第一种使用 while true 来自行实现周期任务的方案并不靠谱。第二种方案虽然是可行的，但递归地创建 timer，并不容易让人理解。</p>
+<p>那么，是否有更好的方案呢？其实，OpenResty 后面新增的 <code>ngx.time.every</code> API，就是专门为了解决这个问题而出现的，它是更加接近 crontab 的解决方案。</p>
+<p>但美中不足的是，在启动了一个 timer 之后，你就再也没有机会来取消这个定时任务了，毕竟<code>ngx.timer.cancel</code> 还是一个 todo 的功能。</p>
+<p>这时候，你就会面临一个问题：定时任务是在后台运行的，并且无法取消；如果定时任务的数量很多，就很容易耗尽系统资源。</p>
+<p>所以，OpenResty 提供了 <code>lua_max_pending_timers</code> 和 <code>lua_max_running_timers</code> 这两个指令，来对其进行限制。前者代表等待执行的定时任务的最大值，后者代表当前正在运行的定时任务的最大值。</p>
+<p>你也可以通过 Lua API，来获取当前等待执行和正在执行的定时任务的值，下面是两个示例：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">content_by_lua_block {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            ngx.timer.at(3, function() end)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            ngx.say(ngx.timer.pending_count())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码会打印出 1，表示有 1 个计划任务正在等待被执行。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">content_by_lua_block {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            ngx.timer.at(0.1, function() ngx.sleep(0.3) end)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            ngx.sleep(0.2)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            ngx.say(ngx.timer.running_count())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码会打印出 1，表示有 1 个计划任务正在运行中。</p>
+<h2 id="特权进程">特权进程</h2>
+<p>接着来看特权进程。我们都知道 Nginx 主要分为 master 进程和 worker 进程，其中，真正处理用户请求的是 worker 进程。我们可以通过 <code>lua-resty-core</code> 中提供的 <code>process.type</code> API，获取到进程的类型。比如，你可以用 <code>resty</code> 运行下面这个函数：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ resty -e &#39;local process = require &#34;ngx.process&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ngx.say(&#34;process type:&#34;, process.type())&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你会看到，它返回的结果不是 <code>worker</code>，而是 <code>single</code>。这意味 <code>resty</code> 启动的 Nginx 只有 worker 进程，没有 master 进程。其实，事实也是如此。在 <code>resty</code> 的实现中，你可以看到，下面这样的一行配置，关闭了 master 进程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">master_process off;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而 OpenResty 在 Nginx 的基础上进行了扩展，增加了特权进程：privileged agent。特权进程很特别：</p>
+<ul>
+<li>它不监听任何端口，这就意味着不会对外提供任何服务；</li>
+<li>它拥有和 master 进程一样的权限，一般来说是 <code>root</code> 用户的权限，这就让它可以做很多 worker 进程不可能完成的任务；</li>
+<li>特权进程只能在 <code>init_by_lua</code> 上下文中开启；</li>
+<li>另外，特权进程只有运行在 <code>init_worker_by_lua</code> 上下文中才有意义，因为没有请求触发，也就不会走到<code>content</code>、<code>access</code> 等上下文去。</li>
+</ul>
+<p>下面，我们来看一个开启特权进程的示例：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">init_by_lua_block {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    local process = require &#34;ngx.process&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     local ok, err = process.enable_privileged_agent()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if not ok then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ngx.log(ngx.ERR, &#34;enables privileged agent failed error:&#34;, err)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过这段代码开启特权进程后，再去启动 OpenResty 服务，我们就可以看到，Nginx 的进程中多了特权进程的身影：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">nginx: master process
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">nginx: worker process
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">nginx: privileged agent process
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>不过，如果特权只在 <code>init_worker_by_lua</code> 阶段运行一次，显然不是一个好主意，那我们应该怎么来触发特权进程呢？</p>
+<p>没错，答案就藏在刚刚讲过的知识里。既然它不监听端口，也就是不能被终端请求触发，那就只有使用我们刚才介绍的 <code>ngx.timer</code> ，来周期性地触发了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">init_worker_by_lua_block</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">local</span> <span class="n">process</span> <span class="o">=</span> <span class="n">require</span> <span class="s2">&#34;ngx.process&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">local</span> <span class="n">function</span> <span class="n">reload</span><span class="p">(</span><span class="n">premature</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">local</span> <span class="n">f</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">prefix</span><span class="p">()</span> <span class="o">..</span> <span class="s2">&#34;/logs/nginx.pid&#34;</span><span class="p">,</span> <span class="s2">&#34;r&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="ow">not</span> <span class="n">f</span> <span class="n">then</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="k">return</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">end</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">local</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">f</span><span class="p">:</span><span class="n">read</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">f</span><span class="p">:</span><span class="n">close</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">os</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&#34;kill -HUP &#34;</span> <span class="o">..</span> <span class="n">pid</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">end</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">type</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&#34;privileged agent&#34;</span> <span class="n">then</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         <span class="n">local</span> <span class="n">ok</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">ngx</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">every</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">reload</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="ow">not</span> <span class="n">ok</span> <span class="n">then</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">ngx</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="n">ERR</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">end</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">end</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这段代码，实现了每 5 秒给 master 进程发送 HUP 信号量的功能。自然，你也可以在此基础上实现更多有趣的功能，比如轮询数据库，看是否有特权进程的任务并执行。因为特权进程是 root 权限，这显然就有点儿“后门”程序的意味了。</p>
+<h2 id="非阻塞的-ngxpipe">非阻塞的 ngx.pipe</h2>
+<p>最后我们来看非阻塞的 ngx.pipe。刚刚讲过的这个代码示例中，我们使用了 Lua 的标准库，来执行外部命令行，把信号发送给了 master 进程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">os.execute(&#34;kill -HUP &#34; .. pid) 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这种操作自然是会阻塞的。那么，在 OpenResty 中，是否有非阻塞的方法来调用外部程序呢？毕竟，要知道，如果你是把 OpenResty 当做一个完整的开发平台，而非 Web 服务器来使用的话，这就是你的刚需了。</p>
+<p>为此，<code>lua-resty-shell</code> 库应运而生，使用它来调用命令行就是非阻塞的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ resty -e &#39;local shell = require &#34;resty.shell&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local ok, stdout, stderr, reason, status =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    shell.run([[echo &#34;hello, world&#34;]])
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ngx.say(stdout)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码可以算是 hello world 的另外一种写法了，它调用系统的 <code>echo</code> 命令来完成输出。类似的，你可以用 <code>resty.shell</code> ，来替代 Lua 中的 <code>os.execute</code> 调用。</p>
+<p>我们知道，<code>lua-resty-shell</code> 的底层实现，依赖了 <code>lua-resty-core</code> 中的 [<a href="./pipe.md.md">ngx.pipe</a>] API，所以，这个使用 <code>lua-resty-shell</code> 打印出 <code>hello wrold</code> 的示例，改用 <code>ngx.pipe</code> ，可以写成下面这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ resty -e &#39;local ngx_pipe = require &#34;ngx.pipe&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local proc = ngx_pipe.spawn({&#34;echo&#34;, &#34;hello world&#34;})
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local data, err = proc:stdout_read_line()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ngx.say(data)&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这其实也就是 <code>lua-resty-shell</code> 底层的实现代码了。你可以去查看 <code>ngx.pipe</code> 的文档和测试案例，来获取更多的使用方法，这里我就不再赘述了。</p>
+<h2 id="写在最后">写在最后</h2>
+<p>到此，今天的主要内容我就讲完了。从上面的几个功能，我们可以看出，OpenResty 在做一个更好用的 Nginx 的前提下，也在尝试往通用平台的方向上靠拢，希望开发者能够尽量统一技术栈，都用 OpenResty 来解决开发需求。这对于运维来说是相当友好的，因为只要部署一个 OpenResty 就可以了，维护成本更低。</p>
+<p>最后，给你留一个思考题。由于可能会存在多个 Nginx worker，那么 timer 就会在每个 worker 中都运行一次，这在大多数场景下都是不能接受的。我们应该如何保证 timer 只能运行一次呢？</p>
+<p>欢迎留言说说你的解决方法，也欢迎你把这篇文章分享给你的同事、朋友，我们一起交流，一起进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/OpenResty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/12bf8dad402b50769d64b4fa7ee66191.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/">OpenResty从入门到实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/20__%E5%B9%B6%E5%8F%91%E5%AE%B9%E5%99%A8%E9%83%BD%E6%9C%89%E5%93%AA%E4%BA%9B%E5%9D%91%E9%9C%80%E8%A6%81%E6%88%91%E4%BB%AC%E5%A1%AB/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20__并发容器：都有哪些“坑”需要我们填？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/devops%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/20__%E6%8C%81%E7%BB%AD%E6%94%B9%E8%BF%9Bpdca%E4%BD%93%E7%B3%BB%E5%92%8C%E6%8C%81%E7%BB%AD%E6%94%B9%E8%BF%9B%E7%9A%84%E6%84%8F%E4%B9%89/">
+            <span class="next-text nav-default">20__持续改进：PDCA体系和持续改进的意义</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

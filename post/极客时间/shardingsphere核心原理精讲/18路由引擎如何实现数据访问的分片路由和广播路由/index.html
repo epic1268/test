@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>18路由引擎：如何实现数据访问的分片路由和广播路由？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上一课时中，我们看到起到承上启下作用的 ShardingRouter 会调用 RoutingEngine 获取路由结果，而在 ShardingSphere 中存在多种不同类型的 RoutingEngine，分别针对不同的应用场景。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/18%E8%B7%AF%E7%94%B1%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%95%B0%E6%8D%AE%E8%AE%BF%E9%97%AE%E7%9A%84%E5%88%86%E7%89%87%E8%B7%AF%E7%94%B1%E5%92%8C%E5%B9%BF%E6%92%AD%E8%B7%AF%E7%94%B1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/18%E8%B7%AF%E7%94%B1%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%95%B0%E6%8D%AE%E8%AE%BF%E9%97%AE%E7%9A%84%E5%88%86%E7%89%87%E8%B7%AF%E7%94%B1%E5%92%8C%E5%B9%BF%E6%92%AD%E8%B7%AF%E7%94%B1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="18路由引擎：如何实现数据访问的分片路由和广播路由？">
+  <meta property="og:description" content="在上一课时中，我们看到起到承上启下作用的 ShardingRouter 会调用 RoutingEngine 获取路由结果，而在 ShardingSphere 中存在多种不同类型的 RoutingEngine，分别针对不同的应用场景。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="ShardingSphere核心原理精讲">
+
+  <meta itemprop="name" content="18路由引擎：如何实现数据访问的分片路由和广播路由？">
+  <meta itemprop="description" content="在上一课时中，我们看到起到承上启下作用的 ShardingRouter 会调用 RoutingEngine 获取路由结果，而在 ShardingSphere 中存在多种不同类型的 RoutingEngine，分别针对不同的应用场景。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5247">
+  <meta itemprop="keywords" content="ShardingSphere核心原理精讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="18路由引擎：如何实现数据访问的分片路由和广播路由？">
+  <meta name="twitter:description" content="在上一课时中，我们看到起到承上启下作用的 ShardingRouter 会调用 RoutingEngine 获取路由结果，而在 ShardingSphere 中存在多种不同类型的 RoutingEngine，分别针对不同的应用场景。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">18路由引擎：如何实现数据访问的分片路由和广播路由？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5247 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上一课时中，我们看到起到承上启下作用的 ShardingRouter 会调用 RoutingEngine 获取路由结果，而在 ShardingSphere 中存在多种不同类型的 RoutingEngine，分别针对不同的应用场景。</p>
+<p>我们可以按照是否携带分片键信息将这些路由方式分成两大类，即分片路由和广播路由，而这两类路由中又存在一些常见的 RoutingEngine 实现类型，如下图所示：</p>
+<p>我们无意对所有这些 RoutingEngine 进行详细 的 展开，但在接下来的内容中，我们会分别对分片路由和广播路由中具有代表性的 RoutingEngine 进行讨论。</p>
+<p>分片路由</p>
+<p>对于分片路由而言，我们将重点介绍标准路由，标准路由是 ShardingSphere 推荐使用的分片方式。</p>
+<p>在使用过程中，我们需要首先考虑标准路由的适用范围。标准路由适用范围有两大场景：一种面向不包含关联查询的 SQL；另一种则适用于仅包含绑定表关联查询的 SQL。前面一种场景比较好理解，而针对后者，我们就需要引入绑定表这个 ShardingSphere 中的重要概念。</p>
+<p>关于绑定表，我们已经在 《06 | 数据分片：如何实现分库、分表、分库+分表以及强制路由（上）？》中进行了讨论，在明确了这些概念之后，我们来看标准路由的具体实现过程。</p>
+<p>1.StandardRoutingEngine 的创建过程</p>
+<p>明确了标准路由的基本含义之后，我们回顾一下上一课时中介绍的工厂类 RoutingEngineFactory。RoutingEngineFactory 类根据上下文中的路由信息构建对应的 RoutingEngine，但在其 newInstance 方法中，我们并没有发现直接创建StandardRoutingEngine 的代码。事实上，StandardRoutingEngine 的创建是在 newInstance 方法中的最后一个代码分支，即当所有前置的判断都不成立时会进入到最后的 getShardingRoutingEngine 代码分支中，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private static RoutingEngine getShardingRoutingEngine(final ShardingRule shardingRule, final SQLStatementContext sqlStatementContext,
+</span></span><span class="line"><span class="cl">                                                      final ShardingConditions shardingConditions, final Collection&lt;String&gt; tableNames) { 
+</span></span><span class="line"><span class="cl">    //根据分片规则获取分片表 
+</span></span><span class="line"><span class="cl"> Collection&lt;String&gt; shardingTableNames = shardingRule.getShardingLogicTableNames(tableNames); 
+</span></span><span class="line"><span class="cl">    //如果目标表只要一张，或者说目标表都是绑定表关系，则构建StandardRoutingEngine 
+</span></span><span class="line"><span class="cl">    if (1 == shardingTableNames.size() || shardingRule.isAllBindingTables(shardingTableNames)) { 
+</span></span><span class="line"><span class="cl">        return new StandardRoutingEngine(shardingRule, shardingTableNames.iterator().next(), sqlStatementContext, shardingConditions); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    //否则构建ComplexRoutingEngine 
+</span></span><span class="line"><span class="cl">    return new ComplexRoutingEngine(shardingRule, tableNames, sqlStatementContext, shardingConditions); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码首先根据解析出来的逻辑表获取分片表，以如下所示的 SQL 语句为例：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">SELECT record.remark_name FROM health_record record JOIN health_task task ON record.record_id=task.record_id WHERE record.record_id = 1
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那么 shardingTableNames 应该为 health_record 和 health_task。如果分片操作只涉及一张表，或者涉及多张表，但这些表是互为绑定表的关系时，则使用 StandardRoutingEngine 进行路由。</p>
+<p>基于绑定表的概念，当多表互为绑定表关系时，每张表的路由结果是相同的，所以只要计算第一张表的分片即可；反之，如果不满足这一条件，则构建一个 ComplexRoutingEngine 进行路由。</p>
+<p>这里我们来看一下代码中的 isAllBindingTables 方法如何对多表互为绑定表关系进行判定，该方法位于 ShardingRule 中，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public boolean isAllBindingTables(final Collection&lt;String&gt; logicTableNames) { 
+</span></span><span class="line"><span class="cl">    if (logicTableNames.isEmpty()) { 
+</span></span><span class="line"><span class="cl">        return false; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    //通过传入的logicTableNames构建一个专门的BindingTableRule 
+</span></span><span class="line"><span class="cl">    Optional&lt;BindingTableRule&gt; bindingTableRule = findBindingTableRule(logicTableNames); 
+</span></span><span class="line"><span class="cl">    if (!bindingTableRule.isPresent()) { 
+</span></span><span class="line"><span class="cl">        return false; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    Collection&lt;String&gt; result = new TreeSet&lt;&gt;(String.CASE_INSENSITIVE_ORDER); 
+</span></span><span class="line"><span class="cl">    //获取BindingTableRule中的LogicTable 
+</span></span><span class="line"><span class="cl">    result.addAll(bindingTableRule.get().getAllLogicTables()); 
+</span></span><span class="line"><span class="cl">    //判断获取的LogicTable是否与传入的logicTableNames一致 
+</span></span><span class="line"><span class="cl">    return !result.isEmpty() &amp;&amp; result.containsAll(logicTableNames); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码会通过传入的 logicTableNames 构建一个专门的 BindingTableRule，然后看最终获取的 BindingTableRule 中的 LogicTable 是否与传入的 logicTableNames 一致。这里构建 BindingTableRule 的过程实际上是根据传入的 logicTableName 来从 ShardingRule 中自身保存的 Collection
+<BindingTableRule>
+获取对应的 BindingTableRule，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public Optional&lt;BindingTableRule&gt; findBindingTableRule(final String logicTableName) { 
+</span></span><span class="line"><span class="cl">        for (BindingTableRule each : bindingTableRules) { 
+</span></span><span class="line"><span class="cl">            if (each.hasLogicTable(logicTableName)) { 
+</span></span><span class="line"><span class="cl">                return Optional.of(each); 
+</span></span><span class="line"><span class="cl">            } 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        return Optional.absent(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码的 bindingTableRules 就是 ShardingRule 中自身保存的 BindingTableRule 集合，我们在 ShardingRule 构造函数中发现了初始化 bindingTableRules 的代码，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">bindingTableRules = createBindingTableRules(shardingRuleConfig.getBindingTableGroups());
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然，这个构建过程与规则配置机制有关。如果基于 Yaml 配置文件，绑定表的配置一般会采用如下形式：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">shardingRule:
+</span></span><span class="line"><span class="cl">  bindingTables: 
+</span></span><span class="line"><span class="cl">     health_record,health_task
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>针对这种配置形式，ShardingRule 会对其进行解析并生成 BindingTableRule 对象，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private BindingTableRule createBindingTableRule(final String bindingTableGroup) { 
+</span></span><span class="line"><span class="cl">    List&lt;TableRule&gt; tableRules = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">    for (String each : Splitter.on(&#34;,&#34;).trimResults().splitToList(bindingTableGroup)) { 
+</span></span><span class="line"><span class="cl">        tableRules.add(getTableRule(each)); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return new BindingTableRule(tableRules); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>至此，我们终于把绑定表相关的概念以及实现方式做了介绍，也就是说完成了 RoutingEngineFactory 中进入到 StandardRoutingEngine 这条代码分支的介绍。</p>
+<p>2.StandardRoutingEngine 的运行机制</p>
+<p>现在，我们已经创建了 StandardRoutingEngine，接下来就看它的运行机制。作为一种具体的路由引擎实现方案，StandardRoutingEngine 实现了 RoutingEngine 接口，它的 route 方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">	    … 
+</span></span><span class="line"><span class="cl">        return generateRoutingResult(getDataNodes(shardingRule.getTableRule(logicTableName))); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的核心方法就是 generateRoutingResult，在此之前需要先通过 getDataNodes 方法来获取数据节点信息，该方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Collection&lt;DataNode&gt; getDataNodes(final TableRule tableRule) { 
+</span></span><span class="line"><span class="cl">     //如基于Hint进行路由 
+</span></span><span class="line"><span class="cl">    if (isRoutingByHint(tableRule)) { 
+</span></span><span class="line"><span class="cl">        return routeByHint(tableRule); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    //基于分片条件进行路由 
+</span></span><span class="line"><span class="cl">    if (isRoutingByShardingConditions(tableRule)) { 
+</span></span><span class="line"><span class="cl">        return routeByShardingConditions(tableRule); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    //执行混合路由 
+</span></span><span class="line"><span class="cl">    return routeByMixedConditions(tableRule); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们看到这个方法的入参是一个 TableRule 对象，而 TableRule 属于分片规则 ShardingRule 中的一部分。我们在上一课时中知道该对象主要保存着与分片相关的各种规则信息，其中就包括 ShardingStrategy。从命名上看，ShardingStrategy 属于一种分片策略，用于指定分片的具体 Column，以及执行分片并返回目标 DataSource 和 Table。</p>
+<p>这部分内容我们会在下一课时中进行展开。这里，我们先梳理与 ShardingStrategy 相关的类结构，如下所示：</p>
+<p>在 StandardRoutingEngine 中，整体结构也与上图类似。在 StandardRoutingEngine 中，前面所介绍的 getDataNodes 方法的第一个判断分支 isRoutingByHint 方法中会判断是否根据 Hint 来进行路由，其判断依据是它的 DatabaseShardingStrategy 和 TableShardingStrategy 是否都为 HintShardingStrategy，这个方法就用到了 ShardingRule 的这两个ShardingStrategy 对象，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private boolean isRoutingByHint(final TableRule tableRule) { 
+</span></span><span class="line"><span class="cl">    return shardingRule.getDatabaseShardingStrategy(tableRule) instanceof HintShardingStrategy &amp;&amp; shardingRule.getTableShardingStrategy(tableRule) instanceof HintShardingStrategy; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ShardingSphere 中，Hint 代表的是一种强制路由的方法，是一条流程的支线。然后，我们再看 getDataNodes 方法中的 isRoutingByShardingConditions 判断。想要判断是否根据分片条件进行路由，其逻辑在于 DatabaseShardingStrategy 和 TableShardingStrategy 都不是 HintShardingStrategy 时就走这个代码分支。而最终如果 isRoutingByHint 和 isRoutingByShardingConditions 都不满足，也就是说，DatabaseShardingStrategy 或 TableShardingStrategy 中任意一个是 HintShardingStrategy，则执行 routeByMixedConditions 这一混合的路由方式。</p>
+<p>以上三条代码分支虽然处理方式有所不同，但本质上都是获取 RouteValue 的集合，我们在上一课时中介绍路由条件 ShardingCondition 时知道，RouteValue 保存的就是用于路由的表名和列名。在获取了所需的 RouteValue 之后，在 StandardRoutingEngine 中，以上三种场景最终都会调用 route0 基础方法进行路由，该方法的作用就是根据这些 RouteValue 得出目标 DataNode 的集合。同样，我们也知道 DataNode 中保存的就是具体的目标节点，包括 dataSourceName和tableName。route0 方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Collection&lt;DataNode&gt; route0(final TableRule tableRule, final List&lt;RouteValue&gt; databaseShardingValues, final List&lt;RouteValue&gt; tableShardingValues) { 
+</span></span><span class="line"><span class="cl">    //路由DataSource 
+</span></span><span class="line"><span class="cl"> Collection&lt;String&gt; routedDataSources = routeDataSources(tableRule, databaseShardingValues); 
+</span></span><span class="line"><span class="cl">    Collection&lt;DataNode&gt; result = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">    //路由Table，并完成DataNode集合的拼装 
+</span></span><span class="line"><span class="cl">    for (String each : routedDataSources) { 
+</span></span><span class="line"><span class="cl">        result.addAll(routeTables(tableRule, each, tableShardingValues)); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，该方法首先路由 DataSource，然后再根据每个 DataSource 路由 Table，最终完成 DataNode 集合的拼装。在上述 routeDataSources 和 routeTables 方法中，最终都会分别依赖 DatabaseShardingStrategy 和 TableShardingStrategy 完成背后的路由计算以获取目标 DataSource 以及 Table。</p>
+<p>当获取了 DataNode 集合之后，我们回到 StandardRoutingEngine 的 generateRoutingResult 方法，该方法用于组装路由结果并返回一个 RoutingResult：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private RoutingResult generateRoutingResult(final Collection&lt;DataNode&gt; routedDataNodes) { 
+</span></span><span class="line"><span class="cl">    RoutingResult result = new RoutingResult(); 
+</span></span><span class="line"><span class="cl">    for (DataNode each : routedDataNodes) { 
+</span></span><span class="line"><span class="cl">     //根据每个DataNode构建一个RoutingUnit对象 
+</span></span><span class="line"><span class="cl">        RoutingUnit routingUnit = new RoutingUnit(each.getDataSourceName()); 
+</span></span><span class="line"><span class="cl">        //填充RoutingUnit中的TableUnit 
+</span></span><span class="line"><span class="cl">        routingUnit.getTableUnits().add(new TableUnit(logicTableName, each.getTableName())); 
+</span></span><span class="line"><span class="cl">        result.getRoutingUnits().add(routingUnit); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这部分代码的作用就是根据每个 DataNode 构建一个 RoutingUnit 对象，然后再填充 RoutingUnit 中的 TableUnit。关于 RoutingUnit 和 TableUnit 的数据结构我们在上一课时中已经进行了介绍，这里不再展开。</p>
+<p>至此，对标准路由引擎 StandardRoutingEngine 的介绍就告一段落，标准路由是 ShardingSphere 最为推荐使用的分片方式，在日常开发中应用也最广泛。</p>
+<p>广播路由</p>
+<p>对于不携带分片键的 SQL，路由引擎会采取广播路由的方式。在 ShardingSphere，根据输入 SQL 的类型，存在很多种用于广播的路由引擎，我们同样可以回顾 RoutingEngineFactory 中创建 RoutingEngine的 方法。</p>
+<p>首先，如果输入的是 TCLStatement，即授权、角色控制等数据库控制语言，那么直接执行 DatabaseBroadcastRoutingEngine；同样，如果执行的是用于数据定义的 DDLStatement，则执行 TableBroadcastRoutingEngine 中的路由方法，判断条件如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">//全库路由 
+</span></span><span class="line"><span class="cl">if (sqlStatement instanceof TCLStatement) { 
+</span></span><span class="line"><span class="cl">    return new DatabaseBroadcastRoutingEngine(shardingRule); 
+</span></span><span class="line"><span class="cl">} 
+</span></span><span class="line"><span class="cl">//全库表路由 
+</span></span><span class="line"><span class="cl">if (sqlStatement instanceof DDLStatement) { 
+</span></span><span class="line"><span class="cl">    return new TableBroadcastRoutingEngine(shardingRule, metaData.getTables(), sqlStatementContext); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>DatabaseBroadcastRoutingEngine 的路由方法非常直接，即基于每个 DataSourceName 构建一个 RoutingUnit，然后再拼装成 RoutingResult，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class DatabaseBroadcastRoutingEngine implements RoutingEngine { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final ShardingRule shardingRule; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override 
+</span></span><span class="line"><span class="cl">    public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">        RoutingResult result = new RoutingResult(); 
+</span></span><span class="line"><span class="cl">        for (String each : shardingRule.getShardingDataSourceNames().getDataSourceNames()) { 
+</span></span><span class="line"><span class="cl">         //基于每个DataSourceName构建一个RoutingUnit 
+</span></span><span class="line"><span class="cl">            result.getRoutingUnits().add(new RoutingUnit(each)); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        return result; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>同样也可以想象 TableBroadcastRoutingEngine 的实现过程，我们根据 logicTableName 获取对应的 TableRule，然后根据 TableRule 中的真实 DataNode 构建 RoutingUnit 对象，这一过程如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Collection&lt;RoutingUnit&gt; getAllRoutingUnits(final String logicTableName) { 
+</span></span><span class="line"><span class="cl">    Collection&lt;RoutingUnit&gt; result = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">    //根据logicTableName获取对应的TableRule 
+</span></span><span class="line"><span class="cl">    TableRule tableRule = shardingRule.getTableRule(logicTableName); 
+</span></span><span class="line"><span class="cl">    for (DataNode each : tableRule.getActualDataNodes()) { 
+</span></span><span class="line"><span class="cl">        //根据TableRule中的真实DataNode构建RoutingUnit对象 
+</span></span><span class="line"><span class="cl">        RoutingUnit routingUnit = new RoutingUnit(each.getDataSourceName()); 
+</span></span><span class="line"><span class="cl">        //根据DataNode的TableName构建TableUnit 
+</span></span><span class="line"><span class="cl">        routingUnit.getTableUnits().add(new TableUnit(logicTableName, each.getTableName())); 
+</span></span><span class="line"><span class="cl">        result.add(routingUnit); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接着我们来看针对 DALStatement 的场景，这一场景相对复杂，根据输入的 DALStatement 的不同类型，会有几个不同的处理分支，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private static RoutingEngine getDALRoutingEngine(final ShardingRule shardingRule, final SQLStatement sqlStatement, final Collection&lt;String&gt; tableNames) { 
+</span></span><span class="line"><span class="cl">         //如果是Use语句，则什么也不做 
+</span></span><span class="line"><span class="cl">        if (sqlStatement instanceof UseStatement) { 
+</span></span><span class="line"><span class="cl">            return new IgnoreRoutingEngine(); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">         //如果是Set或ResetParameter语句，则进行全数据库广播 
+</span></span><span class="line"><span class="cl">        if (sqlStatement instanceof SetStatement || sqlStatement instanceof ResetParameterStatement || sqlStatement instanceof ShowDatabasesStatement) { 
+</span></span><span class="line"><span class="cl">            return new DatabaseBroadcastRoutingEngine(shardingRule); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        //如果存在默认数据库，则执行默认数据库路由 
+</span></span><span class="line"><span class="cl">        if (!tableNames.isEmpty() &amp;&amp; !shardingRule.tableRuleExists(tableNames) &amp;&amp; shardingRule.hasDefaultDataSourceName()) { 
+</span></span><span class="line"><span class="cl">            return new DefaultDatabaseRoutingEngine(shardingRule, tableNames); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        //如果表列表不为空，则执行单播路由 
+</span></span><span class="line"><span class="cl">        if (!tableNames.isEmpty()) { 
+</span></span><span class="line"><span class="cl">            return new UnicastRoutingEngine(shardingRule, tableNames); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        // 
+</span></span><span class="line"><span class="cl">        return new DataSourceGroupBroadcastRoutingEngine(shardingRule); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们分别来看一下这里面的几个路由引擎。首先是最简单的 IgnoreRoutingEngine，它只返回一个空的 RoutingResult 对象，其他什么都不做，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class IgnoreRoutingEngine implements RoutingEngine { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override 
+</span></span><span class="line"><span class="cl">    public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">        return new RoutingResult(); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>本质上，UnicastRoutingEngine 代表单播路由，用于获取某一真实表信息的场景，它只需要从任意库中的任意真实表中获取数据即可。例如 DESCRIBE 语句就适合使用 UnicastRoutingEngine，因为每个真实表中的数据描述结构都是相同的。</p>
+<p>UnicastRoutingEngine 实现过程如下所示，由于方法比较长，我们裁剪了代码，直接使用注释来标明每个分支的执行逻辑：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">    RoutingResult result = new RoutingResult(); 
+</span></span><span class="line"><span class="cl">    if (shardingRule.isAllBroadcastTables(logicTables)) { 
+</span></span><span class="line"><span class="cl">         //如果都是广播表，则对每个logicTable组装TableUnit，再构建RoutingUnit
+</span></span><span class="line"><span class="cl">    } else if (logicTables.isEmpty()) { 
+</span></span><span class="line"><span class="cl">         //如果表为null，则直接组装RoutingUnit，不用构建TableUnit
+</span></span><span class="line"><span class="cl">    } else if (1 == logicTables.size()) { 
+</span></span><span class="line"><span class="cl">         //如果只有一张表，则组装RoutingUnit和单个表的TableUnit
+</span></span><span class="line"><span class="cl">    } else { 
+</span></span><span class="line"><span class="cl">         //如果存在多个实体表，则先获取DataSource，再组装RoutingUnit和TableUnit
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>DefaultDatabaseRoutingEngine，顾名思义是对默认的数据库执行路由。那么这个默认数据库是怎么来的呢？我们可以从 ShardingRule的ShardingDataSourceNames 类中的 getDefaultDataSourceName 方法中找到答案。</p>
+<p>一般，这种默认数据库可以通过配置的方式进行设置。明白这一点，DefaultDatabaseRoutingEngine 的路由过程也就不难理解了，其 route 方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">    RoutingResult result = new RoutingResult(); 
+</span></span><span class="line"><span class="cl">    List&lt;TableUnit&gt; routingTables = new ArrayList&lt;&gt;(logicTables.size()); 
+</span></span><span class="line"><span class="cl">    for (String each : logicTables) { 
+</span></span><span class="line"><span class="cl">        routingTables.add(new TableUnit(each, each)); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    //从ShardingRule中获取默认所配置的数据库名 
+</span></span><span class="line"><span class="cl">    RoutingUnit routingUnit = new RoutingUnit(shardingRule.getShardingDataSourceNames().getDefaultDataSourceName()); 
+</span></span><span class="line"><span class="cl">    routingUnit.getTableUnits().addAll(routingTables); 
+</span></span><span class="line"><span class="cl">    result.getRoutingUnits().add(routingUnit); 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最后，我们来看一下针对数据控制语言 DCLStatement 的处理流程。在主从环境下，对于 DCLStatement 而言，有时候我们希望 SQL 语句只针对主数据库进行执行，所以就有了如下所示的 MasterInstanceBroadcastRoutingEngine：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public RoutingResult route() { 
+</span></span><span class="line"><span class="cl">    RoutingResult result = new RoutingResult(); 
+</span></span><span class="line"><span class="cl">    for (String each : shardingRule.getShardingDataSourceNames().getDataSourceNames()) { 
+</span></span><span class="line"><span class="cl">        if (dataSourceMetas.getAllInstanceDataSourceNames().contains(each)) { 
+</span></span><span class="line"><span class="cl">          //通过MasterSlaveRule获取主从数据库信息 
+</span></span><span class="line"><span class="cl">            Optional&lt;MasterSlaveRule&gt; masterSlaveRule = shardingRule.findMasterSlaveRule(each); 
+</span></span><span class="line"><span class="cl">            if (!masterSlaveRule.isPresent() || masterSlaveRule.get().getMasterDataSourceName().equals(each)) { 
+</span></span><span class="line"><span class="cl">                result.getRoutingUnits().add(new RoutingUnit(each)); 
+</span></span><span class="line"><span class="cl">            } 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，这里引入了一个 MasterSlaveRule 规则，该规则提供 getMasterDataSourceName 方法以获取主 DataSourceName，这样我们就可以针对这个主数据执行，如 Grant 等数据控制语言。</p>
+<p>从源码解析到日常开发</p>
+<p>在 ShardingSphere 中，我们还是有必要再次强调其在配置信息管理上的一些设计和实践。基于 ShardingRule 和 TableRule 这两个配置类，ShardingSphere 把大量纷繁复杂的配置信息从业务流程中进行隔离，而这些配置信息往往需要灵活进行设置，以及多种默认配置值。基于 ShardingRule 和 TableRule 的两层配置体系，系统能够更好地完成业务逻辑的变化和配置信息变化之间的有效整合，值得我们在日常开发过程中进行尝试和应用。</p>
+<p>小结与预告</p>
+<p>今天我们关注的是 ShardingSphere 中各种路由引擎的实现过程，ShardingSphere 中实现了多款不同的路由引擎，可以分为分片路由和广播路由两大类。我们针对这两类路由引擎中的代表性实现方案分别展开了讨论。</p>
+<p>这里给你留一道思考题：ShardingSphere 中如何判断两张表是互为绑定表关系？ 欢迎你在留言区与大家讨论，我将一一点评解答。</p>
+<p>从今天的内容中，我们也看到了路由引擎中路由机制的实现需要依赖于分片策略及其背后分片算法的集成，下一课时将对 ShardingSphere 中的各种分片策略进行具体的展开。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/">ShardingSphere核心原理精讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/18%E9%93%BE%E8%B7%AF%E8%AE%AD%E7%BB%83%E5%88%86%E5%B8%83%E5%BC%8F%E9%97%AE%E9%A2%98%E4%B8%8B%E8%AE%A9%E6%AF%8F%E4%B8%AArd%E6%8B%A5%E6%9C%89%E7%8B%AC%E7%AB%8B%E5%AE%9A%E4%BD%8D%E8%83%BD%E5%8A%9B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">18链路训练：分布式问题下，让每个RD拥有独立定位能力</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/18%E6%9D%83%E9%99%90%E5%88%86%E6%9E%90kubernete%E9%9B%86%E7%BE%A4%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/">
+            <span class="next-text nav-default">18权限分析：Kubernete集群权限管理那些事儿</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

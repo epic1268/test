@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>38__从外界连通Service与Service调试“三板斧” - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是张磊。今天我和你分享的主题是：从外界连通 Service 与 Service 调试“三板斧”。
+在上一篇文章中，我为你介绍了 Service 机制的工作原理。通过这些讲解，你应该能够明白这样一个事实：Service 的访问信息在 Kubernetes 集群之外，其实是无效的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/38__%E4%BB%8E%E5%A4%96%E7%95%8C%E8%BF%9E%E9%80%9Aservice%E4%B8%8Eservice%E8%B0%83%E8%AF%95%E4%B8%89%E6%9D%BF%E6%96%A7/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/38__%E4%BB%8E%E5%A4%96%E7%95%8C%E8%BF%9E%E9%80%9Aservice%E4%B8%8Eservice%E8%B0%83%E8%AF%95%E4%B8%89%E6%9D%BF%E6%96%A7/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="38__从外界连通Service与Service调试“三板斧”">
+  <meta property="og:description" content="你好，我是张磊。今天我和你分享的主题是：从外界连通 Service 与 Service 调试“三板斧”。
+在上一篇文章中，我为你介绍了 Service 机制的工作原理。通过这些讲解，你应该能够明白这样一个事实：Service 的访问信息在 Kubernetes 集群之外，其实是无效的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入剖析Kubernetes">
+
+  <meta itemprop="name" content="38__从外界连通Service与Service调试“三板斧”">
+  <meta itemprop="description" content="你好，我是张磊。今天我和你分享的主题是：从外界连通 Service 与 Service 调试“三板斧”。
+在上一篇文章中，我为你介绍了 Service 机制的工作原理。通过这些讲解，你应该能够明白这样一个事实：Service 的访问信息在 Kubernetes 集群之外，其实是无效的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3922">
+  <meta itemprop="keywords" content="深入剖析Kubernetes">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="38__从外界连通Service与Service调试“三板斧”">
+  <meta name="twitter:description" content="你好，我是张磊。今天我和你分享的主题是：从外界连通 Service 与 Service 调试“三板斧”。
+在上一篇文章中，我为你介绍了 Service 机制的工作原理。通过这些讲解，你应该能够明白这样一个事实：Service 的访问信息在 Kubernetes 集群之外，其实是无效的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">38__从外界连通Service与Service调试“三板斧”</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3922 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是张磊。今天我和你分享的主题是：从外界连通 Service 与 Service 调试“三板斧”。</p>
+<p>在上一篇文章中，我为你介绍了 Service 机制的工作原理。通过这些讲解，你应该能够明白这样一个事实：Service 的访问信息在 Kubernetes 集群之外，其实是无效的。</p>
+<p>这其实也容易理解：所谓 Service 的访问入口，其实就是每台宿主机上由 kube-proxy 生成的 iptables 规则，以及 kube-dns 生成的 DNS 记录。而一旦离开了这个集群，这些信息对用户来说，也就自然没有作用了。</p>
+<p>所以，在使用 Kubernetes 的 Service 时，一个必须要面对和解决的问题就是：<strong>如何从外部（Kubernetes 集群之外），访问到 Kubernetes 里创建的 Service？</strong></p>
+<p>这里最常用的一种方式就是：NodePort。我来为你举个例子。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: Service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: my-nginx
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    run: my-nginx
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  type: NodePort
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ports:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - nodePort: 8080
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    targetPort: 80
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    protocol: TCP
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    name: http
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - nodePort: 443
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    protocol: TCP
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    name: https
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    run: my-nginx
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这个 Service 的定义里，我们声明它的类型是，type=NodePort。然后，我在 ports 字段里声明了 Service 的 8080 端口代理 Pod 的 80 端口，Service 的 443 端口代理 Pod 的 443 端口。</p>
+<p>当然，如果你不显式地声明 nodePort 字段，Kubernetes 就会为你分配随机的可用端口来设置代理。这个端口的范围默认是 30000-32767，你可以通过 kube-apiserver 的–service-node-port-range 参数来修改它。</p>
+<p>那么这时候，要访问这个 Service，你只需要访问：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">&lt; 任何一台宿主机的 IP 地址 &gt;:8080
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>就可以访问到某一个被代理的 Pod 的 80 端口了。</p>
+<p>而在理解了我在上一篇文章中讲解的 Service 的工作原理之后，NodePort 模式也就非常容易理解了。显然，kube-proxy 要做的，就是在每台宿主机上生成这样一条 iptables 规则：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-A KUBE-NODEPORTS -p tcp -m comment --comment &#34;default/my-nginx: nodePort&#34; -m tcp --dport 8080 -j KUBE-SVC-67RL4FN6JRUPOJYM
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而我在上一篇文章中已经讲到，KUBE-SVC-67RL4FN6JRUPOJYM 其实就是一组随机模式的 iptables 规则。所以接下来的流程，就跟 ClusterIP 模式完全一样了。</p>
+<p>需要注意的是，在 NodePort 方式下，Kubernetes 会在 IP 包离开宿主机发往目的 Pod 时，对这个 IP 包做一次 SNAT 操作，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-A KUBE-POSTROUTING -m comment --comment &#34;kubernetes service traffic requiring SNAT&#34; -m mark --mark 0x4000/0x4000 -j MASQUERADE
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，这条规则设置在 POSTROUTING 检查点，也就是说，它给即将离开这台主机的 IP 包，进行了一次 SNAT 操作，将这个 IP 包的源地址替换成了这台宿主机上的 CNI 网桥地址，或者宿主机本身的 IP 地址（如果 CNI 网桥不存在的话）。</p>
+<p>当然，这个 SNAT 操作只需要对 Service 转发出来的 IP 包进行（否则普通的 IP 包就被影响了）。而 iptables 做这个判断的依据，就是查看该 IP 包是否有一个“0x4000”的“标志”。你应该还记得，这个标志正是在 IP 包被执行 DNAT 操作之前被打上去的。</p>
+<p>可是，<strong>为什么一定要对流出的包做 SNAT</strong>操作呢？**</p>
+<p>这里的原理其实很简单，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           client
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             \ ^
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">              \ \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               v \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   node 1 &lt;--- node 2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    | ^   SNAT
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    | |   ---&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    v |
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> endpoint
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当一个外部的 client 通过 node 2 的地址访问一个 Service 的时候，node 2 上的负载均衡规则，就可能把这个 IP 包转发给一个在 node 1 上的 Pod。这里没有任何问题。</p>
+<p>而当 node 1 上的这个 Pod 处理完请求之后，它就会按照这个 IP 包的源地址发出回复。</p>
+<p>可是，如果没有做 SNAT 操作的话，这时候，被转发来的 IP 包的源地址就是 client 的 IP 地址。<strong>所以此时，Pod 就会直接将回复发</strong>给client。**对于 client 来说，它的请求明明发给了 node 2，收到的回复却来自 node 1，这个 client 很可能会报错。</p>
+<p>所以，在上图中，当 IP 包离开 node 2 之后，它的源 IP 地址就会被 SNAT 改成 node 2 的 CNI 网桥地址或者 node 2 自己的地址。这样，Pod 在处理完成之后就会先回复给 node 2（而不是 client），然后再由 node 2 发送给 client。</p>
+<p>当然，这也就意味着这个 Pod 只知道该 IP 包来自于 node 2，而不是外部的 client。对于 Pod 需要明确知道所有请求来源的场景来说，这是不可以的。</p>
+<p>所以这时候，你就可以将 Service 的 spec.externalTrafficPolicy 字段设置为 local，这就保证了所有 Pod 通过 Service 收到请求之后，一定可以看到真正的、外部 client 的源地址。</p>
+<p>而这个机制的实现原理也非常简单：<strong>这时候，一台宿主机上的 iptables 规则，会设置为只将 IP 包转发给运行在这台宿主机上的 Pod</strong>。所以这时候，Pod 就可以直接使用源地址将回复包发出，不需要事先进行 SNAT 了。这个流程，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       client
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">       ^ /   \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      / /     \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     / v       X
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   node 1     node 2
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ^ |
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    | |
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    | v
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> endpoint
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然，这也就意味着如果在一台宿主机上，没有任何一个被代理的 Pod 存在，比如上图中的 node 2，那么你使用 node 2 的 IP 地址访问这个 Service，就是无效的。此时，你的请求会直接被 DROP 掉。</p>
+<p>从外部访问 Service 的第二种方式，适用于公有云上的 Kubernetes 服务。这时候，你可以指定一个 LoadBalancer 类型的 Service，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">---
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: Service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: example-service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ports:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - port: 8765
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    targetPort: 9376
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    app: example
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  type: LoadBalancer
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在公有云提供的 Kubernetes 服务里，都使用了一个叫作 CloudProvider 的转接层，来跟公有云本身的 API 进行对接。所以，在上述 LoadBalancer 类型的 Service 被提交后，Kubernetes 就会调用 CloudProvider 在公有云上为你创建一个负载均衡服务，并且把被代理的 Pod 的 IP 地址配置给负载均衡服务做后端。</p>
+<p>而第三种方式，是 Kubernetes 在 1.7 之后支持的一个新特性，叫作 ExternalName。举个例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: Service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: my-service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  type: ExternalName
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  externalName: my.database.example.com
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在上述 Service 的 YAML 文件中，我指定了一个 externalName=my.database.example.com 的字段。而且你应该会注意到，这个 YAML 文件里不需要指定 selector。</p>
+<p>这时候，当你通过 Service 的 DNS 名字访问它的时候，比如访问：my-service.default.svc.cluster.local。那么，Kubernetes 为你返回的就是<code>my.database.example.com</code>。所以说，ExternalName 类型的 Service，其实是在 kube-dns 里为你添加了一条 CNAME 记录。这时，访问 my-service.default.svc.cluster.local 就和访问 my.database.example.com 这个域名是一个效果了。</p>
+<p>此外，Kubernetes 的 Service 还允许你为 Service 分配公有 IP 地址，比如下面这个例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">kind: Service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  name: my-service
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  selector:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    app: MyApp
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ports:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - name: http
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    protocol: TCP
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    port: 80
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    targetPort: 9376
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  externalIPs:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  - 80.11.12.10
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在上述 Service 中，我为它指定的 externalIPs=80.11.12.10，那么此时，你就可以通过访问 80.11.12.10:80 访问到被代理的 Pod 了。不过，在这里 Kubernetes 要求 externalIPs 必须是至少能够路由到一个 Kubernetes 的节点。你可以想一想这是为什么。</p>
+<p>实际上，在理解了 Kubernetes Service 机制的工作原理之后，很多与 Service 相关的问题，其实都可以通过分析 Service 在宿主机上对应的 iptables 规则（或者 IPVS 配置）得到解决。</p>
+<p>比如，当你的 Service 没办法通过 DNS 访问到的时候。你就需要区分到底是 Service 本身的配置问题，还是集群的 DNS 出了问题。一个行之有效的方法，就是检查 Kubernetes 自己的 Master 节点的 Service DNS 是否正常：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># 在一个 Pod 里执行
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ nslookup kubernetes.default
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Server:    10.0.0.10
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> Name:      kubernetes.default
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Address 1: 10.0.0.1 kubernetes.default.svc.cluster.local
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果上面访问 kubernetes.default 返回的值都有问题，那你就需要检查 kube-dns 的运行状态和日志了。否则的话，你应该去检查自己的 Service 定义是不是有问题。</p>
+<p>而如果你的 Service 没办法通过 ClusterIP 访问到的时候，你首先应该检查的是这个 Service 是否有 Endpoints：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl get endpoints hostnames
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">NAME        ENDPOINTS
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">hostnames   10.244.0.5:9376,10.244.0.6:9376,10.244.0.7:9376
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>需要注意的是，如果你的 Pod 的 readniessProbe 没通过，它也不会出现在 Endpoints 列表里。</p>
+<p>而如果 Endpoints 正常，那么你就需要确认 kube-proxy 是否在正确运行。在我们通过 kubeadm 部署的集群里，你应该看到 kube-proxy 输出的日志如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:53.995134    5063 server.go:200] Running in resource-only container &#34;/kube-proxy&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:53.998163    5063 server.go:247] Using iptables Proxier.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:53.999055    5063 server.go:255] Tearing down userspace rules. Errors here are acceptable.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.038140    5063 proxier.go:352] Setting endpoints for &#34;kube-system/kube-dns:dns-tcp&#34; to [10.244.1.3:53]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.038164    5063 proxier.go:352] Setting endpoints for &#34;kube-system/kube-dns:dns&#34; to [10.244.1.3:53]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.038209    5063 proxier.go:352] Setting endpoints for &#34;default/kubernetes:https&#34; to [10.240.0.2:443]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.038238    5063 proxier.go:429] Not syncing iptables until Services and Endpoints have been received from master
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.040048    5063 proxier.go:294] Adding new service &#34;default/kubernetes:https&#34; at 10.0.0.1:443/TCP
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.040154    5063 proxier.go:294] Adding new service &#34;kube-system/kube-dns:dns&#34; at 10.0.0.10:53/UDP
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">I1027 22:14:54.040223    5063 proxier.go:294] Adding new service &#34;kube-system/kube-dns:dns-tcp&#34; at 10.0.0.10:53/TCP
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果 kube-proxy 一切正常，你就应该仔细查看宿主机上的 iptables 了。而<strong>一个 iptables 模式的 Service 对应的规则，我在上一篇以及这一篇文章里已经全部介绍到了，它们包括：</strong></p>
+<ol>
+<li>KUBE-SERVICES 或者 KUBE-NODEPORTS 规则对应的 Service 的入口链，这个规则应该与 VIP 和 Service 端口一一对应；</li>
+<li>KUBE-SEP-(hash) 规则对应的 DNAT 链，这些规则应该与 Endpoints 一一对应；</li>
+<li>KUBE-SVC-(hash) 规则对应的负载均衡链，这些规则的数目应该与 Endpoints 数目一致；</li>
+<li>如果是 NodePort 模式的话，还有 POSTROUTING 处的 SNAT 链。</li>
+</ol>
+<p>通过查看这些链的数量、转发目的地址、端口、过滤条件等信息，你就能很容易发现一些异常的蛛丝马迹。</p>
+<p>当然，<strong>还有一种典型问题，就是 Pod 没办法通过 Service 访问到自己</strong>。这往往就是因为 kubelet 的 hairpin-mode 没有被正确设置。关于 Hairpin 的原理我在前面已经介绍过，这里就不再赘述了。你只需要确保将 kubelet 的 hairpin-mode 设置为 hairpin-veth 或者 promiscuous-bridge 即可。</p>
+<blockquote>
+<p>这里，你可以再回顾下第 34 篇文章<a href="./67351.md">《Kubernetes 网络模型与 CNI 网络插件》</a>中的相关内容。</p>
+</blockquote>
+<p>其中，在 hairpin-veth 模式下，你应该能看到 CNI 网桥对应的各个 VETH 设备，都将 Hairpin 模式设置为了 1，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ for d in /sys/devices/virtual/net/cni0/brif/veth*/hairpin_mode; do echo &#34;$d = $(cat $d)&#34;; done
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/sys/devices/virtual/net/cni0/brif/veth4bfbfe74/hairpin_mode = 1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/sys/devices/virtual/net/cni0/brif/vethfc2a18c5/hairpin_mode = 1
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而如果是 promiscuous-bridge 模式的话，你应该看到 CNI 网桥的混杂模式（PROMISC）被开启，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ ifconfig cni0 |grep PROMISC
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">UP BROADCAST RUNNING PROMISC MULTICAST  MTU:1460  Metric:1
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结">总结</h2>
+<p>在本篇文章中，我为你详细讲解了从外部访问 Service 的三种方式（NodePort、LoadBalancer 和 External Name）和具体的工作原理。然后，我还为你讲述了当 Service 出现故障的时候，如何根据它的工作原理，按照一定的思路去定位问题的可行之道。</p>
+<p>通过上述讲解不难看出，所谓 Service，其实就是 Kubernetes 为 Pod 分配的、固定的、基于 iptables（或者 IPVS）的访问入口。而这些访问入口代理的 Pod 信息，则来自于 Etcd，由 kube-proxy 通过控制循环来维护。</p>
+<p>并且，你可以看到，Kubernetes 里面的 Service 和 DNS 机制，也都不具备强多租户能力。比如，在多租户情况下，每个租户应该拥有一套独立的 Service 规则（Service 只应该看到和代理同一个租户下的 Pod）。再比如 DNS，在多租户情况下，每个租户应该拥有自己的 kube-dns（kube-dns 只应该为同一个租户下的 Service 和 Pod 创建 DNS Entry）。</p>
+<p>当然，在 Kubernetes 中，kube-proxy 和 kube-dns 其实也是普通的插件而已。你完全可以根据自己的需求，实现符合自己预期的 Service。</p>
+<h2 id="思考题">思考题</h2>
+<p>为什么 Kubernetes 要求 externalIPs 必须是至少能够路由到一个 Kubernetes 的节点？</p>
+<p>感谢你的收听，欢迎你给我留言，也欢迎分享给更多的朋友一起阅读。<br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90Kubernetes/e870b7df0db49509e735e6becd4a9a9a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/">深入剖析Kubernetes</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/38__%E6%B5%8B%E8%AF%95%E6%95%B0%E6%8D%AE%E7%9A%84%E9%93%B6%E5%BC%B9-_%E7%BB%9F%E4%B8%80%E6%B5%8B%E8%AF%95%E6%95%B0%E6%8D%AE%E5%B9%B3%E5%8F%B0%E4%B8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">38__测试数据的“银弹”-_统一测试数据平台（下）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/38__%E8%B0%83%E4%BC%98kafka%E4%BD%A0%E5%81%9A%E5%88%B0%E4%BA%86%E5%90%97/">
+            <span class="next-text nav-default">38__调优Kafka，你做到了吗？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__服务高可用：保证核心链路稳定性的流控和熔断机制 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是袁武林。
+在第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”中，我针对直播互动场景中面对“突发流量”和“高并发峰值”的业务形态的几个关键技术点进行了分析，并介绍了具体的应对方式。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/12__%E6%9C%8D%E5%8A%A1%E9%AB%98%E5%8F%AF%E7%94%A8%E4%BF%9D%E8%AF%81%E6%A0%B8%E5%BF%83%E9%93%BE%E8%B7%AF%E7%A8%B3%E5%AE%9A%E6%80%A7%E7%9A%84%E6%B5%81%E6%8E%A7%E5%92%8C%E7%86%94%E6%96%AD%E6%9C%BA%E5%88%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/12__%E6%9C%8D%E5%8A%A1%E9%AB%98%E5%8F%AF%E7%94%A8%E4%BF%9D%E8%AF%81%E6%A0%B8%E5%BF%83%E9%93%BE%E8%B7%AF%E7%A8%B3%E5%AE%9A%E6%80%A7%E7%9A%84%E6%B5%81%E6%8E%A7%E5%92%8C%E7%86%94%E6%96%AD%E6%9C%BA%E5%88%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__服务高可用：保证核心链路稳定性的流控和熔断机制">
+  <meta property="og:description" content="你好，我是袁武林。
+在第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”中，我针对直播互动场景中面对“突发流量”和“高并发峰值”的业务形态的几个关键技术点进行了分析，并介绍了具体的应对方式。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="即时消息技术剖析与实战">
+
+  <meta itemprop="name" content="12__服务高可用：保证核心链路稳定性的流控和熔断机制">
+  <meta itemprop="description" content="你好，我是袁武林。
+在第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”中，我针对直播互动场景中面对“突发流量”和“高并发峰值”的业务形态的几个关键技术点进行了分析，并介绍了具体的应对方式。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4300">
+  <meta itemprop="keywords" content="即时消息技术剖析与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__服务高可用：保证核心链路稳定性的流控和熔断机制">
+  <meta name="twitter:description" content="你好，我是袁武林。
+在第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”中，我针对直播互动场景中面对“突发流量”和“高并发峰值”的业务形态的几个关键技术点进行了分析，并介绍了具体的应对方式。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__服务高可用：保证核心链路稳定性的流控和熔断机制</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4300 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#流量控制">流量控制</a></li>
+        <li><a href="#流控的常用算法">流控的常用算法</a>
+          <ul>
+            <li><a href="#漏桶算法">漏桶算法</a></li>
+            <li><a href="#令牌桶算法">令牌桶算法</a></li>
+          </ul>
+        </li>
+        <li><a href="#全局流控">全局流控</a>
+          <ul>
+            <li><a href="#细粒度控制">细粒度控制</a></li>
+            <li><a href="#流控依赖资源瓶颈">流控依赖资源瓶颈</a></li>
+          </ul>
+        </li>
+        <li><a href="#自动熔断机制">自动熔断机制</a></li>
+        <li><a href="#小结">小结</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是袁武林。</p>
+<p>在<a href="./137000.md">第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”</a>中，我针对直播互动场景中面对“突发流量”和“高并发峰值”的业务形态的几个关键技术点进行了分析，并介绍了具体的应对方式。</p>
+<p>但是，仅从设计优化、服务拆分、自动扩容等方面进行优化，有时候并不能完全解决问题。比如，有时流量增长过快，扩容流程还来不及完成，服务器可能就已经抗不住了。</p>
+<p>不仅如此，在即时消息系统的很多实现中，业务上对于外部接口或者资源的依赖比较多。比如：发消息可能需要依赖“垃圾内容识别”的 API 来进行消息内容的过滤；下推图片消息时，推送服务需要依赖图片服务获取缩略图来进行推流；有的时候，当业务中依赖的这些接口、资源不可用或变慢时，会导致业务整体失败或者被拖慢而造成超时，影响服务的整体可用性。</p>
+<p>对于上面这些问题，在实际线上业务中其实并不少见，甚至可以说是常态化。既然突发流量我们没法预测，业务上也不可能不依赖任何外部服务和资源，那么有什么办法能尽量避免，或者降低出现这些问题时对核心业务的影响呢？</p>
+<h2 id="流量控制">流量控制</h2>
+<p>针对超高流量带来的请求压力，业界比较常用的一种方式就是“流控”。</p>
+<p>“流控”这个词你应该不陌生，当我们坐飞机航班延误或者被取消时，航空公司给出的原因经常就是“因为目的机场流量控制”。对于机场来说，当承载的航班量超过极限负荷时，就会限制后续出港和到港的航班来进行排队等候，从而保护整个机场的正常运转。</p>
+<p>同样，在即时消息系统中，突发超高流量时，为了避免服务器整体被流量打死，我们可以通过流控来扔掉或者通过排队的方式来保护系统在能力范围内的运转。比如，我在<a href="./137000.md">第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”</a>中讲到，当有突发的高热度直播活动时，为了保护推送服务的整体可用性，我们可以通过流控扔掉一些非核心的消息，比如一些普通的进出场消息或点赞消息。</p>
+<h2 id="流控的常用算法">流控的常用算法</h2>
+<p>目前，业界常用的流控算法有两种：漏桶算法和令牌桶算法。</p>
+<h3 id="漏桶算法">漏桶算法</h3>
+<p>“漏桶算法”的主要目的是控制数据注入到网络的速率，平滑网络上的突发流量。“漏桶算法”在实现上文如其名：它模拟的是一个漏水的桶，所有外部的水都先放进这个水桶，而这个桶以匀速往外均匀漏水，如果水桶满了，外部的水就不能再往桶里倒了。</p>
+<p>这里你可以把这些外部的水想象成原始的请求，桶里漏出的水就是被算法平滑过后的请求。从这里也可以看出来，漏桶算法可以比较好地控制流量的访问速度。</p>
+<h3 id="令牌桶算法">令牌桶算法</h3>
+<p>令牌桶算法是流控中另一种常用算法，控制的是一个时间窗口内通过的数据量。令牌桶算法大概实现是这样的：</p>
+<ol>
+<li>每 1/r 秒往桶里放入一个令牌，r 是用户配置的平均发送速率（也就是每秒会有 r 个令牌放入）。</li>
+<li>桶里最多可以放入 b 个令牌，如果桶满了，新放入的令牌会被丢弃。</li>
+<li>如果来了 n 个请求，会从桶里消耗掉 n 个令牌。</li>
+<li>如果桶里可用令牌数小于 n，那么这 n 个请求会被丢弃掉或者等待新的令牌放入。</li>
+</ol>
+<p>请求通过令牌桶算法实现限流的大概过程，我在这里画了一张图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/ae7b088ff381f24eaf584566e553a83e.png" alt=""></p>
+<p>算法按一定速度均匀往桶里放入令牌，原始请求进入后，根据请求量从令牌桶里取出需要的令牌数，如果令牌数不够，会直接抛弃掉超限的请求或者进行等待，能成功获取到令牌的请求才会进入到后端服务器。</p>
+<p>与漏桶算法“精确控制速率”不太一样的是，由于令牌桶的桶本身具备一定的容量，可以允许一次把桶里的令牌全都取出，因此，令牌桶算法在限制请求的平均速率的同时，还允许一定程度的突发流量。</p>
+<p>比如，明星粉丝群的场景里，平时用户发消息的请求是比较小的，一般都比设置的阈值小很多，这样令牌桶平时都是处于“满”的状态；如果群隶属的明星突然空降出现在群里，群里的粉丝瞬间活跃起来，会快速、突发地消耗掉令牌桶里缓存的 b 个令牌，对于后端业务层就会出现一定的峰值流量。</p>
+<p>通过令牌桶算法来限流的应用实例是比较多的，Google 开源的 Guava 就通过令牌桶算法实现了一个单机版的 RateLimiter，Google 在工程实现上做了一些优化，比如 SmoothBursty 特性支持累计 N 个时间窗口产生的令牌桶，这样应对突发流量的能力会更好一些。</p>
+<h2 id="全局流控">全局流控</h2>
+<p>对于单机瓶颈的问题，通过单机版的流控算法和组件就能很好地实现单机保护。但在分布式服务的场景下，很多时候的瓶颈点在于全局的资源或者依赖，这种情况就需要分布式的全局流控来对整体业务进行保护。</p>
+<p>业界比较通用的全局流控方案，一般是通过中央式的资源（如：Redis、Nginx）配合脚本来实现全局的计数器，或者实现更为复杂的漏桶算法和令牌桶算法，比如可以通过 Redis 的 INCR 命令配合 Lua 实现一个限制 QPS（每秒查询量）的流控组件。</p>
+<p>下面的示例代码是一个精简版的 Redis+Lua 实现全局流控的例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 操作的 Redis Key
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local rate_limit_key = KEYS[1]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 每秒最大的 QPS 许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local max_permits = ARGV[1]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 此次申请的许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local incr_by_count_str = ARGV[2]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> -- 当前已用的许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local currentStr = redis.call(&#39;get&#39;, rate_limit_key)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local current = 0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if currentStr then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    current = tonumber(currentStr)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> -- 剩余可分发的许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local remain_permits = tonumber(max_permits) - current
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local incr_by_count = tonumber(incr_by_count_str)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 如果可分发的许可数小于申请的许可数，只能申请到可分发的许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if remain_permits &lt; incr_by_count then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    incr_by_count = remain_permits
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> -- 将此次实际申请的许可数加到 Redis Key 里面
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local result = redis.call(&#39;incrby&#39;, rate_limit_key, incr_by_count)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 初次操作 Redis Key 设置 1 秒的过期
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if result == incr_by_count then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    redis.call(&#39;expire&#39;, rate_limit_key, 1)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> -- 返回实际申请到的许可数
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">return incr_by_co
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一个需要注意的细节是：在每次创建完对应的限流 Key 后，你需要设置一个过期的时间。整个操作是原子化的，这样能避免分布式操作时设置过期时间失败，导致限流的 Key 一直无法重置，从而使限流功能不可用。</p>
+<p>此外，在实现全局流控时还有两个问题需要注意：一个是流控的粒度问题，另一个是流控依赖资源存在瓶颈的问题。下面我们分别来看一下，在实现全局流控时是如何解决这两个问题的。</p>
+<h3 id="细粒度控制">细粒度控制</h3>
+<p>首先是针对流控的粒度问题。举个例子：在限制 QPS 的时候，流控粒度太粗，没有把 QPS 均匀分摊到每个毫秒里，而且边界处理时不够平滑，比如上一秒的最后一个毫秒和下一秒的第一个毫秒都出现了最大流量，就会导致两个毫秒内的 QPS 翻倍。</p>
+<p>一个简单的处理方式是把一秒分成若干个 N 毫秒的桶，通过滑动窗口的方式，将流控粒度细化到 N 毫秒，并且每次都是基于滑动窗口来统计 QPS，这样也能避免边界处理时不平滑的问题。</p>
+<h3 id="流控依赖资源瓶颈">流控依赖资源瓶颈</h3>
+<p>全局流控实现中可能会出现的另一个问题是，有时入口流量太大，导致实现流控的资源出现访问瓶颈，反而影响了正常业务的可用性。在微博消息箱业务中，就发生过流控使用的 Redis 资源由于访问量太大导致出现不可用的情况。</p>
+<p>针对这种情况，我们可以通过“本地批量预取”的方式来降低对资源的压力。</p>
+<p>所谓的“本地批量预取”，是指让使用限流服务的业务进程，每次从远程资源预取多个令牌在本地缓存，处理限流逻辑时先从本地缓存消耗令牌，本地消费完再触发从远程资源获取到本地缓存，如果远程获取资源时配额已经不够了，本次请求就会被抛弃。</p>
+<p>通过“本地批量预取”的方式，能大幅降低对资源的压力，比如每次预取 10 个令牌，那么相应地对资源的压力能降低到 1/10。</p>
+<p>但是有一点需要注意，本地预取可能会导致一定范围的限流误差。比如：上一秒预取的 10 个令牌，在实际业务中下一秒才用到，这样会导致下一秒业务实际的请求量会多一些，因此本地预取对于需要精准控制访问量的场景来说可能不是特别适合。</p>
+<h2 id="自动熔断机制">自动熔断机制</h2>
+<p>针对突发流量，除了扩容和流控外，还有一个能有效保护系统整体可用性的手段就是熔断机制。</p>
+<p>不过在介绍熔断机制前，我们先来了解一下多依赖的微服务中的雪崩效应，因为在没有“熔断机制”前，雪崩效应在多依赖服务中往往会导致一个服务出问题，从而拖慢整个系统的情况。</p>
+<p>在<a href="./137000.md">第 10 讲“自动智能扩缩容：直播互动场景中峰值流量的应对”</a>中有讲过，为了便于管理和隔离，我们经常会对服务进行解耦，独立拆分解耦到不同的微服务中，微服务间通过 RPC 来进行调用和依赖。如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/915263e183bc8b3800dbc8c76dd3b0ef.png" alt=""></p>
+<p>API 1 和 API 2 一起关联部署，而且共同依赖多个依赖服务 A、B、C。如果此时 API 1 依赖的服务 B 由于资源或者网络等原因造成接口变慢，就会导致和 API 1 一起关联部署的 API 2 也出现整体性能被拖累变慢的情况，继而导致依赖 API 1 和 API 2 的其他上层的服务也级联地性能变差，最终可能导致系统整体性能的雪崩。</p>
+<p>虽然服务间的调用能够通过超时控制来降低被影响的程度，但在很多情况下，单纯依赖超时控制很难避免依赖服务性能恶化的问题。这种情况下，需要能快速“熔断”对这些性能出现问题的依赖调用。</p>
+<p>一种常见的方式是手动通过开关来进行依赖的降级，微博的很多场景和业务都有用到开关来实现业务或者资源依赖的降级。</p>
+<p>另一种更智能的方式是自动熔断机制。自动熔断机制主要是通过持续收集被依赖服务或者资源的访问数据和性能指标，当性能出现一定程度的恶化或者失败量达到某个阈值时，会自动触发熔断，让当前依赖快速失败（Fail-fast），并降级到其他备用依赖，或者暂存到其他地方便于后续重试恢复。在熔断过程中，再通过不停探测被依赖服务或者资源是否恢复，来判断是否自动关闭熔断，恢复业务。</p>
+<p>自动熔断这一机制目前业界已经有很多比较成熟的框架可以直接使用，比如，Netflix 公司出品的 Hystrix，以及目前社区很火热的 Resilience4j 等。</p>
+<h2 id="小结">小结</h2>
+<p>今天，我主要从服务高可用的角度出发，带你了解了如何在面对突发流量时，通过流控来保障系统整体运行在压力阈值范围内，从而让业务大部分仍然处于“柔性可用”的状态，而不至于被流量打死。</p>
+<p>接下来我介绍了一下流控实现的两大算法：漏桶算法和令牌桶算法。</p>
+<ul>
+<li><strong>漏桶算法</strong>的核心能力在于平滑实际流量的速度，让被流控的服务始终按固定速度来处理流量。</li>
+<li><strong>令牌桶算法</strong>并不精确限制流量给到被流控服务的速度，主要是限制请求的<strong>平均速度</strong>，而且允许被流控服务出现一定突发流量请求。</li>
+</ul>
+<p>此外，针对分布式业务需要控制全局流量的场景，我们一般还可以通过中央式的资源来实现，比如 Redis+Lua。</p>
+<p>在全局流控实现中，我们可以通过滑动窗口和细粒度分桶来解决流量不均衡和边界处理不平滑的问题；对于超大流量可能导致中央资源出现瓶颈的情况，可以通过“本地批量预取”来降低中央资源的压力。</p>
+<p>另外，对于突发流量和微服务间依赖复杂导致的雪崩问题，就需要通过“熔断机制”来进行快速失败，我们可以通过手动降级和自动熔断来互相配合，以保障系统的整体稳定性和可用性。</p>
+<p>“限流”“熔断机制”和“缓存”一起被列为高并发应用工程实现中的三板斧，可见其对高并发业务稳定性的重要程度。在包括即时通讯的很多业务场景中，超高并发的突发流量也是随处可见。所以，掌握好流量和熔断这两种利器，也是对我们后端架构能力的一种很好的提升。</p>
+<p>最后给你留一个思考题：<strong>自动熔断机制中，如何来确认 Fail-fast 时的熔断阈值（比如：当单位时间内访问耗时超过 1s 的比例达到 50% 时，对该依赖进行熔断）？</strong></p>
+<p>以上就是今天课程的内容，欢迎你给我留言，我们可以在留言区一起讨论。感谢你的收听，我们下期再见。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/0b97f1bb735db6979eca2f17f8cdf223.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%8D%B3%E6%97%B6%E6%B6%88%E6%81%AF%E6%8A%80%E6%9C%AF%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/">即时消息技术剖析与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/12__%E5%88%86%E5%B8%83%E5%BC%8F%E8%B0%83%E5%BA%A6%E6%9E%B6%E6%9E%84%E4%B9%8B%E4%B8%A4%E5%B1%82%E8%B0%83%E5%BA%A6%E7%89%A9%E8%B4%A8%E6%96%87%E6%98%8E%E7%B2%BE%E7%A5%9E%E6%96%87%E6%98%8E%E4%B8%A4%E6%89%8B%E6%8A%93/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__分布式调度架构之两层调度：物质文明、精神文明两手抓</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9E%B6%E6%9E%84%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B%E8%A7%A3%E6%9E%90/12__%E9%AB%98%E5%8F%AF%E7%94%A8%E6%9E%B6%E6%9E%84%E5%A6%82%E4%BD%95%E8%AE%A9%E4%BD%A0%E7%9A%84%E7%B3%BB%E7%BB%9F%E4%B8%8D%E6%8E%89%E9%93%BE%E5%AD%90/">
+            <span class="next-text nav-default">12__高可用架构：如何让你的系统不掉链子？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

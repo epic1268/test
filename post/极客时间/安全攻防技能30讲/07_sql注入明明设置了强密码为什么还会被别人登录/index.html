@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>07_SQL注入：明明设置了强密码，为什么还会被别人登录？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是何为舟。
+在上一讲中，我们介绍了 XSS 攻击。今天，我们来介绍另外一种常见的 Web 攻击：SQL 注入。
+在讲正文之前，让我们先来看一个案例。某天，当你在查看应用的管理后台时，发现有很多异常的操作。接着，你很快反应过来了，这应该是黑客成功登录了管理员账户。于是，你立刻找到管理员，责问他是不是设置了弱密码。管理员很无辜地表示，自己的密码非常复杂，不可能泄漏，但是为了安全起见，他还是立即修改了当前的密码。奇怪的是，第二天，黑客还是能够继续登录管理员账号。问题来了，黑客究竟是怎么做到的呢？你觉得这里面的问题究竟出在哪里呢？你可以先自己思考一下，然后跟着我开始今天的学习！
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/07_sql%E6%B3%A8%E5%85%A5%E6%98%8E%E6%98%8E%E8%AE%BE%E7%BD%AE%E4%BA%86%E5%BC%BA%E5%AF%86%E7%A0%81%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E4%BC%9A%E8%A2%AB%E5%88%AB%E4%BA%BA%E7%99%BB%E5%BD%95/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/07_sql%E6%B3%A8%E5%85%A5%E6%98%8E%E6%98%8E%E8%AE%BE%E7%BD%AE%E4%BA%86%E5%BC%BA%E5%AF%86%E7%A0%81%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E4%BC%9A%E8%A2%AB%E5%88%AB%E4%BA%BA%E7%99%BB%E5%BD%95/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="07_SQL注入：明明设置了强密码，为什么还会被别人登录？">
+  <meta property="og:description" content="你好，我是何为舟。
+在上一讲中，我们介绍了 XSS 攻击。今天，我们来介绍另外一种常见的 Web 攻击：SQL 注入。
+在讲正文之前，让我们先来看一个案例。某天，当你在查看应用的管理后台时，发现有很多异常的操作。接着，你很快反应过来了，这应该是黑客成功登录了管理员账户。于是，你立刻找到管理员，责问他是不是设置了弱密码。管理员很无辜地表示，自己的密码非常复杂，不可能泄漏，但是为了安全起见，他还是立即修改了当前的密码。奇怪的是，第二天，黑客还是能够继续登录管理员账号。问题来了，黑客究竟是怎么做到的呢？你觉得这里面的问题究竟出在哪里呢？你可以先自己思考一下，然后跟着我开始今天的学习！">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="安全攻防技能30讲">
+
+  <meta itemprop="name" content="07_SQL注入：明明设置了强密码，为什么还会被别人登录？">
+  <meta itemprop="description" content="你好，我是何为舟。
+在上一讲中，我们介绍了 XSS 攻击。今天，我们来介绍另外一种常见的 Web 攻击：SQL 注入。
+在讲正文之前，让我们先来看一个案例。某天，当你在查看应用的管理后台时，发现有很多异常的操作。接着，你很快反应过来了，这应该是黑客成功登录了管理员账户。于是，你立刻找到管理员，责问他是不是设置了弱密码。管理员很无辜地表示，自己的密码非常复杂，不可能泄漏，但是为了安全起见，他还是立即修改了当前的密码。奇怪的是，第二天，黑客还是能够继续登录管理员账号。问题来了，黑客究竟是怎么做到的呢？你觉得这里面的问题究竟出在哪里呢？你可以先自己思考一下，然后跟着我开始今天的学习！">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4538">
+  <meta itemprop="keywords" content="安全攻防技能30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="07_SQL注入：明明设置了强密码，为什么还会被别人登录？">
+  <meta name="twitter:description" content="你好，我是何为舟。
+在上一讲中，我们介绍了 XSS 攻击。今天，我们来介绍另外一种常见的 Web 攻击：SQL 注入。
+在讲正文之前，让我们先来看一个案例。某天，当你在查看应用的管理后台时，发现有很多异常的操作。接着，你很快反应过来了，这应该是黑客成功登录了管理员账户。于是，你立刻找到管理员，责问他是不是设置了弱密码。管理员很无辜地表示，自己的密码非常复杂，不可能泄漏，但是为了安全起见，他还是立即修改了当前的密码。奇怪的是，第二天，黑客还是能够继续登录管理员账号。问题来了，黑客究竟是怎么做到的呢？你觉得这里面的问题究竟出在哪里呢？你可以先自己思考一下，然后跟着我开始今天的学习！">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">07_SQL注入：明明设置了强密码，为什么还会被别人登录？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4538 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#sql-注入攻击是如何产生的">SQL 注入攻击是如何产生的？</a>
+          <ul>
+            <li><a href="#1-修改-where-语句">1. 修改 WHERE 语句</a></li>
+            <li><a href="#2-执行任意语句">2. 执行任意语句</a></li>
+          </ul>
+        </li>
+        <li><a href="#通过-sql-注入攻击黑客能做什么">通过 SQL 注入攻击，黑客能做什么？</a>
+          <ul>
+            <li><a href="#1-绕过验证">1. 绕过验证</a></li>
+            <li><a href="#2-任意篡改数据">2. 任意篡改数据</a></li>
+            <li><a href="#3-窃取数据">3. 窃取数据</a></li>
+            <li><a href="#4-消耗资源">4. 消耗资源</a></li>
+          </ul>
+        </li>
+        <li><a href="#如何进行-sql-注入防护">如何进行 SQL 注入防护？</a>
+          <ul>
+            <li><a href="#1-使用-preparedstatement">1. 使用 PreparedStatement</a></li>
+            <li><a href="#2-使用存储过程">2. 使用存储过程</a></li>
+            <li><a href="#3-验证输入">3. 验证输入</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是何为舟。</p>
+<p>在上一讲中，我们介绍了 XSS 攻击。今天，我们来介绍另外一种常见的 Web 攻击：SQL 注入。</p>
+<p>在讲正文之前，让我们先来看一个案例。某天，当你在查看应用的管理后台时，发现有很多异常的操作。接着，你很快反应过来了，这应该是黑客成功登录了管理员账户。于是，你立刻找到管理员，责问他是不是设置了弱密码。管理员很无辜地表示，自己的密码非常复杂，不可能泄漏，但是为了安全起见，他还是立即修改了当前的密码。奇怪的是，第二天，黑客还是能够继续登录管理员账号。问题来了，黑客究竟是怎么做到的呢？你觉得这里面的问题究竟出在哪里呢？你可以先自己思考一下，然后跟着我开始今天的学习！</p>
+<h2 id="sql-注入攻击是如何产生的">SQL 注入攻击是如何产生的？</h2>
+<p>在上一讲中，我们讲了，XSS 是黑客通过篡改 HTML 代码，来插入并执行恶意脚本的一种攻击。其实，SQL 注入和 XSS 攻击很类似，都是黑客通过篡改代码逻辑发起的攻击。那么，不同的点是什么？SQL 注入到底是什么呢？</p>
+<p>通常来说，我们会将应用的用户信息存储在数据库中。每次用户登录时，都会执行一个相应的 SQL 语句。这时，黑客会通过构造一些恶意的输入参数，在应用拼接 SQL 语句的时候，去篡改正常的 SQL 语意，从而执行黑客所控制的 SQL 查询功能。这个过程，就相当于黑客“注入”了一段 SQL 代码到应用中。这就是我们常说的 <strong>SQL 注入</strong>。</p>
+<p>这么说可能还是有点理论，不够具体。接下来，我就以几个简单而又经典的示例，来给你介绍两种主要的 SQL 注入方式。</p>
+<h3 id="1-修改-where-语句">1. 修改 WHERE 语句</h3>
+<p>我们先来看一个例子。现在有一个简单的登录页面，需要用户输入 Username 和 Password 这两个变量来完成登录。具体的 Web 后台代码如下所示：</p>
+<p>uName = getRequestString(&ldquo;username&rdquo;);<br>
+uPass = getRequestString(&ldquo;password&rdquo;);</p>
+<p>sql = &lsquo;SELECT * FROM Users WHERE Username =&quot;&rsquo; + uName + &lsquo;&quot; AND Password =&quot;&rsquo; + uPass + &lsquo;&quot;&rsquo;</p>
+<p>当用户提交一个表单（假设 Username 为 admin，Password 为 123456）时，Web 将执行下面这行代码：</p>
+<p>SELECT * FROM Users WHERE Username =&ldquo;admin&rdquo; AND Password =&ldquo;123456&rdquo;</p>
+<p>用户名密码如果正确的话，这句 SQL 就能够返回对应的用户信息；如果错误的话，不会返回任何信息。因此，只要返回的行数≥1，就说明验证通过，用户可以成功登录。</p>
+<p>所以，当用户正常地输入自己的用户名和密码时，自然就可以成功登录应用。那黑客想要在不知道密码的情况下登录应用，他又会输入什么呢？他会输入 <code>&quot; or &quot;&quot;=&quot;</code>。这时，应用的数据库就会执行下面这行代码：</p>
+<p>SELECT * FROM Users WHERE Username =&quot;&quot; AND Password =&quot;&quot; or &ldquo;&quot;=&rdquo;&quot;</p>
+<p>我们可以看到，WHERE 语句后面的判断是通过 or 进行拼接的，其中&quot;&quot;=&ldquo;&ldquo;的结果是 true。那么，当有一个 or 是 true 的时候，最终结果就一定是 true 了。因此，这个 WHERE 语句是恒为真的，所以，数据库将返回全部的数据。</p>
+<p>这样一来，我们就能解答文章开头的问题了，也就是说，黑客只需要在登录页面中输入 <code>&quot; or &quot;&quot;=&quot;</code>，就可以在不知道密码的情况下，成功登录后台了。而这，也就是所谓的“万能密码”。而这个“万能密码”，其实就是通过修改 WHERE 语句，改变数据库的返回结果，实现无密码登录。</p>
+<h3 id="2-执行任意语句">2. 执行任意语句</h3>
+<p>除此之外，大部分的数据库都支持多语句执行。因此，黑客除了修改原本的 WHERE 语句之外，也可以在原语句的后面，插入额外的 SQL 语句，来实现任意的增删改查操作。在实际工作中，MySQL 是最常用的数据库，我们就以它为例，来介绍一下，任意语句是如何执行的。</p>
+<p>在 MySQL 中，实现任意语句执行最简单的方法，就是利用分号将原本的 SQL 语句进行分割。这样，我们就可以一次执行多个语句了。比如，下面这个语句在执行的时候会先插入一个行，然后再返回 Users 表中全部的数据。</p>
+<p>INSERT INTO Users (Username, Password) VALUES(&ldquo;test&rdquo;,&ldquo;000000&rdquo;); SELECT * FROM Users;</p>
+<p>接下来，我们来看一个具体的例子。在用户完成登录后，应用通常会通过 userId 来获取对应的用户信息。其 Web 后台的代码如下所示：</p>
+<p>uid = getRequestString(&ldquo;userId&rdquo;);<br>
+sql = &ldquo;SELECT * FROM Users WHERE UserId = &quot; + uid;</p>
+<p>在这种情况下，黑客只要在传入的 userId 参数中加入一个分号，就可以执行任意的 SQL 语句了。比如，黑客想“删库跑路”的话，就令 userId 为 <code>1;DROP TABLE Users</code>，那么，后台实际执行的 SQL 就会变成下面这行代码，而数据库中所有的用户信息就都会被删除。</p>
+<p>SELECT * FROM Users WHERE UserId = 1；DROP TABLE Users</p>
+<p>SQL 注入的“姿势”还有很多（比如：没有回显的盲注、基于 INSERT 语句的注入等等），它们的原理都是一样的，都是通过更改 SQL 的语义来执行黑客设定的 SQL 语句。如果你有兴趣，可以通过我前面给出的链接去进一步了解。</p>
+<h2 id="通过-sql-注入攻击黑客能做什么">通过 SQL 注入攻击，黑客能做什么？</h2>
+<p>通过上面对 SQL 注入的简单介绍，我们已经知道，SQL 注入会令 Web 后台执行非常规的 SQL 语句，从而导致各种各样的问题。那么通过 SQL 注入攻击，黑客究竟能够干些什么呢？下面我们就一一来看。</p>
+<h3 id="1-绕过验证">1. 绕过验证</h3>
+<p>在上面的内容中，我们已经介绍过，<code>&quot; or &quot;&quot;=&quot;</code> 作为万能密码，可以让黑客在不知道密码的情况下，通过登录认证。因此，SQL 注入最直接的利用方式，就是绕过验证，也就相当于身份认证被破解了。</p>
+<h3 id="2-任意篡改数据">2. 任意篡改数据</h3>
+<p>除了绕过验证，我们在任意语句执行的部分中讲到，SQL 注入漏洞导致黑客可以执行任意的 SQL 语句。因此，通过插入 DML 类的 SQL 语句（INSERT、UPDATE、DELETE、TRUNCATE、DROP 等），黑客就可以对表数据甚至表结构进行更改，这样数据的完整性就会受到损害。比如上面例子中，黑客通过插入 DROP TABLE Users，删除数据库中全部的用户。</p>
+<h3 id="3-窃取数据">3. 窃取数据</h3>
+<p>在 XSS 漏洞中，黑客可以通过窃取 Cookie 和“钓鱼”获得用户的隐私数据。那么，在 SQL 注入中，黑客会怎么来获取这些隐私数据呢？</p>
+<p>在各类安全事件中，我们经常听到“拖库”这个词。所谓“拖库”，就是指黑客通过类似 SQL 注入的手段，获取到数据库中的全部数据（如用户名、密码、手机号等隐私数据）。最简单的，黑客利用 UNION 关键词，将 SQL 语句拼接成下面这行代码之后，就可以直接获取全部的用户信息了。</p>
+<p>SELECT * FROM Users WHERE UserId = 1 UNION SELECT * FROM Users</p>
+<h3 id="4-消耗资源">4. 消耗资源</h3>
+<p>通过第 1 讲对 CIA 三元组的学习，我们知道，除了获取数据之外，影响服务可用性也是黑客的目标之一。</p>
+<p>SQL 注入破坏可用性十分简单，可以通过完全消耗服务器的资源来实现。比如，在 Web 后台中，黑客可以利用 WHILE 打造死循环操作，或者定义存储过程，触发一个无限迭代等等。在这些情况下，数据库服务器因为 CPU 被迅速打满，持续 100%，而无法及时响应其他请求。</p>
+<p>总结来说，通过 SQL 注入攻击，黑客可以绕过验证登录后台，非法篡改数据库中的数据；还能执行任意的 SQL 语句，盗取用户的隐私数据影响公司业务等等。所以，我认为，SQL 注入相当于让黑客直接和服务端的数据库进行了交互。正如我们一直所说的，应用的本质是数据，黑客控制了数据库，也就相当于控制了整个应用。</p>
+<h2 id="如何进行-sql-注入防护">如何进行 SQL 注入防护？</h2>
+<p>在认识到 SQL 注入的危害之后，我们知道，一个简单的 SQL 查询逻辑，能够带来巨大的安全隐患。因此，我们应该做到在开发过程中就避免出现 SQL 注入漏洞。那具体应该怎么做呢？接下来，我会为你介绍 3 种常见的防护方法，它们分别是：使用 PreparedStatement、使用存储过程和验证输入。接下来，我们一一来看。</p>
+<h3 id="1-使用-preparedstatement">1. 使用 PreparedStatement</h3>
+<p>通过<strong>合理地</strong>使用 PreparedStatement，我们就能够避免 99.99% 的 SQL 注入问题。你肯定很好奇，我为什么会这么说。接下来，让我们一起看一下它的实现过程。</p>
+<p>当数据库在处理一个 SQL 命令的时候，大致可以分为两个步骤：</p>
+<ol>
+<li>将 SQL 语句解析成数据库可使用的指令集。我们在使用 EXPLAIN 关键字分析 SQL 语句，就是干的这个事情；</li>
+<li>将变量代入指令集，开始实际执行。之所以在批量处理 SQL 的时候能够提升性能，就是因为这样做避免了重复解析 SQL 的过程。</li>
+</ol>
+<p>那么 PreparedStatement 为什么能够避免 SQL 注入的问题呢？</p>
+<p>这是因为，SQL 注入是在解析的过程中生效的，用户的输入会影响 SQL 解析的结果。因此，我们可以通过使用 PreparedStatement，将 SQL 语句的解析和实际执行过程分开，只在执行的过程中代入用户的操作。这样一来，无论黑客提交的参数怎么变化，数据库都不会去执行额外的逻辑，也就避免了 SQL 注入的发生。</p>
+<p>在 Java 中，我们可以通过执行下面的代码将解析和执行分开：</p>
+<p>String sql = &ldquo;SELECT * FROM Users WHERE UserId = ?&rdquo;;<br>
+PreparedStatement statement = connection.prepareStatement(sql);<br>
+statement.setInt(1, userId);<br>
+ResultSet results = statement.executeQuery();</p>
+<p>为了实现相似的效果，在 PHP 中，我们可以使用 PDO（PHP Data Objects）；在 C# 中，我们可以使用 OleDbCommand 等等。</p>
+<p>这里有一点需要你注意，前面我们说了，通过合理地使用 PreparedStatement 就能解决 99.99% 的 SQL 注入问题，那到底怎么做才算“合理地”使用呢？</p>
+<p>PreparedStatement 为 SQL 语句的解析和执行提供了不同的“方法”，你需要分开来调用。但是，如果你在使用 PreparedStatement 的时候，还是通过字符串拼接来构造 SQL 语句，那仍然是将解析和执行放在了一块，也就不会产生相应的防护效果了。我这里给你展示了一个错误案例，你可以和上面的代码进行对比。</p>
+<p>String sql = &ldquo;SELECT * FROM Users WHERE UserId = &quot; + userId;<br>
+PreparedStatement statement = connection.prepareStatement(sql);<br>
+ResultSet results = statement.executeQuery();</p>
+<h3 id="2-使用存储过程">2. 使用存储过程</h3>
+<p>接下来，我们说一说，如何使用存储过程来防止 SQL 注入。实际上，它的原理和使用 PreparedStatement 类似，都是通过将 SQL 语句的解析和执行过程分开，来实现防护。区别在于，存储过程防注入是将解析 SQL 的过程，由数据库驱动转移到了数据库本身。</p>
+<p>还是上述的例子，使用存储过程，我们可以这样来实现：</p>
+<p>delimiter $$  # 将语句的结束符号从分号 ; 临时改为两个 $$(可以是自定义)<br>
+CREATE PROCEDURE select_user(IN p_id INTEGER)<br>
+BEGIN<br>
+SELECT * FROM Users WHERE UserId = p_id;<br>
+END$$<br>
+delimiter;  # 将语句的结束符号恢复为分号</p>
+<p>call select_user(1);</p>
+<h3 id="3-验证输入">3. 验证输入</h3>
+<p>在上一节课中，我们讲过，防护的核心原则是，一切用户输入皆不可信。因此，SQL 注入的防护手段和 XSS 其实也是相通的，主要的不同在于：</p>
+<ol>
+<li>SQL 注入的攻击发生在输入的时候，因此，我们只能在输入的时候去进行防护和验证；</li>
+<li>大部分数据库不提供针对 SQL 的编码，因为那会改变原有的语意，所以 SQL 注入没有编码的保护方案。</li>
+</ol>
+<p>因此，对所有输入进行验证或者过滤操作，能够很大程度上避免 SQL 注入的出现。比如，在通过 userId 获取 Users 相关信息的示例中，我们可以确认 userId 必然是一个整数。因此，我们只需要对 userId 参数，进行一个整型转化（比如，Java 中的 Integer.parseInt，PHP 的 intval），就可以实现防护了。</p>
+<p>当然，部分场景下，用户输入的参数会比较复杂。我们以用户发出的评论为例，其内容完全由用户定义，应用无法预判它的格式。这种情况下，应用只能通过对部分关键字符进行过滤，来避免 SQL 注入的发生。比如，在 MySQL 中，需要注意的关键词有&rdquo; % ’ \ _。</p>
+<p>这里我简单地总结一下，在实际使用这些防护方法时的注意点。对于验证输入来说，尤其是在复杂场景下的验证输入措施，其防护效果是最弱的。因此，避免 SQL 注入的防护方法，首要选择仍然是 PreparedStatement 或者存储过程。</p>
+<h2 id="总结">总结</h2>
+<p>好了，这一节内容差不多了，下面我来带你总结回顾一下，你要掌握的重点内容。</p>
+<p>SQL 注入就是黑客通过相关漏洞，篡改 SQL 语句的攻击。通过 SQL 注入，黑客既可以影响正常的 SQL 执行结果，从而绕过验证，也可以执行额外的 SQL 语句，对数据的机密性、完整性和可用性都产生影响。</p>
+<p>为了避免 SQL 注入的出现，我们需要正确地使用 PreparedStatement 方法或者存储过程，尽量避免在 SQL 语句中出现字符串拼接的操作。除此之外，SQL 注入的防护也可以和 XSS 一样，对用户的输入进行验证、检测并过滤 SQL 中的关键词，从而避免原有语句被篡改。</p>
+<p>今天的内容比较多，为了方便你记忆，我总结了一个知识脑图，你可以通过它来对今天的重点内容进行复习巩固。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/35509e5e1b177a317c3680e6c736c905.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<p>好了，今天的内容差不多了，我们来看一道思考题。</p>
+<p>假设有下面这样一个语句：</p>
+<p>SELECT Username FROM Users WHERE UserId = 1</p>
+<p>你现在已经知道，WHERE 语句中存在了 SQL 注入的点。那么，我们怎么才能获取到除了 Username 之外的其他字段呢？这里我给你一个小提示，你可以先了解一下“盲注”这个概念，之后再来思考这个问题。</p>
+<p>欢迎留言和我分享你的思考和疑惑，也欢迎你把文章分享给你的朋友。我们下一讲再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/">安全攻防技能30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%81%9A%E5%A2%9E%E9%95%BF/07_okr%E5%A6%82%E4%BD%95%E5%8A%A9%E5%8A%9B%E5%A2%9E%E9%95%BF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">07_OKR如何助力增长？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/07_workflow%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E8%AE%A9%E4%BD%A0%E5%9C%A8%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E4%B8%96%E7%95%8C%E4%B8%AD%E5%90%9B%E4%B8%B4%E5%A4%A9%E4%B8%8B/">
+            <span class="next-text nav-default">07_Workflow设计模式：让你在大规模数据世界中君临天下</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

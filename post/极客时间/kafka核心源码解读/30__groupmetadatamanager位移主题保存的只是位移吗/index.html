@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>30__GroupMetadataManager：位移主题保存的只是位移吗？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是胡夕。今天，我们学习位移主题管理的源码。
+位移主题，即 __consumer_offsets，是 Kafka 的两大内部主题之一（另一个内部主题是管理 Kafka 事务的，名字是 __transaction_state，用于保存 Kafka 事务的状态信息）。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/30__groupmetadatamanager%E4%BD%8D%E7%A7%BB%E4%B8%BB%E9%A2%98%E4%BF%9D%E5%AD%98%E7%9A%84%E5%8F%AA%E6%98%AF%E4%BD%8D%E7%A7%BB%E5%90%97/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/30__groupmetadatamanager%E4%BD%8D%E7%A7%BB%E4%B8%BB%E9%A2%98%E4%BF%9D%E5%AD%98%E7%9A%84%E5%8F%AA%E6%98%AF%E4%BD%8D%E7%A7%BB%E5%90%97/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="30__GroupMetadataManager：位移主题保存的只是位移吗？">
+  <meta property="og:description" content="你好，我是胡夕。今天，我们学习位移主题管理的源码。
+位移主题，即 __consumer_offsets，是 Kafka 的两大内部主题之一（另一个内部主题是管理 Kafka 事务的，名字是 __transaction_state，用于保存 Kafka 事务的状态信息）。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kafka核心源码解读">
+
+  <meta itemprop="name" content="30__GroupMetadataManager：位移主题保存的只是位移吗？">
+  <meta itemprop="description" content="你好，我是胡夕。今天，我们学习位移主题管理的源码。
+位移主题，即 __consumer_offsets，是 Kafka 的两大内部主题之一（另一个内部主题是管理 Kafka 事务的，名字是 __transaction_state，用于保存 Kafka 事务的状态信息）。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5344">
+  <meta itemprop="keywords" content="Kafka核心源码解读">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="30__GroupMetadataManager：位移主题保存的只是位移吗？">
+  <meta name="twitter:description" content="你好，我是胡夕。今天，我们学习位移主题管理的源码。
+位移主题，即 __consumer_offsets，是 Kafka 的两大内部主题之一（另一个内部主题是管理 Kafka 事务的，名字是 __transaction_state，用于保存 Kafka 事务的状态信息）。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">30__GroupMetadataManager：位移主题保存的只是位移吗？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5344 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#消息类型">消息类型</a>
+          <ul>
+            <li><a href="#注册消息">注册消息</a></li>
+            <li><a href="#已提交位移消息">已提交位移消息</a></li>
+            <li><a href="#tombstone-消息">Tombstone 消息</a></li>
+          </ul>
+        </li>
+        <li><a href="#如何确定-coordinator">如何确定 Coordinator？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后讨论">课后讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是胡夕。今天，我们学习位移主题管理的源码。</p>
+<p>位移主题，即 __consumer_offsets，是 Kafka 的两大内部主题之一（另一个内部主题是管理 Kafka 事务的，名字是 __transaction_state，用于保存 Kafka 事务的状态信息）。</p>
+<p>Kafka 创建位移主题的目的，是<strong>保存消费者组的注册消息和提交位移消息</strong>。前者保存能够标识消费者组的身份信息；后者保存消费者组消费的进度信息。在 Kafka 源码中，GroupMetadataManager 类定义了操作位移主题消息类型以及操作位移主题的方法。该主题下都有哪些消息类型，是我们今天学习的重点。</p>
+<p>说到位移主题，你是否对它里面的消息内容感到很好奇呢？我见过很多人直接使用 kafka-console-consumer 命令消费该主题，想要知道里面保存的内容，可输出的结果却是一堆二进制乱码。其实，如果你不阅读今天的源码，是无法知晓如何通过命令行工具查询该主题消息的内容的。因为这些知识只包含在源码中，官方文档并没有涉及到。</p>
+<p>好了，我不卖关子了。简单来说，你在运行 kafka-console-consumer 命令时，必须指定<code>--formatter &quot;kafka.coordinator.group.GroupMetadataManager\$OffsetsMessageFormatter&quot;</code>，才能查看提交的位移消息数据。类似地，你必须指定 GroupMetadataMessageFormatter，才能读取消费者组的注册消息数据。</p>
+<p>今天，我们就来学习位移主题下的这两大消息类型。除此之外，我还会给你介绍消费者组是如何寻找自己的 Coordinator 的。毕竟，对位移主题进行读写的前提，就是要能找到正确的 Coordinator 所在。</p>
+<h2 id="消息类型">消息类型</h2>
+<p>位移主题有两类消息：<strong>消费者组注册消息</strong>（Group Metadata）和<strong>消费者组的已提交位移消息</strong>（Offset Commit）。很多人以为，位移主题里面只保存消费者组位移，这是错误的！它还保存了消费者组的注册信息，或者说是消费者组的元数据。这里的元数据，主要是指消费者组名称以及成员分区消费分配方案。</p>
+<p>在分别介绍这两类消息的实现代码之前，我们先看下 Kafka 为它们定义的公共服务代码。毕竟它们是这两类消息都会用到的代码组件。这些公共代码主要由两部分组成：GroupTopicPartition 类和 BaseKey 接口。</p>
+<p>我们首先来看 POJO 类 <strong>GroupTopicPartition</strong>。它的作用是封装 &lt; 消费者组名，主题，分区号 &gt; 的三元组，代码如下：</p>
+<p>case class GroupTopicPartition(group: String, topicPartition: TopicPartition) {<br>
+def this(group: String, topic: String, partition: Int) =<br>
+this(group, new TopicPartition(topic, partition))<br>
+// toString 方法&hellip;&hellip;<br>
+}</p>
+<p>显然，这个类就是一个数据容器类。我们后面在学习已提交位移消息时，还会看到它的身影。</p>
+<p>其次是 **BaseKey 接口，**它表示位移主题的两类消息的 Key 类型。强调一下，无论是该主题下的哪类消息，都必须定义 Key。这里的 BaseKey 接口，定义的就是这两类消息的 Key 类型。我们看下它的代码：</p>
+<p>trait BaseKey{<br>
+def version: Short  // 消息格式版本<br>
+def key: Any        // 消息 key<br>
+}</p>
+<p>这里的 version 是 Short 型的消息格式版本。随着 Kafka 代码的不断演进，位移主题的消息格式也在不断迭代，因此，这里出现了版本号的概念。至于 key 字段，它保存的是实际的 Key 值。在 Scala 中，Any 类型类似于 Java 中的 Object 类，表示该值可以是任意类型。稍后讲到具体的消息类型时，你就会发现，这两类消息的 Key 类型其实是不同的数据类型。</p>
+<p>好了，基础知识铺垫完了，有了对 GroupTopicPartition 和 BaseKey 的理解，你就能明白，位移主题的具体消息类型是如何构造 Key 的。</p>
+<p>接下来，我们开始学习具体消息类型的实现代码，包括注册消息、提交位移消息和 Tombstone 消息。由于消费者组必须要先向 Coordinator 组件注册，然后才能提交位移，所以我们先阅读注册消息的代码。</p>
+<h3 id="注册消息">注册消息</h3>
+<p>所谓的注册消息，就是指消费者组向位移主题写入注册类的消息。该类消息的写入时机有两个。</p>
+<ol>
+<li><strong>所有成员都加入组后</strong>：Coordinator 向位移主题写入注册消息，只是该消息不含分区消费分配方案；</li>
+<li><strong>Leader 成员发送方案给 Coordinator 后</strong>：当 Leader 成员将分区消费分配方案发给 Coordinator 后，Coordinator 写入携带分配方案的注册消息。</li>
+</ol>
+<p>我们首先要知道，注册消息的 Key 是如何定义，以及如何被封装到消息里的。</p>
+<p>Key 的定义在 GroupMetadataKey 类代码中：</p>
+<p>case class GroupMetadataKey(version: Short, key: String) extends BaseKey {<br>
+override def toString: String = key<br>
+}</p>
+<p>该类的 key 字段是一个字符串类型，保存的是消费者组的名称。可见，<strong>注册消息的 Key 就是消费者组名</strong>。</p>
+<p>GroupMetadataManager 对象有个 groupMetadataKey 方法，负责将注册消息的 Key 转换成字节数组，用于后面构造注册消息。这个方法的代码如下：</p>
+<p>def groupMetadataKey(group: String): Array[Byte] = {<br>
+val key = new Struct(CURRENT_GROUP_KEY_SCHEMA)<br>
+key.set(GROUP_KEY_GROUP_FIELD, group)<br>
+// 构造一个 ByteBuffer 对象，容纳 version 和 key 数据<br>
+val byteBuffer = ByteBuffer.allocate(2 /* version */ + key.sizeOf)<br>
+byteBuffer.putShort(CURRENT_GROUP_KEY_SCHEMA_VERSION)<br>
+key.writeTo(byteBuffer)<br>
+byteBuffer.array()<br>
+}</p>
+<p>该方法首先会接收消费者组名，构造 ByteBuffer 对象，然后，依次向 Buffer 写入 Short 型的消息格式版本以及消费者组名，最后，返回该 Buffer 底层的字节数组。</p>
+<p>你不用关心这里的格式版本变量以及 Struct 类型都是怎么实现的，因为它们不是我们理解位移主题内部原理的关键。你需要掌握的，是<strong>注册消息的 Key 和 Value 都是怎么定义的</strong>。</p>
+<p>接下来，我们就来了解下消息体 Value 的代码实现。既然有 groupMetadataKey 方法，那么，源码也提供了相应的 groupMetadataValue 方法。它的目的是<strong>将消费者组重要的元数据写入到字节数组</strong>。我们看下它的代码实现：</p>
+<p>def groupMetadataValue(<br>
+groupMetadata: GroupMetadata,  // 消费者组元数据对象<br>
+assignment: Map[String, Array[Byte]], // 分区消费分配方案<br>
+apiVersion: ApiVersion // Kafka API 版本号<br>
+): Array[Byte] = {<br>
+// 确定消息格式版本以及格式结构<br>
+val (version, value) = {<br>
+if (apiVersion &lt; KAFKA_0_10_1_IV0)<br>
+(0.toShort, new Struct(GROUP_METADATA_VALUE_SCHEMA_V0))<br>
+else if (apiVersion &lt; KAFKA_2_1_IV0)<br>
+(1.toShort, new Struct(GROUP_METADATA_VALUE_SCHEMA_V1))<br>
+else if (apiVersion &lt; KAFKA_2_3_IV0)<br>
+(2.toShort, new Struct(GROUP_METADATA_VALUE_SCHEMA_V2))<br>
+else<br>
+(3.toShort, new Struct(GROUP_METADATA_VALUE_SCHEMA_V3))<br>
+}<br>
+// 依次写入消费者组主要的元数据信息<br>
+// 包括协议类型、Generation ID、分区分配策略和 Leader 成员 ID<br>
+value.set(PROTOCOL_TYPE_KEY, groupMetadata.protocolType.getOrElse(&quot;&quot;))<br>
+value.set(GENERATION_KEY, groupMetadata.generationId)<br>
+value.set(PROTOCOL_KEY, groupMetadata.protocolName.orNull)<br>
+value.set(LEADER_KEY, groupMetadata.leaderOrNull)<br>
+// 写入最近一次状态变更时间戳<br>
+if (version &gt;= 2)<br>
+value.set(CURRENT_STATE_TIMESTAMP_KEY, groupMetadata.currentStateTimestampOrDefault)<br>
+// 写入各个成员的元数据信息<br>
+// 包括成员 ID、client.id、主机名以及会话超时时间<br>
+val memberArray = groupMetadata.allMemberMetadata.map { memberMetadata =&gt;<br>
+val memberStruct = value.instance(MEMBERS_KEY)<br>
+memberStruct.set(MEMBER_ID_KEY, memberMetadata.memberId)<br>
+memberStruct.set(CLIENT_ID_KEY, memberMetadata.clientId)<br>
+memberStruct.set(CLIENT_HOST_KEY, memberMetadata.clientHost)<br>
+memberStruct.set(SESSION_TIMEOUT_KEY, memberMetadata.sessionTimeoutMs)<br>
+// 写入 Rebalance 超时时间<br>
+if (version &gt; 0)<br>
+memberStruct.set(REBALANCE_TIMEOUT_KEY, memberMetadata.rebalanceTimeoutMs)<br>
+// 写入用于静态消费者组管理的 Group Instance ID<br>
+if (version &gt;= 3)<br>
+memberStruct.set(GROUP_INSTANCE_ID_KEY, memberMetadata.groupInstanceId.orNull)<br>
+// 必须定义分区分配策略，否则抛出异常<br>
+val protocol = groupMetadata.protocolName.orNull<br>
+if (protocol == null)<br>
+throw new IllegalStateException(&ldquo;Attempted to write non-empty group metadata with no defined protocol&rdquo;)<br>
+// 写入成员消费订阅信息<br>
+val metadata = memberMetadata.metadata(protocol)<br>
+memberStruct.set(SUBSCRIPTION_KEY, ByteBuffer.wrap(metadata))<br>
+val memberAssignment = assignment(memberMetadata.memberId)<br>
+assert(memberAssignment != null)<br>
+// 写入成员消费分配信息<br>
+memberStruct.set(ASSIGNMENT_KEY, ByteBuffer.wrap(memberAssignment))<br>
+memberStruct<br>
+}<br>
+value.set(MEMBERS_KEY, memberArray.toArray)<br>
+// 向 Buffer 依次写入版本信息和以上写入的元数据信息<br>
+val byteBuffer = ByteBuffer.allocate(2 /* version */ + value.sizeOf)<br>
+byteBuffer.putShort(version)<br>
+value.writeTo(byteBuffer)<br>
+// 返回 Buffer 底层的字节数组<br>
+byteBuffer.array()<br>
+}</p>
+<p>代码比较长，我结合一张图来帮助你理解这个方法的执行逻辑。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/c2b8902564f614c64ca87a3bcd447ddb.png" alt=""></p>
+<p>第 1 步，代码根据传入的 apiVersion 字段，确定要使用哪个格式版本，并创建对应版本的结构体（Struct）来保存这些元数据。apiVersion 的取值是 Broker 端参数 inter.broker.protocol.version 的值。你打开 Kafka 官网的话，就可以看到，这个参数的值永远指向当前最新的 Kafka 版本。</p>
+<p>第 2 步，代码依次向结构体写入消费者组的协议类型（Protocol Type）、Generation ID、分区分配策略（Protocol Name）和 Leader 成员 ID。在学习 GroupMetadata 时，我说过，对于普通的消费者组而言，协议类型就是&quot;consumer&quot;字符串，分区分配策略可能是&quot;range&quot;&ldquo;round-robin&quot;等。之后，代码还会为格式版本≥2 的结构体，写入消费者组状态最近一次变更的时间戳。</p>
+<p>第 3 步，遍历消费者组的所有成员，为每个成员构建专属的结构体对象，并依次向结构体写入成员的 ID、Client ID、主机名以及会话超时时间信息。对于格式版本≥0 的结构体，代码要写入成员配置的 Rebalance 超时时间，而对于格式版本≥3 的结构体，代码还要写入用于静态消费者组管理的 Group Instance ID。待这些都做完之后，groupMetadataValue 方法必须要确保消费者组选出了分区分配策略，否则就抛出异常。再之后，方法依次写入成员消费订阅信息和成员消费分配信息。</p>
+<p>第 4 步，代码向 Buffer 依次写入版本信息和刚刚说到的写入的元数据信息，并返回 Buffer 底层的字节数组。至此，方法逻辑结束。</p>
+<p>关于注册消息 Key 和 Value 的内容，我就介绍完了。为了帮助你更直观地理解注册消息到底包含了什么数据，我再用一张图向你展示一下它们的构成。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/5cdcdcb1d232390da7b6cafd1aa5040d.png" alt=""></p>
+<p>这张图完整地总结了 groupMetadataKey 和 groupMetadataValue 方法要生成的注册消息内容。灰色矩形中的字段表示可选字段，有可能不会包含在 Value 中。</p>
+<h3 id="已提交位移消息">已提交位移消息</h3>
+<p>接下来，我们再学习一下提交位移消息的 Key 和 Value 构成。</p>
+<p>OffsetKey 类定义了提交位移消息的 Key 值，代码如下：</p>
+<p>case class OffsetKey(version: Short, key: GroupTopicPartition) extends BaseKey {<br>
+override def toString: String = key.toString<br>
+}</p>
+<p>可见，这类消息的 Key 是一个 GroupTopicPartition 类型，也就是 &lt; 消费者组名，主题，分区号 &gt; 三元组。</p>
+<p>offsetCommitKey 方法负责将这个三元组转换成字节数组，用于后续构造提交位移消息。</p>
+<p>def offsetCommitKey(<br>
+group: String,  // 消费者组名<br>
+topicPartition: TopicPartition // 主题 + 分区号<br>
+): Array[Byte] = {<br>
+// 创建结构体，依次写入消费者组名、主题和分区号<br>
+val key = new Struct(CURRENT_OFFSET_KEY_SCHEMA)<br>
+key.set(OFFSET_KEY_GROUP_FIELD, group)<br>
+key.set(OFFSET_KEY_TOPIC_FIELD, topicPartition.topic)<br>
+key.set(OFFSET_KEY_PARTITION_FIELD, topicPartition.partition)<br>
+// 构造 ByteBuffer，写入格式版本和结构体<br>
+val byteBuffer = ByteBuffer.allocate(2 /* version */ + key.sizeOf)<br>
+byteBuffer.putShort(CURRENT_OFFSET_KEY_SCHEMA_VERSION)<br>
+key.writeTo(byteBuffer)<br>
+// 返回字节数组<br>
+byteBuffer.array()<br>
+}</p>
+<p>该方法接收三元组中的数据，然后创建一个结构体对象，依次写入消费者组名、主题和分区号。接下来，构造 ByteBuffer，写入格式版本和结构体，最后返回它底层的字节数组。</p>
+<p>说完了 Key，我们看下 Value 的定义。</p>
+<p>offsetCommitValue 方法决定了 Value 中都有哪些元素，我们一起看下它的代码。这里，我只列出了最新版本对应的结构体对象，其他版本要写入的元素大同小异，课下你可以阅读下其他版本的结构体内容，也就是我省略的 if 分支下的代码。</p>
+<p>def offsetCommitValue(offsetAndMetadata: OffsetAndMetadata,<br>
+apiVersion: ApiVersion): Array[Byte] = {<br>
+// 确定消息格式版本以及创建对应的结构体对象<br>
+val (version, value) = {<br>
+if (&hellip;&hellip;) {<br>
+&hellip;&hellip;<br>
+} else {<br>
+val value = new Struct(OFFSET_COMMIT_VALUE_SCHEMA_V3)<br>
+// 依次写入位移值、Leader Epoch 值、自定义元数据以及时间戳<br>
+value.set(<br>
+OFFSET_VALUE_OFFSET_FIELD_V3, offsetAndMetadata.offset)<br>
+value.set(OFFSET_VALUE_LEADER_EPOCH_FIELD_V3,<br>
+offsetAndMetadata.leaderEpoch.orElse(RecordBatch.NO_PARTITION_LEADER_EPOCH))<br>
+value.set(OFFSET_VALUE_METADATA_FIELD_V3, offsetAndMetadata.metadata)<br>
+value.set(OFFSET_VALUE_COMMIT_TIMESTAMP_FIELD_V3, offsetAndMetadata.commitTimestamp)<br>
+(3, value)<br>
+}<br>
+}<br>
+// 构建 ByteBuffer，写入消息格式版本和结构体<br>
+val byteBuffer = ByteBuffer.allocate(2 /* version */ + value.sizeOf)<br>
+byteBuffer.putShort(version.toShort)<br>
+value.writeTo(byteBuffer)<br>
+// 返回 ByteBuffer 底层字节数组<br>
+byteBuffer.array()<br>
+}</p>
+<p>offsetCommitValue 方法首先确定消息格式版本以及创建对应的结构体对象。对于当前最新版本 V3 而言，结构体的元素包括位移值、Leader Epoch 值、自定义元数据和时间戳。如果我们使用 Java Consumer API 的话，那么，在提交位移时，这个自定义元数据一般是空。</p>
+<p>接下来，构建 ByteBuffer，写入消息格式版本和结构体。</p>
+<p>最后，返回 ByteBuffer 底层字节数组。</p>
+<p>与注册消息的消息体相比，提交位移消息的 Value 要简单得多。我再用一张图展示一下提交位移消息的 Key、Value 构成。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/aaca9497f401ce21fe68228faeb9d065.png" alt=""></p>
+<h3 id="tombstone-消息">Tombstone 消息</h3>
+<p>关于位移主题，Kafka 源码中还存在一类消息，那就是 Tombstone 消息。其实，它并没有任何稀奇之处，就是 Value 为 null 的消息。因此，注册消息和提交位移消息都有对应的 Tombstone 消息。这个消息的主要作用，是让 Kafka 识别哪些 Key 对应的消息是可以被删除的，有了它，Kafka 就能保证，内部位移主题不会持续增加磁盘占用空间。</p>
+<p>你可以看下下面两行代码，它们分别表示两类消息对应的 Tombstone 消息。</p>
+<p>// 提交位移消息对应的 Tombstone 消息<br>
+tombstones += new SimpleRecord(timestamp, commitKey, null)<br>
+// 注册消息对应的 Tombstone 消息<br>
+tombstones += new SimpleRecord(timestamp, groupMetadataKey, null)</p>
+<p>无论是哪类消息，<strong>它们的 Value 字段都是 null</strong>。一旦注册消息中出现了 Tombstone 消息，就表示 Kafka 可以将该消费者组元数据从位移主题中删除；一旦提交位移消息中出现了 Tombstone，就表示 Kafka 能够将该消费者组在某主题分区上的位移提交数据删除。</p>
+<h2 id="如何确定-coordinator">如何确定 Coordinator？</h2>
+<p>接下来，我们要再学习一下位移主题和消费者组 Coordinator 之间的关系。<strong>Coordinator 组件是操作位移主题的唯一组件，它在内部对位移主题进行读写操作</strong>。</p>
+<p>每个 Broker 在启动时，都会启动 Coordinator 组件，但是，一个消费者组只能被一个 Coordinator 组件所管理。Kafka 是如何确定哪台 Broker 上的 Coordinator 组件为消费者组服务呢？答案是，位移主题某个特定分区 Leader 副本所在的 Broker 被选定为指定消费者组的 Coordinator。</p>
+<p>那么，这个特定分区是怎么计算出来的呢？我们来看 GroupMetadataManager 类的 partitionFor 方法代码：</p>
+<p>def partitionFor(groupId: String): Int = Utils.abs(groupId.hashCode) % groupMetadataTopicPartitionCount</p>
+<p>看到了吧，消费者组名哈希值与位移主题分区数求模的绝对值结果，就是该消费者组要写入位移主题的目标分区。</p>
+<p>假设位移主题默认是 50 个分区，我们的消费者组名是“testgroup”，因此，Math.abs(“testgroup”.hashCode % 50) 的结果是 27，那么，目标分区号就是 27。也就是说，这个消费者组的注册消息和提交位移消息都会写入到位移主题的分区 27 中，而分区 27 的 Leader 副本所在的 Broker，就成为该消费者组的 Coordinator。</p>
+<h2 id="总结">总结</h2>
+<p>Kafka 内部位移主题，是 Coordinator 端用来保存和记录消费者组信息的重要工具。具体而言，消费者组信息包括消费者组元数据以及已提交位移，它们分别对应于我们今天讲的位移主题中的注册消息和已提交位移消息。前者定义了消费者组的元数据信息，包括组名、成员列表和分区消费分配方案；后者则是消费者组各个成员提交的位移值。这两部分信息共同构成了位移主题的消息类型。</p>
+<p>除了消息类型，我还介绍了消费者组确定 Coordinator 端的代码。明白了这一点，下次你的消费者组成员出现问题的时候，你就会知道，要去哪台 Broker 上去查找相应的日志了。</p>
+<p>我们来回顾一下这节课的重点。</p>
+<ol>
+<li>位移主题：即 __consumer_offsets。该主题是内部主题，默认有 50 个分区，Kafka 负责将其创建出来，因此你不需要亲自执行创建主题操作。</li>
+<li>消息类型：位移主题分为注册消息和已提交位移消息。</li>
+<li>Tombstone 消息：Value 为 null 的位移主题消息，用于清除消费者组已提交的位移值和注册信息。</li>
+<li>Coordinator 确认原则：消费者组名的哈希值与位移主题分区数求模的绝对值，即为目标分区，目标分区 Leader 副本所在的 Broker 即为 Coordinator。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/7adb7cdd26c8cf196f3bcac91ca372dd.png" alt=""></p>
+<p>定义了消息格式，明确了 Coordinator，下一步，就是 Coordinator 对位移主题进行读写操作了。具体来说，就是构建今天我们所学的两类消息，并将其序列化成字节数组，写入到位移主题，以及从位移主题中读取出字节数组，并反序列化成对应的消息类型。下节课，我们一起研究下这个问题。</p>
+<h2 id="课后讨论">课后讨论</h2>
+<p>请你根据今天的内容，用 kafka-console-consumer 脚本去读取一下你线上环境中位移主题的已提交位移消息，并结合 readOffsetMessageValue 方法的源码，说一下输出中的每个字段都是什么含义。</p>
+<p>欢迎在留言区写下你的思考和答案，跟我交流讨论，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">Kafka核心源码解读</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BB%84%E6%88%90%E5%8E%9F%E7%90%86/30__gpu%E4%B8%8A%E4%B8%BA%E4%BB%80%E4%B9%88%E7%8E%A9%E6%B8%B8%E6%88%8F%E9%9C%80%E8%A6%81%E4%BD%BF%E7%94%A8gpu/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">30__GPU（上）：为什么玩游戏需要使用GPU？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%87%8D%E5%AD%A6%E5%89%8D%E7%AB%AF/30__javascript%E8%AF%AD%E6%B3%95%E4%BA%8C%E4%BD%A0%E7%9F%A5%E9%81%93%E5%93%AA%E4%BA%9Bjavascript%E8%AF%AD%E5%8F%A5/">
+            <span class="next-text nav-default">30__JavaScript语法（二）：你知道哪些JavaScript语句？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

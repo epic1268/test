@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25_多个活动要安排（上）：多进程如何调度？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+上节课，我们了解了什么是进程，还一起写好了建立进程的代码。不知道你想过没有，如果在系统中只有一个进程，那我们提出进程相关的概念和实现与进程有关的功能，是不是就失去了意义呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/25_%E5%A4%9A%E4%B8%AA%E6%B4%BB%E5%8A%A8%E8%A6%81%E5%AE%89%E6%8E%92%E4%B8%8A%E5%A4%9A%E8%BF%9B%E7%A8%8B%E5%A6%82%E4%BD%95%E8%B0%83%E5%BA%A6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/25_%E5%A4%9A%E4%B8%AA%E6%B4%BB%E5%8A%A8%E8%A6%81%E5%AE%89%E6%8E%92%E4%B8%8A%E5%A4%9A%E8%BF%9B%E7%A8%8B%E5%A6%82%E4%BD%95%E8%B0%83%E5%BA%A6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25_多个活动要安排（上）：多进程如何调度？">
+  <meta property="og:description" content="你好，我是 LMOS。
+上节课，我们了解了什么是进程，还一起写好了建立进程的代码。不知道你想过没有，如果在系统中只有一个进程，那我们提出进程相关的概念和实现与进程有关的功能，是不是就失去了意义呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="25_多个活动要安排（上）：多进程如何调度？">
+  <meta itemprop="description" content="你好，我是 LMOS。
+上节课，我们了解了什么是进程，还一起写好了建立进程的代码。不知道你想过没有，如果在系统中只有一个进程，那我们提出进程相关的概念和实现与进程有关的功能，是不是就失去了意义呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6527">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25_多个活动要安排（上）：多进程如何调度？">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+上节课，我们了解了什么是进程，还一起写好了建立进程的代码。不知道你想过没有，如果在系统中只有一个进程，那我们提出进程相关的概念和实现与进程有关的功能，是不是就失去了意义呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25_多个活动要安排（上）：多进程如何调度？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6527 字 </span>
+          <span class="more-meta"> 预计阅读 14 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#为什么需要多进程调度">为什么需要多进程调度</a></li>
+        <li><a href="#管理进程">管理进程</a>
+          <ul>
+            <li><a href="#进程的生命周期">进程的生命周期</a></li>
+            <li><a href="#如何组织进程">如何组织进程</a></li>
+            <li><a href="#管理进程的初始化">管理进程的初始化</a></li>
+          </ul>
+        </li>
+        <li><a href="#设计实现进程调度器">设计实现进程调度器</a>
+          <ul>
+            <li><a href="#进程调度器入口">进程调度器入口</a></li>
+            <li><a href="#如何获取当前运行的进程">如何获取当前运行的进程</a></li>
+            <li><a href="#选择下一个进程">选择下一个进程</a></li>
+            <li><a href="#获取空转进程">获取空转进程</a></li>
+            <li><a href="#进程切换">进程切换</a></li>
+          </ul>
+        </li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>上节课，我们了解了什么是进程，还一起写好了建立进程的代码。不知道你想过没有，如果在系统中只有一个进程，那我们提出进程相关的概念和实现与进程有关的功能，是不是就失去了意义呢？</p>
+<p>显然，提出进程的目的之一，就是为了实现多个进程，使系统能运行多个应用程序。今天我们就在单进程的基础上扩展多进程，并在进程与进程之间进行调度。</p>
+<p>“你存在，我深深的脑海里，我的梦里，我的心里，我的代码里”，我经常一边哼着歌，一边写着代码，这就是我们大脑中最典型“多进程”场景。</p>
+<p>再来举一个例子：你在 Windows 上，边听音乐，边浏览网页，还能回复微信消息。Windows 之所以能同时运行多个应用程序，就是因为 Windows 内核支持多进程机制，这就是最典型的多进程场景了。</p>
+<h2 id="为什么需要多进程调度">为什么需要多进程调度</h2>
+<p>我们先来搞清楚多进程调度的原因是什么，我来归纳一下。</p>
+<p>第一，CPU 同一时刻只能运行一个进程，而 CPU 个数总是比进程个数少，这就需要让多进程共用一个 CPU，每个进程在这个 CPU 上运行一段时间。</p>
+<p>第二点原因，当一个进程不能获取某种资源，导致它不能继续运行时，就应该让出 CPU。当然你也可以把第一点中的 CPU 时间，也归纳为一种资源，这样就合并为一点：**进程拿不到资源就要让出 CPU。**我来为你画幅图就明白了，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/ba155f26f15e57329bd6b4a482c7cdb0.png" alt=""></p>
+<p>多进程调度示意图</p>
+<p>上图中，有五个进程，其中浏览器进程和微信进程依赖于网络和键盘的数据资源，如果不能满足它们，就应该通过进程调度让出 CPU。</p>
+<p>而两个科学计算进程，则更多的依赖于 CPU，但是如果它们中的一个用完了自己的 CPU 时间，也得借助进程调度让出 CPU，不然它就会和长期霸占 CPU，导致其它进程无法运行。需要注意的是，每个进程都会依赖一种资源，那就是 CPU 时间，你可以把 CPU 时间理解为它就是 CPU，一个进程必须要有 CPU 才能运行。</p>
+<p>这里我们只需要明白，多个进程为什么要进行调度，就可以了。</p>
+<h2 id="管理进程">管理进程</h2>
+<p>下面我们一起来看看怎么管理进程，我们的 Cosmos 操作系统也支持多个进程，有了多个进程就要把它们管理起来。说白了，就是弄清楚这些进程有哪些状态，是如何组织起来的，又要从哪找到它们。</p>
+<h3 id="进程的生命周期">进程的生命周期</h3>
+<p>人有生老病死，对于一个进程来说也是一样。一个进程从建立开始，接着运行，然后因为资源问题不得不暂停运行，最后退出系统。这一过程，我们称为进程的生命周期。在系统实现中，通常用进程的状态表示进程的生命周期。进程的状态我们用几个宏来定义，如下所示。</p>
+<p>#define TDSTUS_RUN 0        //进程运行状态<br>
+#define TDSTUS_SLEEP 3      //进程睡眠状态<br>
+#define TDSTUS_WAIT 4       //进程等待状态<br>
+#define TDSTUS_NEW 5        //进程新建状态<br>
+#define TDSTUS_ZOMB 6       //进程僵死状态</p>
+<p>可以发现，我们的进程有 5 个状态。其中进程僵死状态，表示进程将要退出系统不再进行调度。那么进程状态之间是如何转换的，别急，我来给画一幅图解释，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/5f01890b1783f928dfcd7df50d2ff123.png" alt=""></p>
+<p>进程状态切换示意图</p>
+<p>上图中已经为你展示了，从建立进程到进程退出系统各状态之间的转换关系和需要满足的条件。</p>
+<h3 id="如何组织进程">如何组织进程</h3>
+<p>首先我们来研究如何组织进程。由于系统中会有许多个进程，在上节课中我们用 thread_t 结构表示一个进程，因此会有多个 thread_t 结构。而根据刚才我们对进程生命周期的解读，我们又知道了进程是随时可能建立或者退出的，所以系统中会随时分配或者删除 thread_t 结构。</p>
+<p>要应对这样的情况，最简单的办法就是<strong>使用链表数据结构</strong>，而且我们的进程有优先级，所以我们可以设计成<strong>每个优先级对应一个链表头</strong>。</p>
+<p>下面我们来把设计落地成数据结构，由于这是调度器模块，所以我们要建立几个文件 krlsched.h、krlsched.c，在其中写上代码，如下所示。</p>
+<p>typedef struct s_THRDLST<br>
+{<br>
+list_h_t    tdl_lsth;                //挂载进程的链表头<br>
+thread_t*   tdl_curruntd;            //该链表上正在运行的进程<br>
+uint_t      tdl_nr;                  //该链表上进程个数<br>
+}thrdlst_t;<br>
+typedef struct s_SCHDATA<br>
+{<br>
+spinlock_t  sda_lock;                //自旋锁<br>
+uint_t      sda_cpuid;               //当前 CPU id<br>
+uint_t      sda_schdflgs;            //标志<br>
+uint_t      sda_premptidx;           //进程抢占计数<br>
+uint_t      sda_threadnr;            //进程数<br>
+uint_t      sda_prityidx;            //当前优先级<br>
+thread_t*   sda_cpuidle;             //当前 CPU 的空转进程<br>
+thread_t*   sda_currtd;              //当前正在运行的进程<br>
+thrdlst_t   sda_thdlst[PRITY_MAX];   //进程链表数组<br>
+}schdata_t;<br>
+typedef struct s_SCHEDCALSS<br>
+{<br>
+spinlock_t  scls_lock;                //自旋锁<br>
+uint_t      scls_cpunr;               //CPU 个数<br>
+uint_t      scls_threadnr;            //系统中所有的进程数<br>
+uint_t      scls_threadid_inc;        //分配进程 id 所用<br>
+schdata_t   scls_schda[CPUCORE_MAX];  //每个 CPU 调度数据结构<br>
+}schedclass_t;</p>
+<p>从上述代码中，我们发现 schedclass_t 是个全局数据结构，这个结构里包含一个 schdata_t 结构数组，数组大小根据 CPU 的数量决定。在每个 schdata_t 结构中，又包含一个进程优先级大小的 thrdlst_t 结构数组。我画幅图，你就明白了。这幅图能让你彻底理清以上数据结构之间的关系。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/9e1a1043ba725a5bd10e844685e59ff4.png" alt=""></p>
+<p>组织进程示意图</p>
+<p>好，下面我们就去定义这个 schedclass_t 数据结构并初始化。</p>
+<h3 id="管理进程的初始化">管理进程的初始化</h3>
+<p>管理进程的初始化非常简单，就是对 schedclass_t 结构的变量的初始化。</p>
+<p>通过前面的学习，你也许已经发现了，schedclass_t 结构的变量应该是个全局变量，所以先得在 cosmos/kernel/krlglobal.c 文件中定义一个 schedclass_t 结构的全局变量，如下所示。</p>
+<p>KRL_DEFGLOB_VARIABLE(schedclass_t,osschedcls);</p>
+<p>有了 schedclass_t 结构的全局变量 osschedcls，接着我们在 cosmos/kernel/krlsched.c 文件中写好初始化 osschedcls 变量的代码，如下所示。</p>
+<p>void thrdlst_t_init(thrdlst_t *initp)<br>
+{<br>
+list_init(&amp;initp-&gt;tdl_lsth); //初始化挂载进程的链表<br>
+initp-&gt;tdl_curruntd = NULL; //开始没有运行进程<br>
+initp-&gt;tdl_nr = 0;  //开始没有进程<br>
+return;<br>
+}<br>
+void schdata_t_init(schdata_t *initp)<br>
+{<br>
+krlspinlock_init(&amp;initp-&gt;sda_lock);<br>
+initp-&gt;sda_cpuid = hal_retn_cpuid(); //获取 CPU id<br>
+initp-&gt;sda_schdflgs = NOTS_SCHED_FLGS;<br>
+initp-&gt;sda_premptidx = 0;<br>
+initp-&gt;sda_threadnr = 0;<br>
+initp-&gt;sda_prityidx = 0;<br>
+initp-&gt;sda_cpuidle = NULL; //开始没有空转进程和运行的进程<br>
+initp-&gt;sda_currtd = NULL;<br>
+for (uint_t ti = 0; ti &lt; PRITY_MAX; ti++)<br>
+{//初始化 schdata_t 结构中的每个 thrdlst_t 结构<br>
+thrdlst_t_init(&amp;initp-&gt;sda_thdlst[ti]);<br>
+}<br>
+return;<br>
+}<br>
+void schedclass_t_init(schedclass_t *initp)<br>
+{<br>
+krlspinlock_init(&amp;initp-&gt;scls_lock);<br>
+initp-&gt;scls_cpunr = CPUCORE_MAX;  //CPU 最大个数<br>
+initp-&gt;scls_threadnr = 0;   //开始没有进程<br>
+initp-&gt;scls_threadid_inc = 0;<br>
+for (uint_t si = 0; si &lt; CPUCORE_MAX; si++)<br>
+{//初始化 osschedcls 变量中的每个 schdata_t<br>
+schdata_t_init(&amp;initp-&gt;scls_schda[si]);<br>
+}<br>
+return;<br>
+}<br>
+void init_krlsched()<br>
+{   //初始化 osschedcls 变量<br>
+schedclass_t_init(&amp;osschedcls);<br>
+return;<br>
+}</p>
+<p>上述代码非常简单，由 init_krlsched 函数调用 schedclass_t_init 函数，对 osschedcls 变量进行初始化工作，但是 init_krlsched 函数由谁调用呢？</p>
+<p>还记得之前学的内核功能层的入口函数吗（可回看第 13 节课）？它就是 cosmos/kernel/krlinit.c 文件中的 <strong>init_krl 函数</strong>，我们在这个函数中来调用 init_krlsched 函数，代码如下所示。</p>
+<p>void init_krl()<br>
+{<br>
+init_krlsched();<br>
+die(0);//控制不让 init_krl 函数返回<br>
+return;<br>
+}</p>
+<p>至此，管理进程的初始化就完成了，其实这也是我们进程调度器的初始化，就是这么简单吗？当然不是，还有重要的进程调度等我们搞定。</p>
+<h2 id="设计实现进程调度器">设计实现进程调度器</h2>
+<p>管理进程的数据结构已经初始化好了，现在我们开始设计实现进程调度器。</p>
+<p>进程调度器是为了在合适的时间点，合适的代码执行路径上进行进程调度。说白了，就是从当前运行进程切换到另一个进程上运行，让当前进程停止运行，由 CPU 开始执行另一个进程的代码。这个事情说来简单，但做起来并不容易，下面我将带领你一步步实现进程调度器。</p>
+<h3 id="进程调度器入口">进程调度器入口</h3>
+<p>首先请你想象一下，进程调度器是什么样子的。其实，进程调度器不过是个函数，和其它函数并没有本质区别，你在其它很多代码执行路径上都可以调用它。只是它会从一个进程运行到下一个进程。</p>
+<p>那这个函数的功能就能定下来了：**无非是确定当前正在运行的进程，然后选择下一个将要运行的进程，最后从当前运行的进程，切换到下一个将要运行的进程。**下面我们先来写好进程调度器的入口函数，如下所示。</p>
+<p>void krlschedul()<br>
+{<br>
+thread_t *prev = krlsched_retn_currthread(),//返回当前运行进程<br>
+*next = krlsched_select_thread();//选择下一个运行的进程<br>
+save_to_new_context(next, prev);//从当前进程切换到下一个进程<br>
+return;<br>
+}</p>
+<p>我们只要在任何需要调度进程的地方，调用上述代码中的函数就可以了。下面我们开始实现 krlschedul 函数中的其它功能逻辑。</p>
+<h3 id="如何获取当前运行的进程">如何获取当前运行的进程</h3>
+<p>获取当前正在运行的进程，目的是为了保存当前进程的运行上下文，确保在下一次调度到当前运行的进程时能够恢复运行。后面你就会看到，每次切换到下一个进程运行时，我们就会将下一个运行的进程设置为当前运行的进程。</p>
+<p>这个获取当前运行进程的函数，它的代码是这样的。</p>
+<p>thread_t *krlsched_retn_currthread()<br>
+{<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+//通过 cpuid 获取当前 cpu 的调度数据结构<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+if (schdap-&gt;sda_currtd == NULL)<br>
+{//若调度数据结构中当前运行进程的指针为空，就出错死机<br>
+hal_sysdie(&ldquo;schdap-&gt;sda_currtd NULL&rdquo;);<br>
+}<br>
+return schdap-&gt;sda_currtd;//返回当前运行的进程<br>
+}</p>
+<p>上述代码非常简单，如果你认真了解过前面组织进程的数据结构，就会发现，schdata_t 结构中的 <strong>sda_currtd 字段</strong>正是保存当前正在运行进程的地址。返回这个字段的值，就能取得当前正在运行的进程。</p>
+<h3 id="选择下一个进程">选择下一个进程</h3>
+<p>根据调度器入口函数的设计，取得了当前正在运行的进程之后，下一步就是选择下个将要投入运行的进程。</p>
+<p>在商业系统中，这个过程极为复杂。因为这个过程是<strong>进程调度算法的核心</strong>，它关乎到进程的吞吐量，能否及时响应请求，CPU 的利用率，各个进程之间运行获取资源的公平性，这些问题综合起来就会影响整个操作系统的性能、可靠性。</p>
+<p>作为初学者，我们不必搞得如此复杂，可以使用一个简单的优先级调度算法，就是始终选择优先级最高的进程，作为下一个运行的进程。</p>
+<p>完成这个功能的代码，如下所示。</p>
+<p>thread_t *krlsched_select_thread()<br>
+{<br>
+thread_t *retthd, *tdtmp;<br>
+cpuflg_t cufg;<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+krlspinlock_cli(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+for (uint_t pity = 0; pity &lt; PRITY_MAX; pity++)<br>
+{//从最高优先级开始扫描<br>
+if (schdap-&gt;sda_thdlst[pity].tdl_nr &gt; 0)<br>
+{//若当前优先级的进程链表不为空<br>
+if (list_is_empty_careful(&amp;(schdap-&gt;sda_thdlst[pity].tdl_lsth)) == FALSE)<br>
+{//取出当前优先级进程链表下的第一个进程<br>
+tdtmp = list_entry(schdap-&gt;sda_thdlst[pity].tdl_lsth.next, thread_t, td_list);<br>
+list_del(&amp;tdtmp-&gt;td_list);//脱链<br>
+if (schdap-&gt;sda_thdlst[pity].tdl_curruntd != NULL)<br>
+{//将这 sda_thdlst[pity].tdl_curruntd 的进程挂入链表尾<br>
+list_add_tail(&amp;(schdap-&gt;sda_thdlst[pity].tdl_curruntd-&gt;td_list), &amp;schdap-&gt;sda_thdlst[pity].tdl_lsth);<br>
+}<br>
+schdap-&gt;sda_thdlst[pity].tdl_curruntd = tdtmp;<br>
+retthd = tdtmp;//将选择的进程放入 sda_thdlst[pity].tdl_curruntd 中，并返回<br>
+goto return_step;<br>
+}<br>
+if (schdap-&gt;sda_thdlst[pity].tdl_curruntd != NULL)<br>
+{//若 sda_thdlst[pity].tdl_curruntd 不为空就直接返回它<br>
+retthd = schdap-&gt;sda_thdlst[pity].tdl_curruntd;<br>
+goto return_step;<br>
+}<br>
+}<br>
+}<br>
+//如果最后也没有找到进程就返回默认的空转进程<br>
+schdap-&gt;sda_prityidx = PRITY_MIN;<br>
+retthd = krlsched_retn_idlethread();<br>
+return_step:<br>
+//解锁并返回进程<br>
+krlspinunlock_sti(&amp;schdap-&gt;sda_lock, &amp;cufg);<br>
+return retthd;<br>
+}</p>
+<p>上述代码的逻辑非常简单，我来给你梳理一下。</p>
+<p>首先，从高到低扫描优先级进程链表，然后若当前优先级进程链表不为空，就取出该链表上的第一个进程，放入 thrdlst_t 结构中的 tdl_curruntd 字段中，并把之前 thrdlst_t 结构的 tdl_curruntd 字段中的进程挂入该链表的尾部，并返回。最后，当扫描到最低优先级时也没有找到进程，就返回默认的空转进程。</p>
+<p>这个算法极其简单，但是对我们学习原理却足够了，也欢迎你举一反三，动手实现更高级的调度算法。</p>
+<h3 id="获取空转进程">获取空转进程</h3>
+<p>在选择下一个进程的函数中，如果没有找到合适的进程，就返回默认的空转进程。</p>
+<p>你可以想一下，为什么要有一个空转进程，直接返回 NULL 不行吗？</p>
+<p>还真不行，因为调度器的功能必须完成从一个进程到下一个进程的切换，如果没有下一个进程，而上一个进程又不能运行了，调度器将无处可去，整个系统也将停止运行，这当然不是我们要的结果，所以我们要给系统留下最后一条路。</p>
+<p>下面我们先来实现获取空转进程的函数，如下所示。</p>
+<p>thread_t *krlsched_retn_idlethread()<br>
+{<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+//通过 cpuid 获取当前 cpu 的调度数据结构<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+if (schdap-&gt;sda_cpuidle == NULL)<br>
+{//若调度数据结构中空转进程的指针为空，就出错死机<br>
+hal_sysdie(&ldquo;schdap-&gt;sda_cpuidle NULL&rdquo;);<br>
+}<br>
+return schdap-&gt;sda_cpuidle;//返回空转进程<br>
+}</p>
+<p>上述代码非常简单，和我们之前实现的获取当前运行进程的函数如出一辙，只是使用 schdata_t 结构中的字段发生了改变。好，接下来我们要处理更重要的问题，那就是进程之间的切换。</p>
+<h3 id="进程切换">进程切换</h3>
+<p>经过前面的流程，我们已经找到了当前运行的进程 P1，和下一个将要运行的进程 P2，现在就进入最重要的进程切换流程。</p>
+<p>在进程切换前，我们还要了解另一个重要的问题：<strong>进程在内核中函数调用路径，那什么是函数调用路径。</strong></p>
+<p>举个例子，比如进程 P1 调用了函数 A，接着在函数 A 中调用函数 B，然后在函数 B 中调用了函数 C，最后在函数 C 中调用了调度器函数 S，这个函数 A 到函数 S 就是进程 P1 的函数调用路径。</p>
+<p>再比如，进程 P2 开始调用了函数 D，接着在函数 D 中调用函数 E，然后在函数 E 中又调用了函数 F，最后在函数 F 中调用了调度器函数 S，函数 D、E、F 到函数 S 就是进程 P2 的函数调用路径。</p>
+<p>函数调用路径是通过栈来保存的，对于运行在内核空间中的进程，就是保存在对应的内核栈中。我为你准备了一幅图帮助理解。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/3530c95b4604708254551630474eeb8a.png" alt=""></p>
+<p>内核栈状态</p>
+<p>以上就是进程 P1，P2 的函数调用路径，也是它们调用函数时各自内核栈空间状态的变化结果。说个题外话，你有没有发现。C 语言栈才是最高效内存管理，而且变量的生命周期也是妥妥的，比很多高级语言的内存垃圾回收器都牛。</p>
+<p>有了前面的基础，现在我们来动手实现进程切换的函数。在这个函数中，我们要干这几件事。</p>
+<p>首先，我们把当前进程的通用寄存器保存到当前进程的内核栈中；然后，保存 CPU 的 RSP 寄存器到当前进程的机器上下文结构中，并且读取保存在下一个进程机器上下文结构中的 RSP 的值，把它存到 CPU 的 RSP 寄存器中；接着，调用一个函数切换 MMU 页表；最后，从下一个进程的内核栈中恢复下一个进程的通用寄存器。</p>
+<p>这样下一个进程就开始运行了，代码如下所示。</p>
+<p>void save_to_new_context(thread_t *next, thread_t *prev)<br>
+{<br>
+<strong>asm</strong> <strong>volatile</strong>(<br>
+&ldquo;pushfq \n\t&rdquo;//保存当前进程的标志寄存器<br>
+&ldquo;cli \n\t&rdquo;  //关中断<br>
+//保存当前进程的通用寄存器<br>
+&ldquo;pushq %%rax\n\t&rdquo;<br>
+&ldquo;pushq %%rbx\n\t&rdquo;<br>
+&ldquo;pushq %%rcx\n\t&rdquo;<br>
+&ldquo;pushq %%rdx\n\t&rdquo;<br>
+&ldquo;pushq %%rbp\n\t&rdquo;<br>
+&ldquo;pushq %%rsi\n\t&rdquo;<br>
+&ldquo;pushq %%rdi\n\t&rdquo;<br>
+&ldquo;pushq %%r8\n\t&rdquo;<br>
+&ldquo;pushq %%r9\n\t&rdquo;<br>
+&ldquo;pushq %%r10\n\t&rdquo;<br>
+&ldquo;pushq %%r11\n\t&rdquo;<br>
+&ldquo;pushq %%r12\n\t&rdquo;<br>
+&ldquo;pushq %%r13\n\t&rdquo;<br>
+&ldquo;pushq %%r14\n\t&rdquo;<br>
+&ldquo;pushq %%r15\n\t&rdquo;<br>
+//保存 CPU 的 RSP 寄存器到当前进程的机器上下文结构中<br>
+&ldquo;movq %%rsp,%[PREV_RSP] \n\t&rdquo;<br>
+//把下一个进程的机器上下文结构中的 RSP 的值，写入 CPU 的 RSP 寄存器中<br>
+&ldquo;movq %[NEXT_RSP],%%rsp \n\t&rdquo;//事实上这里已经切换到下一个进程了，因为切换进程的内核栈   <br>
+//调用__to_new_context 函数切换 MMU 页表<br>
+&ldquo;callq __to_new_context\n\t&rdquo;<br>
+//恢复下一个进程的通用寄存器<br>
+&ldquo;popq %%r15\n\t&rdquo;<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;popq %%r13\n\t&rdquo;<br>
+&ldquo;popq %%r12\n\t&rdquo;<br>
+&ldquo;popq %%r11\n\t&rdquo;<br>
+&ldquo;popq %%r10\n\t&rdquo;<br>
+&ldquo;popq %%r9\n\t&rdquo;<br>
+&ldquo;popq %%r8\n\t&rdquo;<br>
+&ldquo;popq %%rdi\n\t&rdquo;<br>
+&ldquo;popq %%rsi\n\t&rdquo;<br>
+&ldquo;popq %%rbp\n\t&rdquo;<br>
+&ldquo;popq %%rdx\n\t&rdquo;<br>
+&ldquo;popq %%rcx\n\t&rdquo;<br>
+&ldquo;popq %%rbx\n\t&rdquo;<br>
+&ldquo;popq %%rax\n\t&rdquo;<br>
+&ldquo;popfq \n\t&rdquo;      //恢复下一个进程的标志寄存器<br>
+//输出当前进程的内核栈地址<br>
+: [ PREV_RSP ] &ldquo;=m&rdquo;(prev-&gt;td_context.ctx_nextrsp)<br>
+//读取下一个进程的内核栈地址<br>
+: [ NEXT_RSP ] &ldquo;m&rdquo;(next-&gt;td_context.ctx_nextrsp), &ldquo;D&rdquo;(next), &ldquo;S&rdquo;(prev)//为调用__to_new_context 函数传递参数<br>
+: &ldquo;memory&rdquo;);<br>
+return;<br>
+}</p>
+<p>你看，代码中的 save_to_new_context 函数，是不是有点偷天换日的感觉？</p>
+<p>通过切换进程的内核栈，导致切换进程，因为进程的函数调用路径就保存在对应的内核栈中，只要调用 krlschedul 函数，最后的函数调用路径一定会停在 save_to_new_context 函数中，当 save_to_new_context 函数一返回，就会导致回到调用 save_to_new_context 函数的下一行代码开始运行，在这里就是返回到 krlschedul 函数中，最后层层返回。</p>
+<p>我知道你很难理解这一过程，所以准备了一幅图辅助说明。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/5708a1781547307d5c267dd019e54849.png" alt=""></p>
+<p>进程切换示意图</p>
+<p>结合上图，你就能理解这个进程切换的原理了。同时你也会发现一个问题，就是这个切换机制能够正常运行，必须保证下一个进程已经被调度过，也就是<strong>它调用执行过 krlschedul 函数。</strong></p>
+<p>那么已知新建进程绝对没有调用过 krlschedul 函数，所以它得进行特殊处理。我们在 __to_new_context 函数中完成这个特殊处理，代码如下所示。</p>
+<p>void __to_new_context(thread_t *next, thread_t *prev)<br>
+{<br>
+uint_t cpuid = hal_retn_cpuid();<br>
+schdata_t *schdap = &amp;osschedcls.scls_schda[cpuid];<br>
+//设置当前运行进程为下一个运行的进程<br>
+schdap-&gt;sda_currtd = next;<br>
+//设置下一个运行进程的 tss 为当前 CPU 的 tss<br>
+next-&gt;td_context.ctx_nexttss = &amp;x64tss[cpuid];<br>
+//设置当前 CPU 的 tss 中的 R0 栈为下一个运行进程的内核栈<br>
+next-&gt;td_context.ctx_nexttss-&gt;rsp0 = next-&gt;td_krlstktop;<br>
+//装载下一个运行进程的 MMU 页表<br>
+hal_mmu_load(&amp;next-&gt;td_mmdsc-&gt;msd_mmu);<br>
+if (next-&gt;td_stus == TDSTUS_NEW)<br>
+{   //如果是新建进程第一次运行就要进行处理<br>
+next-&gt;td_stus = TDSTUS_RUN;<br>
+retnfrom_first_sched(next);<br>
+}<br>
+return;<br>
+}</p>
+<p>上面代码的注释已经很清楚了，__to_new_context 负责设置当前运行的进程，处理 CPU 发生中断时需要切换栈的问题，又切换了一个进程的 MMU 页表（即使用新进程的地址空间），最后如果是新建进程第一次运行，就调用 retnfrom_first_sched 函数进行处理。下面我们来写好这个函数。</p>
+<p>void retnfrom_first_sched(thread_t *thrdp)<br>
+{<br>
+<strong>asm</strong> <strong>volatile</strong>(<br>
+&ldquo;movq %[NEXT_RSP],%%rsp\n\t&rdquo;  //设置 CPU 的 RSP 寄存器为该进程机器上下文结构中的 RSP<br>
+//恢复进程保存在内核栈中的段寄存器<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;movw %%r14w,%%gs\n\t&rdquo;<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;movw %%r14w,%%fs\n\t&rdquo;<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;movw %%r14w,%%es\n\t&rdquo;<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;movw %%r14w,%%ds\n\t&rdquo;<br>
+//恢复进程保存在内核栈中的通用寄存器<br>
+&ldquo;popq %%r15\n\t&rdquo;<br>
+&ldquo;popq %%r14\n\t&rdquo;<br>
+&ldquo;popq %%r13\n\t&rdquo;<br>
+&ldquo;popq %%r12\n\t&rdquo;<br>
+&ldquo;popq %%r11\n\t&rdquo;<br>
+&ldquo;popq %%r10\n\t&rdquo;<br>
+&ldquo;popq %%r9\n\t&rdquo;<br>
+&ldquo;popq %%r8\n\t&rdquo;<br>
+&ldquo;popq %%rdi\n\t&rdquo;<br>
+&ldquo;popq %%rsi\n\t&rdquo;<br>
+&ldquo;popq %%rbp\n\t&rdquo;<br>
+&ldquo;popq %%rdx\n\t&rdquo;<br>
+&ldquo;popq %%rcx\n\t&rdquo;<br>
+&ldquo;popq %%rbx\n\t&rdquo;<br>
+&ldquo;popq %%rax\n\t&rdquo;<br>
+//恢复进程保存在内核栈中的 RIP、CS、RFLAGS，（有可能需要恢复进程应用程序的 RSP、SS）寄存器<br>
+&ldquo;iretq\n\t&rdquo;<br>
+:<br>
+: [ NEXT_RSP ] &ldquo;m&rdquo;(thrdp-&gt;td_context.ctx_nextrsp)<br>
+: &ldquo;memory&rdquo;);<br>
+}</p>
+<p>retnfrom_first_sched 函数不会返回到调用它的 __to_new_context 函数中，而是直接运行新建进程的相关代码（如果你不理解这段代码的原理，可以回顾上一课，看看建立进程时，对进程内核栈进行的初始化工作）。</p>
+<p>好，进行到这里，我们已经设计出了我们的 Cosmos 的进程调度器，但我们都知道，这样的调度器还不够，我们还没有解决进程的等待和唤醒问题，这些内容下节课我再跟你详细分享。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>这节课我们从了解为什么需要多进程调度开始，随后实现子调度管理多个进程，最终实现了进程调度器，这里面有很多重要的知识点，我来为你梳理一下。</p>
+<p>1.**为什么需要多进程调度？**我们分析了系统中总有些资源不能满足每个进程的需求，所以一些进程必须要走走停停，这就需要不同的进程来回切换到 CPU 上运行，为了实现这个机制就需要多讲行调度。</p>
+<p>2.**组织多个进程。**为了实现进程管理，必须要组织多个进程。我们设计了调度器数据结构，在该结构中，我们使用优先级链表数组来组织多个进程，并且对这些数据结构的变量进行了初始化。</p>
+<p>3.**进程调度。**有了多个进程就需要进程调度，我们的进程调度器是一个函数，在这个函数中选择了当前运行进程和下一个将要运行的进程，如果实在没有可运行的进程就选择空转进程，最后关键是进程间切换，我们是通过切换进程的内核栈来切换进程的函数调用路径，当调度器函数返回的时候已经是另一个进程了。</p>
+<h2 id="思考题">思考题</h2>
+<p>请问当调度器函数调度到一个新建进程时，为何要进入 retnfrom_first_sched 函数呢？</p>
+<p>欢迎你在留言区积极分享，相信通过主动输出，你将更好地理解这节课的内容。也欢迎把这节课分享给你的朋友，和他交流探讨，</p>
+<p>好，我是 LMOS，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8C%81%E7%BB%AD%E4%BA%A4%E4%BB%9836%E8%AE%B2/25_%E4%BB%A3%E7%A0%81%E9%9D%99%E6%80%81%E6%A3%80%E6%9F%A5%E5%AE%9E%E8%B7%B5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25_代码静态检查实践</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%9E%B6%E6%9E%84/25_%E9%AB%98%E5%8F%AF%E7%94%A8%E5%AD%98%E5%82%A8%E6%9E%B6%E6%9E%84%E5%8F%8C%E6%9C%BA%E6%9E%B6%E6%9E%84/">
+            <span class="next-text nav-default">25_高可用存储架构：双机架构</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

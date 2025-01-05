@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>48__Prometheus、Metrics_Server与Kubernetes监控体系 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是张磊。今天我和你分享的主题是：Prometheus、Metrics Server 与 Kubernetes 监控体系。
+通过前面的文章，我已经和你分享过了 Kubernetes 的核心架构，编排概念，以及具体的设计与实现。接下来，我会用 3 篇文章，为你介绍 Kubernetes 监控相关的一些核心技术。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/48__prometheusmetrics_server%E4%B8%8Ekubernetes%E7%9B%91%E6%8E%A7%E4%BD%93%E7%B3%BB/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/48__prometheusmetrics_server%E4%B8%8Ekubernetes%E7%9B%91%E6%8E%A7%E4%BD%93%E7%B3%BB/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="48__Prometheus、Metrics_Server与Kubernetes监控体系">
+  <meta property="og:description" content="你好，我是张磊。今天我和你分享的主题是：Prometheus、Metrics Server 与 Kubernetes 监控体系。
+通过前面的文章，我已经和你分享过了 Kubernetes 的核心架构，编排概念，以及具体的设计与实现。接下来，我会用 3 篇文章，为你介绍 Kubernetes 监控相关的一些核心技术。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入剖析Kubernetes">
+
+  <meta itemprop="name" content="48__Prometheus、Metrics_Server与Kubernetes监控体系">
+  <meta itemprop="description" content="你好，我是张磊。今天我和你分享的主题是：Prometheus、Metrics Server 与 Kubernetes 监控体系。
+通过前面的文章，我已经和你分享过了 Kubernetes 的核心架构，编排概念，以及具体的设计与实现。接下来，我会用 3 篇文章，为你介绍 Kubernetes 监控相关的一些核心技术。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3088">
+  <meta itemprop="keywords" content="深入剖析Kubernetes">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="48__Prometheus、Metrics_Server与Kubernetes监控体系">
+  <meta name="twitter:description" content="你好，我是张磊。今天我和你分享的主题是：Prometheus、Metrics Server 与 Kubernetes 监控体系。
+通过前面的文章，我已经和你分享过了 Kubernetes 的核心架构，编排概念，以及具体的设计与实现。接下来，我会用 3 篇文章，为你介绍 Kubernetes 监控相关的一些核心技术。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">48__Prometheus、Metrics_Server与Kubernetes监控体系</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3088 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是张磊。今天我和你分享的主题是：Prometheus、Metrics Server 与 Kubernetes 监控体系。</p>
+<p>通过前面的文章，我已经和你分享过了 Kubernetes 的核心架构，编排概念，以及具体的设计与实现。接下来，我会用 3 篇文章，为你介绍 Kubernetes 监控相关的一些核心技术。</p>
+<p>首先需要明确指出的是，Kubernetes 项目的监控体系曾经非常繁杂，在社区中也有很多方案。但这套体系发展到今天，已经完全演变成了以 Prometheus 项目为核心的一套统一的方案。</p>
+<p>在这里，可能有一些同学对 Prometheus 项目还太不熟悉。所以，我先来简单为你介绍一下这个项目。</p>
+<p>实际上，Prometheus 项目是当年 CNCF 基金会起家时的“第二把交椅”。而这个项目发展到今天，已经全面接管了 Kubernetes 项目的整套监控体系。</p>
+<p>比较有意思的是，Prometheus 项目与 Kubernetes 项目一样，也来自于 Google 的 Borg 体系，它的原型系统，叫作 BorgMon，是一个几乎与 Borg 同时诞生的内部监控系统。而 Prometheus 项目的发起原因也跟 Kubernetes 很类似，都是希望通过对用户更友好的方式，将 Google 内部系统的设计理念，传递给用户和开发者。</p>
+<p>作为一个监控系统，Prometheus 项目的作用和工作方式，其实可以用如下所示的一张官方示意图来解释。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90Kubernetes/3e3f4f2b0a711b5babeef15afa11ca8c.png" alt=""><br>
+可以看到，Prometheus 项目工作的核心，是使用 Pull（抓取）的方式去搜集被监控对象的 Metrics 数据（监控指标数据），然后，再把这些数据保存在一个 TSDB（时间序列数据库，比如 OpenTSDB、InfluxDB 等）当中，以便后续可以按照时间进行检索。</p>
+<p>有了这套核心监控机制，Prometheus 剩下的组件就是用来配合这套机制的运行。比如 Pushgateway，可以允许被监控对象以 Push 的方式向 Prometheus 推送 Metrics 数据。而 Alertmanager，则可以根据 Metrics 信息灵活地设置报警。当然，Prometheus 最受用户欢迎的功能，还是通过 Grafana 对外暴露出的、可以灵活配置的监控数据可视化界面。</p>
+<p>有了 Prometheus 之后，我们就可以按照 Metrics 数据的来源，来对 Kubernetes 的监控体系做一个汇总了。</p>
+<p>**第一种 Metrics，是宿主机的监控数据。**这部分数据的提供，需要借助一个由 Prometheus 维护的<a href="./node%5Fexporter.md">Node Exporter</a> 工具。一般来说，Node Exporter 会以 DaemonSet 的方式运行在宿主机上。其实，所谓的 Exporter，就是代替被监控对象来对 Prometheus 暴露出可以被“抓取”的 Metrics 信息的一个辅助进程。</p>
+<p>而 Node Exporter 可以暴露给 Prometheus 采集的 Metrics 数据，也不单单是节点的负载（Load）、CPU、内存、磁盘以及网络这样的常规信息，它的 Metrics 指标可以说是“包罗万象”，你可以查看<a href="./node%5Fexporter.md#enabled-by-default">这个列表</a>来感受一下。</p>
+<p><strong>第二种 Metrics，是来自于 Kubernetes 的 API Server、kubelet 等组件的 /metrics API</strong>。除了常规的 CPU、内存的信息外，这部分信息还主要包括了各个组件的核心监控指标。比如，对于 API Server 来说，它就会在 /metrics API 里，暴露出各个 Controller 的工作队列（Work Queue）的长度、请求的 QPS 和延迟数据等等。这些信息，是检查 Kubernetes 本身工作情况的主要依据。</p>
+<p>**第三种 Metrics，是 Kubernetes 相关的监控数据。**这部分数据，一般叫作 Kubernetes 核心监控数据（core metrics）。这其中包括了 Pod、Node、容器、Service 等主要 Kubernetes 核心概念的 Metrics。</p>
+<p>其中，容器相关的 Metrics 主要来自于 kubelet 内置的 cAdvisor 服务。在 kubelet 启动后，cAdvisor 服务也随之启动，而它能够提供的信息，可以细化到每一个容器的 CPU、文件系统、内存、网络等资源的使用情况。</p>
+<p>需要注意的是，这里提到的 Kubernetes 核心监控数据，其实使用的是 Kubernetes 的一个非常重要的扩展能力，叫作 Metrics Server。</p>
+<p>Metrics Server 在 Kubernetes 社区的定位，其实是用来取代 Heapster 这个项目的。在 Kubernetes 项目发展的初期，Heapster 是用户获取 Kubernetes 监控数据（比如 Pod 和 Node 的资源使用情况）的主要渠道。而后面提出来的 Metrics Server，则把这些信息，通过标准的 Kubernetes API 暴露了出来。这样，Metrics 信息就跟 Heapster 完成了解耦，允许 Heapster 项目慢慢退出舞台。</p>
+<p>而有了 Metrics Server 之后，用户就可以通过标准的 Kubernetes API 来访问到这些监控数据了。比如，下面这个 URL：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">http://127.0.0.1:8001/apis/metrics.k8s.io/v1beta1/namespaces/&lt;namespace-name&gt;/pods/&lt;pod-name&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当你访问这个 Metrics API 时，它就会为你返回一个 Pod 的监控数据，而这些数据，其实是从 kubelet 的 Summary API（即 &lt;kubelet_ip&gt;:&lt;kubelet_port&gt;/stats/summary）采集而来的。Summary API 返回的信息，既包括了 cAdVisor 的监控数据，也包括了 kubelet 本身汇总的信息。</p>
+<p>需要指出的是，Metrics Server 并不是 kube-apiserver 的一部分，而是通过 Aggregator 这种插件机制，在独立部署的情况下同 kube-apiserver 一起统一对外服务的。</p>
+<p>这里，Aggregator APIServer 的工作原理，可以用如下所示的一幅示意图来表示清楚：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90Kubernetes/f5d3b0f5bcd2a9757813cfa0af39c20b.png" alt=""></p>
+<blockquote>
+<p>备注：图片出处<a href="https://blog.jetstack.io/blog/resource-and-custom-metrics-hpa-v2/">https://blog.jetstack.io/blog/resource-and-custom-metrics-hpa-v2/</a></p>
+</blockquote>
+<p>可以看到，当 Kubernetes 的 API Server 开启了 Aggregator 模式之后，你再访问 apis/metrics.k8s.io/v1beta1 的时候，实际上访问到的是一个叫作 kube-aggregator 的代理。而 kube-apiserver，正是这个代理的一个后端；而 Metrics Server，则是另一个后端。</p>
+<p>而且，在这个机制下，你还可以添加更多的后端给这个 kube-aggregator。所以**kube-aggregator 其实就是一个根据 URL 选择具体的 API 后端的代理服务器。**通过这种方式，我们就可以很方便地扩展 Kubernetes 的 API 了。</p>
+<p>而 Aggregator 模式的开启也非常简单：</p>
+<ul>
+<li>如果你是使用 kubeadm <a href="./xn--kube-up-kk6mp69bbsie91cd3x.sh.md">或者官方的 kube-up.sh</a> 脚本部署 Kubernetes 集群的话，Aggregator 模式就是默认开启的；</li>
+<li>如果是手动 DIY 搭建的话，你就需要在 kube-apiserver 的启动参数里加上如下所示的配置：</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--requestheader-client-ca-file=&lt;path to aggregator CA cert&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--requestheader-allowed-names=front-proxy-client
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--requestheader-extra-headers-prefix=X-Remote-Extra-
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--requestheader-group-headers=X-Remote-Group
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--requestheader-username-headers=X-Remote-User
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--proxy-client-cert-file=&lt;path to aggregator proxy cert&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">--proxy-client-key-file=&lt;path to aggregator proxy key&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而这些配置的作用，主要就是为 Aggregator 这一层设置对应的 Key 和 Cert 文件。而这些文件的生成，就需要你自己手动完成了，具体流程请参考这篇<a href="./auth.md.md">官方文档</a>。</p>
+<p>Aggregator 功能开启之后，你只需要将 Metrics Server 的 YAML 文件部署起来，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ git clone https://github.com/kubernetes-incubator/metrics-server
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ cd metrics-server
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ kubectl create -f deploy/1.8+/
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接下来，你就会看到 metrics.k8s.io 这个 API 出现在了你的 Kubernetes API 列表当中。</p>
+<p>在理解了 Prometheus 关心的三种监控数据源，以及 Kubernetes 的核心 Metrics 之后，作为用户，你其实要做的就是将 Prometheus Operator 在 Kubernetes 集群里部署起来。然后，按照本篇文章一开始介绍的架构，把上述 Metrics 源配置起来，让 Prometheus 自己去进行采集即可。</p>
+<p>在后续的文章中，我会为你进一步剖析 Kubernetes 监控体系以及自定义 Metrics（自定义监控指标）的具体技术点。</p>
+<h2 id="总结">总结</h2>
+<p>在本篇文章中，我主要为你介绍了 Kubernetes 当前监控体系的设计，介绍了 Prometheus 项目在这套体系中的地位，讲解了以 Prometheus 为核心的监控系统的架构设计。</p>
+<p>然后，我为你详细地解读了 Kubernetes 核心监控数据的来源，即：Metrics Server 的具体工作原理，以及 Aggregator APIServer 的设计思路。</p>
+<p>通过以上讲述，我希望你能够对 Kubernetes 的监控体系形成一个整体的认知，体会到 Kubernetes 社区在监控这个事情上，全面以 Prometheus 项目为核心进行建设的大方向。</p>
+<p>最后，在具体的监控指标规划上，我建议你<strong>遵循业界通用的 USE 原则和 RED 原则。</strong></p>
+<p>其中，USE 原则指的是，按照如下三个维度来规划资源监控指标：</p>
+<ol>
+<li>利用率（Utilization），资源被有效利用起来提供服务的平均时间占比；</li>
+<li>饱和度（Saturation），资源拥挤的程度，比如工作队列的长度；</li>
+<li>错误率（Errors），错误的数量。</li>
+</ol>
+<p>而 RED 原则指的是，按照如下三个维度来规划服务监控指标：</p>
+<ol>
+<li>每秒请求数量（Rate）；</li>
+<li>每秒错误数量（Errors）；</li>
+<li>服务响应时间（Duration）。</li>
+</ol>
+<p>不难发现，USE 原则主要关注的是“资源”，比如节点和容器的资源使用情况，而 RED 原则主要关注的是“服务”，比如 kube-apiserver 或者某个应用的工作情况。这两种指标，在我今天为你讲解的 Kubernetes + Prometheus 组成的监控体系中，都是可以完全覆盖到的。</p>
+<h2 id="思考题">思考题</h2>
+<p>在监控体系中，对于数据的采集，其实既有 Prometheus 这种 Pull 模式，也有 Push 模式。请问，你如何看待这两种模式的异同和优缺点呢？</p>
+<p>感谢你的收听，欢迎你给我留言，也欢迎分享给更多的朋友一起阅读。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90Kubernetes/e870b7df0db49509e735e6becd4a9a9a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90kubernetes/">深入剖析Kubernetes</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BB%84%E6%88%90%E5%8E%9F%E7%90%86/48__dma%E4%B8%BA%E4%BB%80%E4%B9%88kafka%E8%BF%99%E4%B9%88%E5%BF%AB/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">48__DMA：为什么Kafka这么快？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%98/48__%E6%A1%88%E4%BE%8B%E7%AF%87%E6%9C%8D%E5%8A%A1%E5%99%A8%E6%80%BB%E6%98%AF%E6%97%B6%E4%B8%8D%E6%97%B6%E4%B8%A2%E5%8C%85%E6%88%91%E8%AF%A5%E6%80%8E%E4%B9%88%E5%8A%9E%E4%B8%8B/">
+            <span class="next-text nav-default">48__案例篇：服务器总是时不时丢包，我该怎么办？（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

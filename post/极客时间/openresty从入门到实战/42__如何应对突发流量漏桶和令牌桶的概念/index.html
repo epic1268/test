@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>42__如何应对突发流量：漏桶和令牌桶的概念 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是温铭。
+在前面几节课中，我们学习了代码的优化和缓存的设计，这两者都和应用的整体性能息息相关，自然值得我们重视。不过，在真实的业务场景下，我们还需要考虑到突发流量对性能的影响。这里的突发流量，可能是正常的，比如突发新闻、促销活动等带来的流量；也可能是不正常的流量，比如 DDoS 攻击等。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/42__%E5%A6%82%E4%BD%95%E5%BA%94%E5%AF%B9%E7%AA%81%E5%8F%91%E6%B5%81%E9%87%8F%E6%BC%8F%E6%A1%B6%E5%92%8C%E4%BB%A4%E7%89%8C%E6%A1%B6%E7%9A%84%E6%A6%82%E5%BF%B5/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/42__%E5%A6%82%E4%BD%95%E5%BA%94%E5%AF%B9%E7%AA%81%E5%8F%91%E6%B5%81%E9%87%8F%E6%BC%8F%E6%A1%B6%E5%92%8C%E4%BB%A4%E7%89%8C%E6%A1%B6%E7%9A%84%E6%A6%82%E5%BF%B5/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="42__如何应对突发流量：漏桶和令牌桶的概念">
+  <meta property="og:description" content="你好，我是温铭。
+在前面几节课中，我们学习了代码的优化和缓存的设计，这两者都和应用的整体性能息息相关，自然值得我们重视。不过，在真实的业务场景下，我们还需要考虑到突发流量对性能的影响。这里的突发流量，可能是正常的，比如突发新闻、促销活动等带来的流量；也可能是不正常的流量，比如 DDoS 攻击等。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="OpenResty从入门到实战">
+
+  <meta itemprop="name" content="42__如何应对突发流量：漏桶和令牌桶的概念">
+  <meta itemprop="description" content="你好，我是温铭。
+在前面几节课中，我们学习了代码的优化和缓存的设计，这两者都和应用的整体性能息息相关，自然值得我们重视。不过，在真实的业务场景下，我们还需要考虑到突发流量对性能的影响。这里的突发流量，可能是正常的，比如突发新闻、促销活动等带来的流量；也可能是不正常的流量，比如 DDoS 攻击等。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3063">
+  <meta itemprop="keywords" content="OpenResty从入门到实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="42__如何应对突发流量：漏桶和令牌桶的概念">
+  <meta name="twitter:description" content="你好，我是温铭。
+在前面几节课中，我们学习了代码的优化和缓存的设计，这两者都和应用的整体性能息息相关，自然值得我们重视。不过，在真实的业务场景下，我们还需要考虑到突发流量对性能的影响。这里的突发流量，可能是正常的，比如突发新闻、促销活动等带来的流量；也可能是不正常的流量，比如 DDoS 攻击等。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">42__如何应对突发流量：漏桶和令牌桶的概念</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3063 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#流量控制">流量控制</a></li>
+        <li><a href="#漏桶算法">漏桶算法</a></li>
+        <li><a href="#令牌桶算法">令牌桶算法</a></li>
+        <li><a href="#nginx-的限速模块">Nginx 的限速模块</a></li>
+        <li><a href="#写在最后">写在最后</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是温铭。</p>
+<p>在前面几节课中，我们学习了代码的优化和缓存的设计，这两者都和应用的整体性能息息相关，自然值得我们重视。不过，在真实的业务场景下，我们还需要考虑到突发流量对性能的影响。这里的突发流量，可能是正常的，比如突发新闻、促销活动等带来的流量；也可能是不正常的流量，比如 DDoS 攻击等。</p>
+<p>OpenResty 现在主要被用于作为接入层的 Web 应用，比如 WAF 和 API 网关，这些都要应对刚刚提到的正常和不正常的突发流量。毕竟，如果不能处理好突发流量，后端的服务就很容易被打垮，业务也就无法正常响应了。所以今天，我们就专门来看下，应对突发流量的方法。</p>
+<h2 id="流量控制">流量控制</h2>
+<p>流量控制是 WAF 和 API 网关都必备的功能之一，它通过一些算法对入口流量进行疏导和控制，来保证上游的服务能够正常运行，从而让系统整体保持健康。</p>
+<p>因为后端的处理能力是有限的，我们需要从成本、用户体验、系统稳定性等多个方面来综合考虑。不管使用哪一种算法，都不可避免地会造成正常用户请求变慢甚至被拒绝，牺牲部分的用户体验。所以，<strong>流量控制是需要在业务稳定和用户体验之间做平衡的</strong>。</p>
+<p>其实，在现实的生活中，也经常会有流量控制的情况。比如春运等高峰期的地铁站、火车站、机场等交通枢纽，这些交通工具的处理能力是有上限的，那么，为了保证交通安全运转，就需要乘客排队等候、分批次进站。</p>
+<p>这自然会影响乘客的体验，但从整体上看，却保证了系统的高效和安全运行。如果没有排队和分批次，而是让大家一窝蜂地进站，最后的结局估计就是整个系统瘫痪了。</p>
+<p>回到技术上来说，举个例子，比如我们假定一个上游服务的设计上限是每分钟处理 1 万条请求。在高峰期的时候，如果入口处没有限流的控制，每分钟堆积的任务达到了 2 万条，那么这个上游服务的处理性能就会下降，可能只有每分钟 5000 条的处理速度，并且持续恶化，最终或许会导致服务不可用。这显然不是我们希望看到的结果。</p>
+<p>应对这种突发的流量，我们常用的流量控制算法，便是漏桶和令牌桶。</p>
+<h2 id="漏桶算法">漏桶算法</h2>
+<p>让我们先来看下漏桶算法，它的目的是让请求的速率保持恒定，把突发的流量变得平滑。不过，它是怎么做到的呢？</p>
+<p>我们来看下面这张概念抽象图，来自维基百科中对于漏桶算法的介绍：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/OpenResty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/bef23a2cc374f91d93af95a8b9ae3d01.png" alt=""></p>
+<p>我们可以把客户端的流量想象成是从水管中流出来的水，水的流速不确定，忽快忽慢；而外层的流量处理模块，就是接水的桶子，并且这个水桶的底部有一个漏水用的洞眼。这其实也就是漏桶算法名字的由来，很明显，这种算法有下面几个好处。</p>
+<p>第一，不管流入水桶的是涓涓细流还是滔天洪水，都可以保证，水桶中流出来的水速是恒定的。这种稳定的流量对于上游服务是很友好的，这也是流量整形的意义。</p>
+<p>第二，水桶本身有一定容积，可以积累一定的水来等待流出水桶。这对于终端的请求来说，相当于是如果不能被立即处理，可以排队等待。</p>
+<p>第三，超过水桶容积的水，不会被水桶接纳，而是会直接流走。这里对应的是，终端的请求如果太多，超过了排队的长度，就直接返回给客户端失败信息。这时候的服务端已经处理不过来了，自然，请求连排队的必要也就没有了。</p>
+<p>说了这么多的优点，那么，这个算法应该如何来实现呢？我们以 OpenResty 中自带的 <a href="./req.lua.md#L73">resty.limit.req 库</a>为例来看，它就是按照漏桶算法实现的限速模块，下节课我还会介绍更多内容。今天我们先来简单了解下，下面是它关键的几行代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">local elapsed = now - tonumber(rec.last)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">excess = max(tonumber(rec.excess) - rate * abs(elapsed) / 1000 + 1000,0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if excess &gt; self.burst then
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return nil, &#34;rejected&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- return the delay in seconds, as well as excess
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">return excess / rate, excess / 1000
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我来简单解释一下这几行代码。其中， <code>elapsed</code> 是当前请求和上一次请求之间的毫秒数，<code>rate</code> 则是我们设定的每秒的速率。因为<code>rate</code>的最小单位是 0.001 s/r，所以在上述实现的代码中，都需要乘以 1000 以便计算。</p>
+<p><code>excess</code> 表示还在排队的请求数量，它为 0 表示水桶是空的，没有请求在排队，而<code>burst</code> 是指整个水桶的容积。如果 <code>excess</code> 已经大于 <code>burst</code>，也就意味着水桶已经满了，这时候再进来的流量就会被直接丢弃；如果 <code>excess</code> 大于 0、小于 <code>burst</code>，就进入了排队来等待处理，这里最后返回的 <code>excess / rate</code> ，也就是要等待的时间。</p>
+<p>这样，在后端服务处理能力不变的情况下，我们就可以通过调节 <code>burst</code> 的大小，来控制突发流量的排队时长了。是直接告诉用户现在请求量太大，稍后再重试，还是让用户多等待一段时间，这就要看你的业务场景了。</p>
+<h2 id="令牌桶算法">令牌桶算法</h2>
+<p>令牌桶算法和漏桶算法的目的都是一样的，用来保证后端服务不被突发流量打垮，不过这两者的实现方式并不相同。</p>
+<p>在漏桶算法中，我们一般会使用终端 IP 作为 key，来做限流限速的依据。这样，对于每一个终端用户而言，漏桶算法的出口速率就是固定的。不过，这就会存在一个问题：</p>
+<blockquote>
+<p>如果 A 用户的请求频率很高，而其他用户的请求频率很低，即使此时的整体服务压力并不大，但漏桶算法就会把 A 的部分请求变慢或者拒绝掉，虽然这时候服务其实是可以处理的。</p>
+</blockquote>
+<p>这时候就有令牌桶的用武之地了。</p>
+<p>漏桶算法关注的是流量的平滑，而令牌桶则可以允许突发流量进入后端服务。令牌桶的原理，是以一个固定的速度向水桶内放入令牌，只要桶没有满就一直往里面放。这样，终端过来的请求都需要先到令牌桶中获取到令牌，才可以被后端处理；如果桶里面没有令牌，那么请求就会被拒绝。</p>
+<p>不过，OpenResty 自带的限流限速的库中没有实现令牌桶，所以，这里我用又拍云开源的、基于令牌桶的限速模块 <code>lua-resty-limit-rate</code> 的<a href="./lua-resty-limit-rate.md">代码</a>为例，为你做一个简单的介绍：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">limit_rate</span> <span class="o">=</span> <span class="n">require</span> <span class="s2">&#34;resty.limit.rate&#34;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">--</span> <span class="n">global</span> <span class="mi">20</span><span class="n">r</span><span class="o">/</span><span class="n">s</span> <span class="mi">6000</span><span class="n">r</span><span class="o">/</span><span class="mi">5</span><span class="n">m</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">lim_global</span> <span class="o">=</span> <span class="n">limit_rate</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_limit_rate_store&#34;</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">6000</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="o">--</span> <span class="n">single</span> <span class="mi">2</span><span class="n">r</span><span class="o">/</span><span class="n">s</span> <span class="mi">600</span><span class="n">r</span><span class="o">/</span><span class="mi">5</span><span class="n">m</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">lim_single</span> <span class="o">=</span> <span class="n">limit_rate</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="s2">&#34;my_limit_rate_store&#34;</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">600</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">local</span> <span class="n">t0</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">lim_global</span><span class="p">:</span><span class="n">take_available</span><span class="p">(</span><span class="s2">&#34;__global__&#34;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">local</span> <span class="n">t1</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="n">lim_single</span><span class="p">:</span><span class="n">take_available</span><span class="p">(</span><span class="n">ngx</span><span class="o">.</span><span class="k">var</span><span class="o">.</span><span class="n">arg_userid</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="k">if</span> <span class="n">t0</span> <span class="o">==</span> <span class="mi">1</span> <span class="n">then</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="o">--</span> <span class="n">global</span> <span class="n">bucket</span> <span class="n">is</span> <span class="ow">not</span> <span class="n">hungry</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">else</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="n">t1</span> <span class="o">==</span> <span class="mi">1</span> <span class="n">then</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="o">--</span> <span class="n">single</span> <span class="n">bucket</span> <span class="n">is</span> <span class="ow">not</span> <span class="n">hungry</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">else</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">ngx</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">503</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">end</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">end</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这段代码中，我们设置了两个令牌桶：一个是全局的令牌桶，一个是以 <code>b ngx.var.arg_userid</code> 为 key，按照用户来划分的令牌桶。这里用两个令牌桶做了一个组合，主要有这么一个好处：</p>
+<ul>
+<li>在全局令牌桶还有令牌的情况下，不用去判断用户的令牌桶，如果后端服务能够正常运行，就尽可能多地去服务用户的突发请求；</li>
+<li>在全局令牌桶没有令牌的情况下，不能无差别地拒绝请求，这时候就需要判断下单个用户的令牌桶，把突发请求比较多的用户请求给拒绝掉。这样一来，就可以保证其他用户的请求不会受到影响。</li>
+</ul>
+<p>显然，令牌桶和漏桶相比，更具有弹性，允许出现突发流量传递到后端服务的情况。当然，它们都各有利弊，你可以根据自己的情况来选择使用。</p>
+<h2 id="nginx-的限速模块">Nginx 的限速模块</h2>
+<p>说完这两个算法，我们最后再来看下，在熟悉的 Nginx 中是如何来实现限流限速的。在 Nginx 中，<a href="./ngx%5Fhttp%5Flimit%5Freq%5Fmodule.md">limit_req 模块</a>是最常用的限速模块，下面是一个简单的配置：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> server {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    location /search/ {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        limit_req zone=one burst=5;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码是把终端的 IP 地址作为 key，申请了一块名为 <code>one</code> 的 10M 的内存空间地址，并把速率限制为每秒 1 个请求。</p>
+<p>在 server 的 location 中，还引用了 <code>one</code> 这个限速规则，并把 <code>brust</code> 设置为 5。这就表示在超过速率 1r/s 的情况下，同时允许有 5 个请求排队等待被处理，给出了一定的缓存区。要注意，如果没有设置 brust，超过速率的请求是会被直接拒绝的。</p>
+<p>Nginx 的这个模块是基于漏桶来实现的，所以和我们上面介绍过的 OpenResty 中的 <code>resty.limit.req</code> ，本质都是一样的。</p>
+<h2 id="写在最后">写在最后</h2>
+<p>事实上，Nginx 中设置限流限速的最大问题是，无法动态地修改。毕竟，修改完配置文件后，还需要重启才能生效，这在快速变化的环境下显然是无法接受的。下节课，我们就来看下，在 OpenResty 中如何动态地实现限流限速。</p>
+<p>最后，给你留一个思考题。站在 WAF 和 API 网关的视角来看，是否有更好的方法来识别哪些是正常用户的请求，哪些是恶意的请求呢？因为，对于正常用户的突发流量，我们可以快速扩容后端服务，来增加服务的能力；而对于恶意的请求，最好可以在接入层就直接拒绝掉。</p>
+<p>希望你可以认真思考这个问题，并且留言和我一起讨论。也欢迎你把这篇文章转发给你的同事、朋友，一起学习和进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/OpenResty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/12bf8dad402b50769d64b4fa7ee66191.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/">OpenResty从入门到实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/42__%E5%A6%82%E4%BD%95%E6%9E%84%E5%BB%BA%E9%AB%98%E6%95%88%E7%9A%84flutter_app%E6%89%93%E5%8C%85%E5%8F%91%E5%B8%83%E7%8E%AF%E5%A2%83/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">42__如何构建高效的Flutter_App打包发布环境？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/42__%E5%A6%82%E4%BD%95%E6%95%B4%E7%90%86%E5%87%BA%E6%88%91%E4%BB%AC%E8%87%AA%E5%B7%B1%E7%9A%84%E5%8F%AF%E8%A7%86%E5%8C%96%E5%B7%A5%E5%85%B7%E9%9B%86/">
+            <span class="next-text nav-default">42__如何整理出我们自己的可视化工具集？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

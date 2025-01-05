@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>35_瞧一瞧Linux：虚拟文件系统如何管理文件？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+在前面的课程中，我们已经实现了 Cosmos 下的文件系统 rfs，相信你已经感受到了一个文件系统是如何管理文件的。今天我们一起来瞧一瞧 Linux 是如何管理文件，也验证一下 Linux 那句口号：一切皆为文件。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/35_%E7%9E%A7%E4%B8%80%E7%9E%A7linux%E8%99%9A%E6%8B%9F%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86%E6%96%87%E4%BB%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/35_%E7%9E%A7%E4%B8%80%E7%9E%A7linux%E8%99%9A%E6%8B%9F%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86%E6%96%87%E4%BB%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="35_瞧一瞧Linux：虚拟文件系统如何管理文件？">
+  <meta property="og:description" content="你好，我是 LMOS。
+在前面的课程中，我们已经实现了 Cosmos 下的文件系统 rfs，相信你已经感受到了一个文件系统是如何管理文件的。今天我们一起来瞧一瞧 Linux 是如何管理文件，也验证一下 Linux 那句口号：一切皆为文件。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="35_瞧一瞧Linux：虚拟文件系统如何管理文件？">
+  <meta itemprop="description" content="你好，我是 LMOS。
+在前面的课程中，我们已经实现了 Cosmos 下的文件系统 rfs，相信你已经感受到了一个文件系统是如何管理文件的。今天我们一起来瞧一瞧 Linux 是如何管理文件，也验证一下 Linux 那句口号：一切皆为文件。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="8090">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="35_瞧一瞧Linux：虚拟文件系统如何管理文件？">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+在前面的课程中，我们已经实现了 Cosmos 下的文件系统 rfs，相信你已经感受到了一个文件系统是如何管理文件的。今天我们一起来瞧一瞧 Linux 是如何管理文件，也验证一下 Linux 那句口号：一切皆为文件。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">35_瞧一瞧Linux：虚拟文件系统如何管理文件？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 8090 字 </span>
+          <span class="more-meta"> 预计阅读 17 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#什么是-vfs">什么是 VFS</a></li>
+        <li><a href="#vfs-数据结构">VFS 数据结构</a>
+          <ul>
+            <li><a href="#超级块结构">超级块结构</a></li>
+            <li><a href="#目录结构">目录结构</a></li>
+            <li><a href="#文件索引结点">文件索引结点</a></li>
+            <li><a href="#打开的文件">打开的文件</a></li>
+            <li><a href="#四大对象结构的关系">四大对象结构的关系</a></li>
+          </ul>
+        </li>
+        <li><a href="#文件操作">文件操作</a>
+          <ul>
+            <li><a href="#打开文件">打开文件</a></li>
+            <li><a href="#读写文件">读写文件</a></li>
+            <li><a href="#关闭文件">关闭文件</a></li>
+          </ul>
+        </li>
+        <li><a href="#文件系统实例">文件系统实例</a>
+          <ul>
+            <li><a href="#注册-trfs">注册 trfs</a></li>
+            <li><a href="#使用-trfs-文件系统">使用 trfs 文件系统</a></li>
+          </ul>
+        </li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>在前面的课程中，我们已经实现了 Cosmos 下的文件系统 rfs，相信你已经感受到了一个文件系统是如何管理文件的。今天我们一起来瞧一瞧 Linux 是如何管理文件，也验证一下 Linux 那句口号：一切皆为文件。</p>
+<p>为此，我们需要首先搞清楚什么是 VFS，接着理清为了实现 VFS 所用到的数据结构，然后看看一个文件的打开、读写、关闭的过程，最后我们还要亲自动手实践，在 VFS 下实现一个“小”且“能跑”的文件系统。</p>
+<p>下面让我们开始吧！这节课的配套代码，你可以从这里下载。</p>
+<h2 id="什么是-vfs">什么是 VFS</h2>
+<p>VFS（Virtual Filesystem）就像伙伴系统、SLAB 内存管理算法一样，也是 SUN 公司最早在 Sloaris 上实现的虚拟文件系统，也可以理解为通用文件系统抽象层。Linux 又一次“白嫖”了 Sun 公司的技术。</p>
+<p>在 Linux 中，支持 EXT、XFS、JFS、BTRFS、FAT、NTFS 等多达十几种不同的文件系统，但不管在什么储存设备上使用什么文件系统，也不管访问什么文件，都可以统一地使用一套 open(), read()、write()、close() 这样的接口。</p>
+<p>这些接口看上去都很简单，但要基于不同的存储设备设计，还要适应不同的文件系统，这并不容易。这就得靠优秀的 VFS 了，它提供了一个抽象层，让不同的文件系统表现出一致的行为。</p>
+<p>对于用户空间和内核空间的其他部分，这些文件系统看起来都是一样的：文件都有目录，都支持建立、打开，读写、关闭和删除操作，不用关注不同文件系统的细节。</p>
+<p>我来给你画张图，你一看就明白了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/3c35ff9498d47db97ea315fd1130735d.png" alt=""></p>
+<p>VFS 架构图</p>
+<p>你有没有发现，在计算机科学领域的很多问题，都可以通过<strong>增加一个中间的抽象层</strong>来解决，上图中 Linux 的 VFS 层就是应用和许多文件系统之间的抽象层。VFS 向上对应用提供了操作文件的标准接口，向下规范了一个文件系统要接入 VFS 必需要实现的机制。</p>
+<p>后面我们就会看到，VFS 提供一系列数据结构和具体文件系统应该实现的回调函数。这样，一个文件系统就可以被安装到 VFS 中了。操作具体文件时，VFS 会根据需要调用具体文件系统的函数。从此文件系统的细节就被 VFS 屏蔽了，应用程序只需要调用标准的接口就行了。</p>
+<h2 id="vfs-数据结构">VFS 数据结构</h2>
+<p>VFS 为了屏蔽各个文件系统的差异，就必须要定义一组通用的数据结构，规范各个文件系统的实现，<strong>每种结构都对应一套回调函数集合</strong>，这是典型的<strong>面向对象的设计方法</strong>。</p>
+<p>这些数据结构包含描述文件系统信息的超级块、表示文件名称的目录结构、描述文件自身信息的索引节点结构、表示打开一个文件的实例结构。下面我们依次探讨这些结构。</p>
+<h3 id="超级块结构">超级块结构</h3>
+<p>首先我们来看一看超级块结构，这个结构用于一个具体文件系统的相关信息，其中包含了 VFS 规定的标准信息，也有具体文件系统的特有信息，Linux 系统中的超级块结构是一个文件系统安装在 VFS 中的标识。我们来看看代码，如下所示。</p>
+<p>struct super_block {<br>
+struct list_head    s_list; //超级块链表<br>
+dev_t           s_dev;     //设备标识<br>
+unsigned char       s_blocksize_bits;//以位为单位的块大小<br>
+unsigned long       s_blocksize;//以字节为单位的块大小<br>
+loff_t          s_maxbytes; //一个文件最大多少字节<br>
+struct file_system_type *s_type; //文件系统类型<br>
+const struct super_operations   *s_op;//超级块函数集合<br>
+const struct dquot_operations   *dq_op;//磁盘限额函数集合<br>
+unsigned long       s_flags;//挂载标志<br>
+unsigned long       s_magic;//文件系统魔数<br>
+struct dentry       *s_root;//挂载目录<br>
+struct rw_semaphore s_umount;//卸载信号量<br>
+int         s_count;//引用计数<br>
+atomic_t        s_active;//活动计数<br>
+struct block_device *s_bdev;//块设备<br>
+void            *s_fs_info;//文件系统信息<br>
+time64_t           s_time_min;//最小时间限制<br>
+time64_t           s_time_max;//最大时间限制<br>
+char            s_id[32];   //标识名称<br>
+uuid_t          s_uuid;     //文件系统的 UUID<br>
+struct list_lru     s_dentry_lru;//LRU 方式挂载的目录<br>
+struct list_lru     s_inode_lru;//LRU 方式挂载的索引结点<br>
+struct mutex        s_sync_lock;//同步锁 <br>
+struct list_head    s_inodes;   //所有的索引节点<br>
+spinlock_t      s_inode_wblist_lock;//回写索引节点的锁<br>
+struct list_head    s_inodes_wb;    //挂载所有要回写的索引节点<br>
+} __randomize_layout;</p>
+<p>上述代码中我删除了我们现在不用关注的代码，在文件系统被挂载到 VFS 的某个目录下时，VFS 会调用获取文件系统自己的超级块的函数，用具体文件系统的信息构造一个上述结构的实例，有了这个结构实例，VFS 就能感知到一个文件系统插入了。</p>
+<p>下面我们来看看超级块函数集合。</p>
+<p>struct super_operations {<br>
+//分配一个新的索引结点结构<br>
+struct inode *(*alloc_inode)(struct super_block *sb);<br>
+//销毁给定的索引节点<br>
+void (*destroy_inode)(struct inode *);<br>
+//释放给定的索引节点<br>
+void (*free_inode)(struct inode *);<br>
+//VFS 在索引节点为脏 (改变) 时，会调用此函数<br>
+void (*dirty_inode) (struct inode *, int flags);<br>
+//该函数用于将给定的索引节点写入磁盘<br>
+int (*write_inode) (struct inode *, struct writeback_control *wbc);<br>
+//在最后一个指向索引节点的引用被释放后，VFS 会调用该函数<br>
+int (*drop_inode) (struct inode *);<br>
+void (*evict_inode) (struct inode *);<br>
+//减少超级块计数调用<br>
+void (*put_super) (struct super_block *);<br>
+//同步文件系统调用<br>
+int (*sync_fs)(struct super_block *sb, int wait);<br>
+//释放超级块调用<br>
+int (*freeze_super) (struct super_block *);<br>
+//释放文件系统调用<br>
+int (*freeze_fs) (struct super_block *);<br>
+int (*thaw_super) (struct super_block *);<br>
+int (*unfreeze_fs) (struct super_block *);<br>
+//VFS 通过调用该函数，获取文件系统状态<br>
+int (*statfs) (struct dentry *, struct kstatfs *);<br>
+//当指定新的安装选项重新安装文件系统时，VFS 会调用此函数<br>
+int (*remount_fs) (struct super_block *, int *, char *);<br>
+//VFS 调用该函数中断安装操作。该函数被网络文件系统使用，如 NFS<br>
+void (*umount_begin) (struct super_block *);<br>
+};</p>
+<p>上述代码中 super_operations 结构中所有函数指针所指向的函数，都应该要由一个具体文件系统实现。</p>
+<p>有了超级块和超级块函数集合结构，VFS 就能让一个文件系统的信息和表示变得规范了。也就是说，文件系统只要实现了 super_block 和 super_operations 两个结构，就可以插入到 VFS 中了。但是，这样的文件系统没有任何实质性的功能，我们接着往下看。</p>
+<h3 id="目录结构">目录结构</h3>
+<p>Linux 系统中所有文件都是用目录组织的，就连具体的文件系统也是挂载到某个目录下的。Linux 系统的目录结构逻辑示意图，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/7d2604b1ef0eb9255c31b8222bafd1bc.png" alt=""></p>
+<p>Linux 目录结构</p>
+<p>上图中显示了 Linux 文件目录情况，也显示了一个设备上的文件系统是如何挂载到某个目录下的。那么 VFS 用什么来表示一个目录呢？我们来看看代码，如下所示。</p>
+<p>//快速字符串保存关于字符串的 &ldquo;元数据&rdquo;（即长度和哈希值）<br>
+struct qstr {<br>
+union {<br>
+struct {<br>
+HASH_LEN_DECLARE;<br>
+};<br>
+u64 hash_len;<br>
+};<br>
+const unsigned char *name;//指向名称字符串<br>
+};<br>
+struct dentry {<br>
+unsigned int d_flags;       //目录标志<br>
+seqcount_spinlock_t d_seq;  //锁<br>
+struct hlist_bl_node d_hash;//目录的哈希链表   <br>
+struct dentry *d_parent;    //指向父目录<br>
+struct qstr d_name;         //目录名称<br>
+struct inode *d_inode;      //指向目录文件的索引节点<br>
+unsigned char d_iname[DNAME_INLINE_LEN];    //短目录名<br>
+struct lockref d_lockref;   //目录锁与计数<br>
+const struct dentry_operations *d_op;//目录的函数集<br>
+struct super_block *d_sb;   //指向超级块<br>
+unsigned long d_time;       //时间<br>
+void *d_fsdata;         //指向具体文件系统的数据<br>
+union {<br>
+struct list_head d_lru;     //LRU 链表<br>
+wait_queue_head_t *d_wait;<br>
+};<br>
+struct list_head d_child;   //挂入父目录的链表节点<br>
+struct list_head d_subdirs; //挂载所有子目录的链表<br>
+} __randomize_layout;</p>
+<p>我们可以发现，dentry 结构中包含了目录的名字和挂载子目录的链表，同时也能指向父目录。但是需要注意的是，<strong>目录也是文件，需要用 inode 索引结构来管理目录文件数据</strong>。</p>
+<p>这个目录文件数据，你可以把它想象成一个表，表有三列，它们分别是：名称、类型（文件或者目录）、inode 号。扫描这个表，就可以找出这个目录文件中包含的所有子目录或者文件。</p>
+<p>接着我们来看看目录函数集，如下所示。</p>
+<p>struct dentry_operations {<br>
+//该函数判断目录对象是否有效<br>
+int (*d_revalidate)(struct dentry *, unsigned int);<br>
+int (*d_weak_revalidate)(struct dentry *, unsigned int);<br>
+//该函数为目录项生成散列值，当目录项要加入散列表中时，VFS 调用该函数<br>
+int (*d_hash)(const struct dentry *, struct qstr *);<br>
+//VFS 调用该函数来比较 name1 和 name2 两个文件名。多数文件系统使用 VFS 的默认操作，仅做字符串比较。对于有些文件系统，比如 FAT，简单的字符串比较不能满足其需要，因为 FAT 文件系统不区分大小写<br>
+int (*d_compare)(const struct dentry *,<br>
+unsigned int, const char *, const struct qstr *);<br>
+//当目录项对象的计数值等于 0 时，VFS 调用该函数<br>
+int (*d_delete)(const struct dentry *);<br>
+//当分配目录时调用<br>
+int (*d_init)(struct dentry *);<br>
+//当目录项对象要被释放时，VFS 调用该函数，默认情况下，它什么也不做<br>
+void (*d_release)(struct dentry *);<br>
+void (*d_prune)(struct dentry *);<br>
+//当一个目录项对象丢失了相关索引节点时，VFS 调用该函数。默认情况下 VFS 会调用 iput() 函数释放索引节点<br>
+void (*d_iput)(struct dentry *, struct inode *);<br>
+//当需要生成一个 dentry 的路径名时被调用<br>
+char *(*d_dname)(struct dentry *, char *, int);<br>
+//当要遍历一个自动挂载时被调用（可选），这应该创建一个新的 VFS 挂载记录并将该记录返回给调用者<br>
+struct vfsmount *(*d_automount)(struct path *);<br>
+//文件系统管理从 dentry 的过渡（可选）时，被调用<br>
+int (*d_manage)(const struct path *, bool);<br>
+//叠加/联合类型的文件系统实现此方法<br>
+struct dentry *(*d_real)(struct dentry *, const struct inode *);<br>
+} ____cacheline_aligned;</p>
+<p>dentry_operations 结构中的函数，也需要具体文件系统实现，下层代码查找或者操作目录时 VFS 就会调用这些函数，让具体文件系统根据自己储存设备上的目录信息处理并设置 dentry 结构中的信息，这样文件系统中的目录就和 VFS 的目录对应了。</p>
+<p>现在我们已经解决了目录，下面我们就去看看 VFS 怎么实现表示文件。</p>
+<h3 id="文件索引结点">文件索引结点</h3>
+<p>VFS 用 inode 结构表示一个文件索引结点，它里面包含文件权限、文件所属用户、文件访问和修改时间、文件数据块号等一个文件的全部信息，一个 inode 结构就对应一个文件，代码如下所示。</p>
+<p>struct inode {<br>
+umode_t         i_mode;//文件访问权限<br>
+unsigned short      i_opflags;//打开文件时的标志<br>
+kuid_t          i_uid;//文件所属的用户 id<br>
+kgid_t          i_gid;//文件所属的用户组 id<br>
+unsigned int        i_flags;//标志<br>
+const struct inode_operations   *i_op;//inode 函数集<br>
+struct super_block  *i_sb;//指向所属超级块<br>
+struct address_space    *i_mapping;//文件数据在内存中的页缓存<br>
+unsigned long       i_ino;//inode 号<br>
+dev_t           i_rdev;//实际设备标志符<br>
+loff_t          i_size;//文件大小，以字节为单位<br>
+struct timespec64   i_atime;//文件访问时间<br>
+struct timespec64   i_mtime;//文件修改时间<br>
+struct timespec64   i_ctime;//最后修改时间<br>
+spinlock_t      i_lock; //保护 inode 的自旋锁<br>
+unsigned short          i_bytes;//使用的字节数<br>
+u8          i_blkbits;//以位为单位的块大小；<br>
+u8          i_write_hint;<br>
+blkcnt_t        i_blocks;<br>
+struct list_head    i_io_list; <br>
+struct list_head    i_lru;      //在缓存 LRU 中的链表节点<br>
+struct list_head    i_sb_list;//在超级块中中的链表节点<br>
+struct list_head    i_wb_list;<br>
+atomic64_t      i_version;//版本号<br>
+atomic64_t      i_sequence;<br>
+atomic_t        i_count;//计数<br>
+atomic_t        i_dio_count;//直接 io 进程计数<br>
+atomic_t        i_writecount;//写进程计数<br>
+union {<br>
+const struct file_operations    *i_fop;//文件函数集合<br>
+void (*free_inode)(struct inode *);<br>
+};<br>
+struct file_lock_context    *i_flctx;<br>
+struct address_space    i_data;<br>
+void            *i_private; //私有数据指针<br>
+} __randomize_layout;</p>
+<p>inode 结构表示一个文件的全部信息，但这个 inode 结构是 VFS 使用的，跟某个具体文件系统上的“inode”结构并不是一一对应关系。</p>
+<p>所以，inode 结构还有一套函数集合，用于具体文件系统根据自己特有的信息，构造出 VFS 使用的 inode 结构，这套函数集合如下所示。</p>
+<p>struct inode_operations {<br>
+//VFS 通过系统 create() 和 open() 接口来调用该函数，从而为 dentry 对象创建一个新的索引节点<br>
+int (*create) (struct inode *, struct dentry *,int);<br>
+//该函数在特定目录中寻找索引节点，该索引节点要对应于 dentry 中给出的文件名<br>
+struct dentry * (*lookup) (struct inode *, struct dentry *);<br>
+//被系统 link() 接口调用，用来创建硬连接。硬链接名称由 dentry 参数指定<br>
+int (*link) (struct dentry *, struct inode *, struct dentry *);<br>
+//被系统 unlink() 接口调用，删除由目录项 dentry 链接的索引节点对象<br>
+int (*unlink) (struct inode *, struct dentry *);<br>
+//被系统 symlik() 接口调用，创建符号连接，该符号连接名称由 symname 指定，连接对象是 dir 目录中的 dentry 目录项<br>
+int (*symlink) (struct inode *, struct dentry *, const char *);<br>
+//被 mkdir() 接口调用，创建一个新目录。<br>
+int (*mkdir) (struct inode *, struct dentry *, int);<br>
+//被 rmdir() 接口调用，删除 dentry 目录项代表的文件<br>
+int (*rmdir) (struct inode *, struct dentry *);<br>
+//被 mknod() 接口调用，创建特殊文件 (设备文件、命名管道或套接字)。<br>
+int (*mknod) (struct inode *, struct dentry *, int, dev_t);<br>
+//VFS 调用该函数来移动文件。文件源路径在 old_dir 目录中，源文件由 old_dentry 目录项所指定，目标路径在 new_dir 目录中，目标文件由 new_dentry 指定<br>
+int (*rename) (struct inode *, struct dentry *, struct inode *, struct dentry *);<br>
+//被系统 readlink() 接口调用，拷贝数据到特定的缓冲 buffer 中。拷贝的数据来自 dentry 指定的符号链接<br>
+int (*readlink) (struct dentry *, char *, int);<br>
+//被 VFS 调用，从一个符号连接查找他指向的索引节点<br>
+int (*follow_link) (struct dentry *, struct nameidata *);<br>
+//在 follow_link() 调用之后，该函数由 vfs 调用进行清除工作<br>
+int (*put_link) (struct dentry *, struct nameidata *);<br>
+//被 VFS 调用，修改文件的大小，在调用之前，索引节点的 i_size 项必须被设置成预期的大小<br>
+void (*truncate) (struct inode *);<br>
+//该函数用来检查给定的 inode 所代表的文件是否允许特定的访问模式，如果允许特定的访问模式，返回 0，否则返回负值的错误码<br>
+int (*permission) (struct inode *, int);<br>
+//被 notify_change 接口调用，在修改索引节点之后，通知发生了改变事件<br>
+int (*setattr) (struct dentry *, struct iattr *);<br>
+//在通知索引节点需要从磁盘中更新时，VFS 会调用该函数<br>
+int (*getattr) (struct vfsmount *, struct dentry *, struct kstat *);<br>
+//被 VFS 调用，向 dentry 指定的文件设置扩展属性<br>
+int (*setxattr) (struct dentry *, const char *, const void *, size_t, int);<br>
+//被 VFS 调用，拷贝给定文件的扩展属性 name 对应的数值<br>
+ssize_t (*getxattr) (struct dentry *, const char *, void *, size_t);<br>
+//该函数将特定文件所有属性列表拷贝到一个缓冲列表中<br>
+ssize_t (*listxattr) (struct dentry *, char *, size_t);<br>
+//该函数从给定文件中删除指定的属性<br>
+int (*removexattr) (struct dentry *, const char *);     <br>
+};</p>
+<p>上述代码中删除了一些我们不用关心的接口，VFS 通过定义 inode 结构和函数集合，并让具体文件系统实现这些函数，使得 VFS 及其上层只要关注 inode 结构，底层的具体文件系统根据自己的文件信息生成相应的 inode 结构，达到了 VFS 表示一个文件的目的。</p>
+<p>下面我们再看一个实例，进一步理解 VFS 如何表示一个打开的文件。</p>
+<h3 id="打开的文件">打开的文件</h3>
+<p>如何表示应用进程打开的不同文件呢？VFS 设计了一个文件对象结构解决这个问题，文件对象结构表示进程已打开的文件。</p>
+<p>如果我们站在应用程序的角度思考，文件对象结构会首先进入我们的视野。应用程序直接处理的就是文件，而不是超级块、索引节点或目录项。文件对象结构包含了我们非常熟悉的信息，如访问模式、当前读写偏移等。我们来看代码，如下所示。</p>
+<p>struct file {<br>
+union {<br>
+struct llist_node   fu_llist;<br>
+struct rcu_head     fu_rcuhead;<br>
+} f_u;<br>
+struct path     f_path; //文件路径<br>
+struct inode        *f_inode;  //文件对应的 inode<br>
+const struct file_operations    *f_op;//文件函数集合<br>
+spinlock_t      f_lock;  //自旋锁<br>
+enum rw_hint        f_write_hint;<br>
+atomic_long_t       f_count;//文件对象计数据。<br>
+unsigned int        f_flags;//文件标志<br>
+fmode_t         f_mode;//文件权限<br>
+struct mutex        f_pos_lock;//文件读写位置锁<br>
+loff_t          f_pos;//进程读写文件的当前位置<br>
+u64         f_version;//文件版本<br>
+void            *private_data;//私有数据<br>
+} __randomize_layout</p>
+<p>在进程结构中有个文件表，那个表其实就是 <strong>file 结构的指针数组</strong>，进程每打开一个文件就会建立一个 file 结构实例，并将其地址放入数组中，最后返回对应的数组下标，就是我们调用 open 函数返回的那个整数。</p>
+<p>对于 file 结构，也有对应的函数集合 file_operations 结构，下面我们再次看看它，如下所示。</p>
+<p>struct file_operations {<br>
+struct module *owner;//所在的模块<br>
+loff_t (*llseek) (struct file *, loff_t, int);//调整读写偏移<br>
+ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//读<br>
+ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//写<br>
+int (*mmap) (struct file *, struct vm_area_struct *);//映射<br>
+int (*open) (struct inode *, struct file *);//打开<br>
+int (*flush) (struct file *, fl_owner_t id);//刷新<br>
+int (*release) (struct inode *, struct file *);//关闭<br>
+} __randomize_layout;</p>
+<p>file_operations 结构中的函数指针有 31 个，这里我删除了我们不需要关注的函数指针，这些函数依然需要具体文件系统来实现，由 VFS 层来调用。</p>
+<p>到此为止，有超级块、目录结构、文件索引节点，打开文件的实例，通过四大对象就可以描述抽象出一个文件系统了。而四大对象的对应的操作函数集合，又由具体的文件系统来实现，这两个一结合，一个文件系统的状态和行为都具备了。</p>
+<p>这样一个具体的文件系统，我们就可以安装在 VFS 中运行了。</p>
+<h3 id="四大对象结构的关系">四大对象结构的关系</h3>
+<p>我们已经了解构成文件系统的四大对象结构，但是要想完全了解它们的工作机制，还必须要搞清楚，随着 VFS 代码的运行，这些对象结构在内存中的建立和销毁以及它们之间的组织关系。</p>
+<p>一图胜千言，我来为你画一幅全景图，你就明白四大对象结构之间的关系了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/62ac370e8500301a893ab84d967c6e9a.png" alt=""></p>
+<p>VFS 对象关系示意图</p>
+<p>上图中展示了 spuer_block、dentry、inode、file 四大结构的关系，当然这只是打开一个文件的情况，如果打开了多个文件则相应的结构实例就会增加，不过底层逻辑还是前面图里梳理的这样，万变不离其宗。</p>
+<p>搞清楚了四大结构的关系后，我们就可以探索文件相关的操作了。</p>
+<h2 id="文件操作">文件操作</h2>
+<p>Linux 下常规的文件操作就是打开、读、写、关闭，让我们分别讨论一下这几种文件操作的流程。</p>
+<h3 id="打开文件">打开文件</h3>
+<p>在对文件进行读写之前，需要先用 open 函数打开这个文件。应用程序使用标准库的 open 函数来打开一个文件。</p>
+<p>在 x86_64 架构里，open 函数会执行 syscall 指令，从用户态转换到内核态，并且最终调用到 do_sys_open 函数，然进而调用 do_sys_openat2 函数。</p>
+<p>我给你画一幅流程图，你一看就明白了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/e9cacf58d84a5861c5ff2af609e58ede.png" alt=""></p>
+<p>打开文件流程</p>
+<p>上图中清楚了展示了从系统调用开始，打开文件的全部主要流程，<strong>file、dentry、inode 三个结构</strong>在这个流程中扮演了重要角色。在查找路径和检查权限后，进入了具体文件系统的打开流程。</p>
+<h3 id="读写文件">读写文件</h3>
+<p>只要打开了一个文件，就可以对文件进行进一步的读写操作了。其实读写本是两个操作，只数据流向不同：读操作是数据从文件经由内核流向进程，而写操作是数据从进程经由内核流向文件。</p>
+<p>所以，下面我们以读操作为例，看看读操作的流程，我依然用画图的方式为你展示这一流程，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/a346bff7faa74ca013e776e69ce52b85.png" alt=""></p>
+<p>读文件流程示意图</p>
+<p>上图中展示了读文件操作的函数调用流程，写文件操作的流程和读文件操作的流程一样，只是数据流向不同，我就不展开了，你可以自己想一下。</p>
+<h3 id="关闭文件">关闭文件</h3>
+<p>我们打开了文件，也对文件进行了读写，然后就到了关闭文件的环节。为什么要关闭文件呢？因为打开文件时分配了很多资源，如 file、dentry、inode，内存缓冲区等，这些资源使用了都要还给系统，如若不然，就会导致资源泄漏。</p>
+<p>下面我们就来看看关闭文件的操作流程，我同样用画图的方式为你展示这一流程，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/25ed42aef57618cd0b5d3be5bd60537d.png" alt=""></p>
+<p>关闭文件流程示意图</p>
+<p>以上就是关闭一个文件的全部流程。它回收了 file 结构，其中最重要<strong>是调用了文件系统的 flush 函数</strong>，它给了文件系统一个刷新缓冲区，把数据写回储存设备的机会，这样就保证了储存设备数据的一致性。</p>
+<h2 id="文件系统实例">文件系统实例</h2>
+<p>为了进一步加深理解，我为你写了一个 400 行代码左右的最小文件系统，放在本课的目录中，**它就是 trfs，这是一个内存文件系统，支持文件的建立、打开、读写、关闭等操作，通过内存块存放数据。**下面仅对文件系统的注册和使用进行介绍。</p>
+<h3 id="注册-trfs">注册 trfs</h3>
+<p>我们先来看看如何注册 trfs 文件系统的。由于我们的文件系统是写在 Linux 内核模块中的，所以我们要在模块初始化函数中注册文件系统，Linux 注册文件系统需要一个参数，即文件系统类型结构，它里面放着文件系统名字、文件系统挂载、卸载的回调函数，代码如下所示。</p>
+<p>struct file_system_type trfs_fs_type = {<br>
+.owner = THIS_MODULE,<br>
+.name = &ldquo;trfs&rdquo;,//文件系统名字<br>
+.mount = trfs_mount,//文件系统挂载函数<br>
+.kill_sb = trfs_kill_superblock,//文件系统卸载函数<br>
+};<br>
+static int trfs_init(void)<br>
+{<br>
+int ret;<br>
+init_fileinfo();//初始化 trfs 文件系统数据结构<br>
+ret = register_filesystem(&amp;trfs_fs_type);//注册文件系统<br>
+if (ret)<br>
+printk(KERN_EMERG&quot;register trfs failed\n&quot;);<br>
+printk(KERN_EMERG&quot;trfs is ok\n&quot;);<br>
+return ret;<br>
+}<br>
+static void trfs_exit(void)<br>
+{<br>
+exit_fileinfo();//释放 trfs 文件系统数据结构<br>
+unregister_filesystem(&amp;trfs_fs_type);//卸载文件系统<br>
+}<br>
+module_init(trfs_init);<br>
+module_exit(trfs_exit);</p>
+<p>上面的代码只展示了注册文件系统的代码，其它代码在课程相关代码目录下。支持文件打开、读写、关闭操作，能够在内存中保存文件数据。</p>
+<h3 id="使用-trfs-文件系统">使用 trfs 文件系统</h3>
+<p>注册了 trfs 文件系统，这不等于可以使用这个文件系统存取文件了。那么如何使用 trfs 文件系统呢？当然首先是编译 trfs 内核模块代码，在终端中 cd 到对应的目录下执行 make，然后把编译好的内核模块插入到系统中，最后就是将这个文件系统挂载到一个具体的目录下。代码如下。</p>
+<p>make                           //编译内核模块<br>
+sudo insmod trfs.ko            //把内核模块插入到内核<br>
+sudo mount -t trfs none /mnt/  // 挂载 trfs 文件系统到 mnt 目录下</p>
+<p>有了上述代码，挂载 trfs 到 /mnt 下，我们就可以用 touch 建立一个文件，然后用 cat 读取这个文件了。</p>
+<p>好了，关于 trfs 我们就介绍到这里了，trfs 的代码我已经帮你写好了，你可以自己慢慢研究，有什么问题也可以和我交流。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>至此，Linux 的虚拟文件系统就告一段落了，同时也标志着我们整个文件系统章节结束了。那么本节课中学了什么呢？我来为你梳理一下。</p>
+<p>1.<strong>什么是 VFS</strong>。VFS 是虚拟文件系统，是 Linux 中一个中间层，它抽象了文件系统共有数据结构和操作函数集合。一个具体的文件系统只要实现这些函数集合就可以插入 VFS 中了，也因为 VFS 的存在，使得 Linux 可以同时支持各种不同的文件系统。</p>
+<p>2.VFS 的数据结构，为了搞清楚 VFS 的实现原理，我们研究了它的数据结构，分别是表示文件系统的超级块结构、表示文件路径的目录结构、表示文件自身的索引结点结构，还有进程打开的文件实例结构，最后还了解了它们之间的关系。</p>
+<p>3. 为了进一步了解 <strong>VFS 和具体文件系统的工作机制</strong>，我们研究了文件的打开、读写、关闭等操作流程，在这些流程我们明白了 VFS 是如何和具体文件系统打通的。</p>
+<p>4. 为了弄懂一个具体文件系统是如何安装到 VFS 中的，我们实现了一个小的 trfs 文件系统，trfs 将文件数据保存在内存中，将 trfs 挂载到 Linux 中某个目录下就可以让一些标准应用进行文件操作了。</p>
+<p>你或许还想知道 EXT4 文件系统是如何划分储存设备的，还想知道 EXT4 是如何管理目录和文件索引结点的。那请你以勤奋为舟，遨游在 LInux 代码的海洋中，寻找 EXT4 这座大岛吧。</p>
+<h2 id="思考题">思考题</h2>
+<p>请说一说 super_block，dentry，inode 这三个数据结构，一定要在储存设备上对应存在吗？</p>
+<p>欢迎你在留言区跟我交流互动，也推荐你把这节课分享给朋友一起学习进步。</p>
+<p>我是 LMOS，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8C%81%E7%BB%AD%E4%BA%A4%E4%BB%9836%E8%AE%B2/35_%E5%BF%AB%E9%80%9F%E6%9E%84%E5%BB%BA%E6%8C%81%E7%BB%AD%E4%BA%A4%E4%BB%98%E7%B3%BB%E7%BB%9F%E4%BA%8Cgitlab_%E8%A7%A3%E5%86%B3%E4%BB%A3%E7%A0%81%E7%AE%A1%E7%90%86%E9%97%AE%E9%A2%98/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">35_快速构建持续交付系统（二）：GitLab_解决代码管理问题</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/35_%E5%A6%82%E4%BD%95%E6%9E%84%E5%BB%BA%E4%BA%91%E7%AB%AF%E4%B8%80%E5%AF%B9%E5%A4%9A%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/">
+            <span class="next-text nav-default">35_如何构建云端一对多直播系统？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

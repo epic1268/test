@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>14解析Webpack源码，实现自己的构建工具 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="前端工程化和基础建设这个话题，自然少不了分析构建工具。作为前端工程中最常见、最经典的构建工具，Webpack 必须要有一个独立小节进行精讲。可是，关于 Webpack 什么样的内容才更有意义呢？当前社区，Webpack 插件编写、loader 编写相关内容已经非常多了，甚至 Tapable 机制也已经有了涉猎。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/14%E8%A7%A3%E6%9E%90webpack%E6%BA%90%E7%A0%81%E5%AE%9E%E7%8E%B0%E8%87%AA%E5%B7%B1%E7%9A%84%E6%9E%84%E5%BB%BA%E5%B7%A5%E5%85%B7/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/14%E8%A7%A3%E6%9E%90webpack%E6%BA%90%E7%A0%81%E5%AE%9E%E7%8E%B0%E8%87%AA%E5%B7%B1%E7%9A%84%E6%9E%84%E5%BB%BA%E5%B7%A5%E5%85%B7/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="14解析Webpack源码，实现自己的构建工具">
+  <meta property="og:description" content="前端工程化和基础建设这个话题，自然少不了分析构建工具。作为前端工程中最常见、最经典的构建工具，Webpack 必须要有一个独立小节进行精讲。可是，关于 Webpack 什么样的内容才更有意义呢？当前社区，Webpack 插件编写、loader 编写相关内容已经非常多了，甚至 Tapable 机制也已经有了涉猎。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="前端基础建设与架构30讲">
+
+  <meta itemprop="name" content="14解析Webpack源码，实现自己的构建工具">
+  <meta itemprop="description" content="前端工程化和基础建设这个话题，自然少不了分析构建工具。作为前端工程中最常见、最经典的构建工具，Webpack 必须要有一个独立小节进行精讲。可是，关于 Webpack 什么样的内容才更有意义呢？当前社区，Webpack 插件编写、loader 编写相关内容已经非常多了，甚至 Tapable 机制也已经有了涉猎。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3806">
+  <meta itemprop="keywords" content="前端基础建设与架构30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="14解析Webpack源码，实现自己的构建工具">
+  <meta name="twitter:description" content="前端工程化和基础建设这个话题，自然少不了分析构建工具。作为前端工程中最常见、最经典的构建工具，Webpack 必须要有一个独立小节进行精讲。可是，关于 Webpack 什么样的内容才更有意义呢？当前社区，Webpack 插件编写、loader 编写相关内容已经非常多了，甚至 Tapable 机制也已经有了涉猎。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">14解析Webpack源码，实现自己的构建工具</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3806 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>前端工程化和基础建设这个话题，自然少不了分析构建工具。作为前端工程中最常见、最经典的构建工具，Webpack 必须要有一个独立小节进行精讲。可是，关于 Webpack 什么样的内容才更有意义呢？当前社区，Webpack 插件编写、loader 编写相关内容已经非常多了，甚至 Tapable 机制也已经有了涉猎。</p>
+<p>这一讲，我们独辟蹊径，从 Webpack 的实现入手，帮助你构建一个自己的工程化工具。</p>
+<p>Webpack 的初心和揭秘</p>
+<p>我不建议对着 Webpack 源码讲解，因为 Webpack 是一个庞大的体系，其源码逐行讲解太过枯燥，真正能转化在技术积累上的内容较少。今天，我们先抽丝剥茧，从 Webpack 的使命谈起，相信你会有一个更加清晰的认知。</p>
+<p>Webpack 的介绍只有简单一句：</p>
+<p>Webpack is a static module bundler for modern JavaScript applications.</p>
+<p>虽然 Webpack 看上去无所不能，但从其本质上来说，Webpack 实质就是一个“前端模块打包器”。前端模块打包器做的事情很简单：它帮助开发者将 JavaScript 模块（各种类型的模块化规范）打包为一个或多个 JavaScript 脚本文件。</p>
+<p>我们回到最初起源，前端为什么需要一个模块打包器呢？其实理由很简单：</p>
+<p>不是所有浏览器都直接支持 JavaScript 规范；</p>
+<p>前端需要管理依赖脚本，把控不同脚本加载的顺序；</p>
+<p>前端需要按顺序加载不同类型的静态资源。</p>
+<p>想象一下，我们的 Web 应用有这样一段内容：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;html&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/1.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/2.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/3.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/4.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/5.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/src/6.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">&lt;/html&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每个 JavaScript 文件都需要额外的 HTTP 请求获取，并且因为依赖关系，
+1.js
+到
+6.js
+需要按顺序加载。因此，打包需求应运而生：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;html&gt;
+</span></span><span class="line"><span class="cl">  &lt;script src=&#34;/dist/bundle.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">&lt;/html&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里需要注意几点：</p>
+<p>随着 HTTP/2 技术的推广，未来长远上看，浏览器像上述代码一样发送多个请求不再是性能瓶颈，但目前来看还过于乐观（更多内容参见 HTTP/2 简介）；</p>
+<p>并不是将所有脚本都打包在一起就是性能最优，
+/dist/bundle.js
+的 size 一般较大，但这属于另外“性能优化”话题了，相关内容，我们在10 讲“代码拆分和按需加载：缩减 bundle size，把性能做到极致”中已有涉及。</p>
+<p>总之，打包器的需求就是前端“刚需”，实现上述打包需要也并不简单，需要考虑：</p>
+<p>如何维护不同脚本的打包顺序，保证
+bundle.js
+的可用性；</p>
+<p>如何避免不同脚本、不同模块的命名冲突；</p>
+<p>在打包过程中，如何确定真正需要的脚本，而不将没有用到的脚本排除在
+bundle.js
+之外？</p>
+<p>事实上，虽然当前 Webpack 依靠 loader 机制实现了对于不同类型资源的解析和打包，依靠插件机制实现了第三方介入编译构建的过程，但究其本质，Webpack 只是一个“无所不能”的打包器，实现了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">a.js + b.js + c.js. =&gt; bundle.js
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>的能力。</p>
+<p>下面我们继续揭秘 Webpack 在打包过程中的奥秘。</p>
+<p>为了简化，我们以 ESM 模块化规范举例。假设我们有：</p>
+<p>circle.js
+模块求圆形面积；</p>
+<p>square.js
+模块求正方形面积；</p>
+<p>app.js
+模块作为主模块。</p>
+<p>对应内容分别如下代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">filename</span><span class="p">:</span> <span class="n">circle</span><span class="o">.</span><span class="n">js</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="bp">PI</span> <span class="o">=</span> <span class="mf">3.141</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">export</span> <span class="n">default</span> <span class="n">function</span> <span class="n">area</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="bp">PI</span> <span class="o">*</span> <span class="n">radius</span> <span class="o">*</span> <span class="n">radius</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="n">filename</span><span class="p">:</span> <span class="n">square</span><span class="o">.</span><span class="n">js</span>
+</span></span><span class="line"><span class="cl"><span class="k">export</span> <span class="n">default</span> <span class="n">function</span> <span class="n">area</span><span class="p">(</span><span class="n">side</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">side</span> <span class="o">*</span> <span class="n">side</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="n">filename</span><span class="p">:</span> <span class="n">app</span><span class="o">.</span><span class="n">js</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">squareArea</span> <span class="n">from</span> <span class="s1">&#39;./square&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">import</span> <span class="n">circleArea</span> <span class="n">from</span> <span class="s1">&#39;./circle&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of square: &#39;</span><span class="p">,</span> <span class="n">squareArea</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl"><span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of circle&#39;</span><span class="p">,</span> <span class="n">circleArea</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>经过 Webpack 打包之后，我们用
+bundle.js
+来表示 Webpack 处理结果（精简并可读化处理后）：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">filename</span><span class="p">:</span> <span class="n">bundle</span><span class="o">.</span><span class="n">js</span>
+</span></span><span class="line"><span class="cl"><span class="k">const</span> <span class="n">modules</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="s1">&#39;circle.js&#39;</span><span class="p">:</span> <span class="n">function</span><span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="bp">PI</span> <span class="o">=</span> <span class="mf">3.141</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">exports</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="n">function</span> <span class="n">area</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="bp">PI</span> <span class="o">*</span> <span class="n">radius</span> <span class="o">*</span> <span class="n">radius</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">},</span>
+</span></span><span class="line"><span class="cl">  <span class="s1">&#39;square.js&#39;</span><span class="p">:</span> <span class="n">function</span><span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">exports</span><span class="o">.</span><span class="n">default</span> <span class="o">=</span> <span class="n">function</span> <span class="n">area</span><span class="p">(</span><span class="n">side</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="n">side</span> <span class="o">*</span> <span class="n">side</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">},</span>
+</span></span><span class="line"><span class="cl">  <span class="s1">&#39;app.js&#39;</span><span class="p">:</span> <span class="n">function</span><span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">squareArea</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;square.js&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">default</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">circleArea</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;circle.js&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">default</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of square: &#39;</span><span class="p">,</span> <span class="n">squareArea</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of circle&#39;</span><span class="p">,</span> <span class="n">circleArea</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">webpackBundle</span><span class="p">({</span>
+</span></span><span class="line"><span class="cl">  <span class="n">modules</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="n">entry</span><span class="p">:</span> <span class="s1">&#39;app.js&#39;</span>
+</span></span><span class="line"><span class="cl"><span class="p">});</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上代码，我们维护了
+modules
+变量，存储了不同模块信息，这个 map 中，key 为模块路径名，value 为一个被 wrapped 过的模块函数，我们先称之为
+module factory function
+，该函数形如：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span><span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="o">//</span> <span class="err">模块内容</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样做是为每个模块提供
+exports
+和
+require
+能力，同时保证了每个模块都处于一个隔离的函数作用域范围。</p>
+<p>有了
+modules
+变量还不够，我们依赖
+webpackBundle
+方法，将所有内容整合在一起。
+webpackBundle
+方法接收
+modules
+模块信息以及一个入口脚本。代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">webpackBundle</span><span class="p">({</span> <span class="n">modules</span><span class="p">,</span> <span class="n">entry</span> <span class="p">})</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">moduleCache</span> <span class="o">=</span> <span class="p">{};</span>
+</span></span><span class="line"><span class="cl">  
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">require</span> <span class="o">=</span> <span class="n">moduleName</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">如果已经解析并缓存过，直接返回缓存内容</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">moduleCache</span><span class="p">[</span><span class="n">moduleName</span><span class="p">])</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="n">moduleCache</span><span class="p">[</span><span class="n">moduleName</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">exports</span> <span class="o">=</span> <span class="p">{};</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">这里是为了防止循环引用</span>
+</span></span><span class="line"><span class="cl">    <span class="n">moduleCache</span><span class="p">[</span><span class="n">moduleName</span><span class="p">]</span> <span class="o">=</span> <span class="n">exports</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">执行模块内容，如果遇见了</span> <span class="n">require</span> <span class="err">方法，则继续递归执行</span> <span class="n">require</span> <span class="err">方法</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">modules</span><span class="p">[</span><span class="n">moduleName</span><span class="p">](</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">moduleCache</span><span class="p">[</span><span class="n">moduleName</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">  <span class="p">};</span>
+</span></span><span class="line"><span class="cl">  <span class="n">require</span><span class="p">(</span><span class="n">entry</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中需要注意：webpackBundle 方法中声明的
+require
+方法和 CommonJS 规范中的 require 是两回事，该
+require
+方法是 Webpack 自己实现的模块化解决方案。</p>
+<p>我们通过下图来总结一下 Webpack 风格的打包器原理和流程：</p>
+<p>Webpack 打包器原理和流程图</p>
+<p>讲到这里，我们再扩充一下另一个打包器——Rollup 的打包原理，针对上述代码，Rollup 打包过后的产出为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="bp">PI</span> <span class="o">=</span> <span class="mf">3.141</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="n">function</span> <span class="n">circle</span><span class="o">$</span><span class="n">area</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="bp">PI</span> <span class="o">*</span> <span class="n">radius</span> <span class="o">*</span> <span class="n">radius</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">function</span> <span class="n">square</span><span class="o">$</span><span class="n">area</span><span class="p">(</span><span class="n">side</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">side</span> <span class="o">*</span> <span class="n">side</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of square: &#39;</span><span class="p">,</span> <span class="n">square</span><span class="o">$</span><span class="n">area</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl"><span class="n">console</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;Area of circle&#39;</span><span class="p">,</span> <span class="n">circle</span><span class="o">$</span><span class="n">area</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上代码，我们看到，Rollup 的原理思想与 Webpack 不同：Rollup 不会维护一个 module map，而是将所有模块拍平（flatten）放到 bundle 中，也就不存在包裹函数（module factory function）。</p>
+<p>为了保证命名冲突不出现，Rollup 将函数和变量名进行了改写，在模块脚本
+circle.js
+和
+square.js
+中，都命名了一个
+area
+方法。经过 Rollup 打包后，
+area
+方法根据模块主体，进行了重命名。</p>
+<p>我们将 Webpack 和 Rollup 的打包方式进行对比总结。</p>
+<p>Webpack 理念：</p>
+<p>使用了 module map，维护项目中的依赖关系；</p>
+<p>使用了包裹函数，对每个模块进行包裹；</p>
+<p>使用了一个“runtime”方法（这里举例为
+webpackBundle
+），最终合成 bundle 内容。</p>
+<p>Rollup 理念：</p>
+<p>将每个模块拍平；</p>
+<p>不使用包裹函数，不需要对每个模块进行包裹。</p>
+<p>不同的理念也会造成不同的打包结果，这里我想给你留一个思考题：在 Rollup 处理理念下，如果模块出现了循环依赖，会发生什么现象呢？</p>
+<p>手动实现打包器</p>
+<p>前面内容我们剖析了以 Webpak、Rollup 为代表的打包器核心原理。下面内容，我们将手动实现一个自己的简易打包器，我们的目标将会向 Webpack 打包设计对齐。核心思路如下：</p>
+<p>读取入口文件（比如
+entry.js
+）；</p>
+<p>基于 AST 分析入口文件，并产出依赖列表；</p>
+<p>使用 Babel 将相关模块编译到 ES5；</p>
+<p>对每个依赖模块产出一个唯一的 ID，方便后续读取模块相关内容；</p>
+<p>将每个依赖以及经过 Babel 编译过后的内容，存储在一个对象中进行维护；</p>
+<p>遍历上一步中的对象，构建出一个依赖图（Dependency Graph）；</p>
+<p>将各模块内容 bundle 产出。</p>
+<p>我们来一步一步实现。首先创建项目：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">mkdir bundler-playground &amp;&amp; cd $_
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>并启动 npm：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">npm init -y
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>安装以下依赖：</p>
+<p>@babel/parser
+用于分析源代码，产出 AST；</p>
+<p>@babel/traverse
+用于遍历 AST，找到 import 声明；</p>
+<p>@babel/core
+用于编译，将源代码编译为 ES5；</p>
+<p>@babel/preset-env
+搭配
+@babel/core
+使用；</p>
+<p>resolve
+用于获取依赖的绝对路径。</p>
+<p>相关命令：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">npm install --save @babel/parser @babel/traverse @babel/core  @babel/preset-env resolve
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>做完了这些，我们开始核心逻辑的编写，创建
+index.js
+，并引入如下依赖代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">fs</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;fs&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">path</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;path&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">parser</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;@babel/parser&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">traverse</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;@babel/traverse&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">default</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">babel</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;@babel/core&#34;</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"> <span class="k">const</span> <span class="n">resolve</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">&#34;resolve&#34;</span><span class="p">)</span><span class="o">.</span><span class="n">sync</span><span class="p">;</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>接着，我们维护一个全局 ID，并通过遍历 AST，访问
+ImportDeclaration
+节点，收集依赖到
+deps
+数组中，同时完成 Babel 降级编译：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">let</span> <span class="n">ID</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl"><span class="n">function</span> <span class="n">createModuleInfo</span><span class="p">(</span><span class="n">filePath</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">读取模块源代码</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">content</span> <span class="o">=</span> <span class="n">fs</span><span class="o">.</span><span class="n">readFileSync</span><span class="p">(</span><span class="n">filePath</span><span class="p">,</span> <span class="s2">&#34;utf-8&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">对源代码进行</span> <span class="n">AST</span> <span class="err">产出</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">ast</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">sourceType</span><span class="p">:</span> <span class="s2">&#34;module&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">相关模块依赖数组</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">deps</span> <span class="o">=</span> <span class="p">[];</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">遍历模块</span> <span class="n">AST</span><span class="err">，将依赖推入</span> <span class="n">deps</span> <span class="err">数组中</span>
+</span></span><span class="line"><span class="cl">    <span class="n">traverse</span><span class="p">(</span><span class="n">ast</span><span class="p">,</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ImportDeclaration</span><span class="p">:</span> <span class="p">({</span> <span class="n">node</span> <span class="p">})</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">deps</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">source</span><span class="o">.</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">id</span> <span class="o">=</span> <span class="n">ID</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">编译为</span> <span class="n">ES5</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="p">{</span> <span class="n">code</span> <span class="p">}</span> <span class="o">=</span> <span class="n">babel</span><span class="o">.</span><span class="n">transformFromAstSync</span><span class="p">(</span><span class="n">ast</span><span class="p">,</span> <span class="n">null</span><span class="p">,</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">presets</span><span class="p">:</span> <span class="p">[</span><span class="s2">&#34;@babel/preset-env&#34;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">id</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="n">filePath</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="n">deps</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">        <span class="n">code</span>
+</span></span><span class="line"><span class="cl">    <span class="p">};</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中，相关注释已经比较明晰了。这里需要指出的是，我们采用了自增 ID的方式，如果采用随机的 GUID，会是更安全的做法。</p>
+<p>至此，我们实现了对一个模块的分析，并产出：</p>
+<p>该模块对应 ID；</p>
+<p>该模块路径；</p>
+<p>该模块的依赖数组；</p>
+<p>该模块经过 Babel 编译后的代码。</p>
+<p>接下来，我们生成整个项目的依赖树（Dependency Graph）。代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">createDependencyGraph</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">获取模块信息</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">entryInfo</span> <span class="o">=</span> <span class="n">createModuleInfo</span><span class="p">(</span><span class="n">entry</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">项目依赖树</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">graphArr</span> <span class="o">=</span> <span class="p">[];</span>
+</span></span><span class="line"><span class="cl">    <span class="n">graphArr</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">entryInfo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">以入口模块为起点，遍历整个项目依赖的模块，并将每个模块信息维护到</span> <span class="n">graphArr</span> <span class="err">中</span>
+</span></span><span class="line"><span class="cl">    <span class="k">for</span> <span class="p">(</span><span class="k">const</span> <span class="n">module</span> <span class="n">of</span> <span class="n">graphArr</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">module</span><span class="o">.</span><span class="n">map</span> <span class="o">=</span> <span class="p">{};</span>
+</span></span><span class="line"><span class="cl">        <span class="n">module</span><span class="o">.</span><span class="n">deps</span><span class="o">.</span><span class="n">forEach</span><span class="p">(</span><span class="n">depPath</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="n">baseDir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">filePath</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="n">moduleDepPath</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">depPath</span><span class="p">,</span> <span class="p">{</span> <span class="n">baseDir</span> <span class="p">});</span>
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="n">moduleInfo</span> <span class="o">=</span> <span class="n">createModuleInfo</span><span class="p">(</span><span class="n">moduleDepPath</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="n">graphArr</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">moduleInfo</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="n">module</span><span class="o">.</span><span class="n">map</span><span class="p">[</span><span class="n">depPath</span><span class="p">]</span> <span class="o">=</span> <span class="n">moduleInfo</span><span class="o">.</span><span class="n">id</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">graphArr</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中，我们使用一个数组类型的变量
+graphArr
+来描述整个项目的依赖树情况。最后，我们基于
+graphArr
+内容，将相关模块进行打包。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">function</span> <span class="n">pack</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">moduleArgArr</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">module</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="err">`</span><span class="o">$</span><span class="p">{</span><span class="n">module</span><span class="o">.</span><span class="n">id</span><span class="p">}:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">factory</span><span class="p">:</span> <span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">                <span class="o">$</span><span class="p">{</span><span class="n">module</span><span class="o">.</span><span class="n">code</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">            <span class="p">},</span>
+</span></span><span class="line"><span class="cl">            <span class="n">map</span><span class="p">:</span> <span class="o">$</span><span class="p">{</span><span class="n">JSON</span><span class="o">.</span><span class="n">stringify</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">map</span><span class="p">)}</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span><span class="err">`</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">});</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">iifeBundler</span> <span class="o">=</span> <span class="err">`</span><span class="p">(</span><span class="n">function</span><span class="p">(</span><span class="n">modules</span><span class="p">){</span>
+</span></span><span class="line"><span class="cl">        <span class="k">const</span> <span class="n">require</span> <span class="o">=</span> <span class="n">id</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="p">{</span><span class="n">factory</span><span class="p">,</span> <span class="n">map</span><span class="p">}</span> <span class="o">=</span> <span class="n">modules</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="n">localRequire</span> <span class="o">=</span> <span class="n">requireDeclarationName</span> <span class="o">=&gt;</span> <span class="n">require</span><span class="p">(</span><span class="n">map</span><span class="p">[</span><span class="n">requireDeclarationName</span><span class="p">]);</span> 
+</span></span><span class="line"><span class="cl">            <span class="k">const</span> <span class="n">module</span> <span class="o">=</span> <span class="p">{</span><span class="n">exports</span><span class="p">:</span> <span class="p">{}};</span>
+</span></span><span class="line"><span class="cl">            <span class="n">factory</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">exports</span><span class="p">,</span> <span class="n">localRequire</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">            <span class="k">return</span> <span class="n">module</span><span class="o">.</span><span class="n">exports</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="n">require</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        
+</span></span><span class="line"><span class="cl">        <span class="p">})({</span><span class="o">$</span><span class="p">{</span><span class="n">moduleArgArr</span><span class="o">.</span><span class="n">join</span><span class="p">()}})</span>
+</span></span><span class="line"><span class="cl">    <span class="err">`</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">iifeBundler</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上代码，我们创建一个对应每个模块的模板对象：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">return</span> <span class="err">`</span><span class="o">$</span><span class="p">{</span><span class="n">module</span><span class="o">.</span><span class="n">id</span><span class="p">}:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">factory</span><span class="p">:</span> <span class="p">(</span><span class="n">exports</span><span class="p">,</span> <span class="n">require</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">$</span><span class="p">{</span><span class="n">module</span><span class="o">.</span><span class="n">code</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">},</span>
+</span></span><span class="line"><span class="cl">  <span class="n">map</span><span class="p">:</span> <span class="o">$</span><span class="p">{</span><span class="n">JSON</span><span class="o">.</span><span class="n">stringify</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">map</span><span class="p">)}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span><span class="err">`</span><span class="p">;</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在
+factory
+对应的内容中，我们包裹模块代码，并注入
+exports
+和
+require
+两个参数。同时，我们构造了一个 IIFE 风格的代码区块，用于将依赖树中的代码串联在一起。最难理解的部分在于：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">iifeBundler</span> <span class="o">=</span> <span class="err">`</span><span class="p">(</span><span class="n">function</span><span class="p">(</span><span class="n">modules</span><span class="p">){</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">require</span> <span class="o">=</span> <span class="n">id</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">const</span> <span class="p">{</span><span class="n">factory</span><span class="p">,</span> <span class="n">map</span><span class="p">}</span> <span class="o">=</span> <span class="n">modules</span><span class="p">[</span><span class="n">id</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">      <span class="k">const</span> <span class="n">localRequire</span> <span class="o">=</span> <span class="n">requireDeclarationName</span> <span class="o">=&gt;</span> <span class="n">require</span><span class="p">(</span><span class="n">map</span><span class="p">[</span><span class="n">requireDeclarationName</span><span class="p">]);</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">const</span> <span class="n">module</span> <span class="o">=</span> <span class="p">{</span><span class="n">exports</span><span class="p">:</span> <span class="p">{}};</span>
+</span></span><span class="line"><span class="cl">      <span class="n">factory</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">exports</span><span class="p">,</span> <span class="n">localRequire</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="n">module</span><span class="o">.</span><span class="n">exports</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">require</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})({</span><span class="o">$</span><span class="p">{</span><span class="n">moduleArgArr</span><span class="o">.</span><span class="n">join</span><span class="p">()}})</span>
+</span></span><span class="line"><span class="cl">  <span class="err">`</span><span class="p">;</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>针对这段代码，我们进行更细致的分析。</p>
+<p>使用 IIFE 的方式，来保证模块变量不会影响到全局作用域。</p>
+<p>构造好的项目依赖树（Dependency Graph）数组，将会作为名为
+modules
+的行参，传递给 IIFE。</p>
+<p>我们构造了
+require(id)
+方法，这个方法的意义在于：</p>
+<p>通过
+require(map[requireDeclarationName])
+方式，按顺序递归调用各个依赖模块；</p>
+<p>通过调用
+factory(module.exports, localRequire)
+执行模块相关代码；</p>
+<p>该方法最终返回
+module.exports
+对象，module.exports 最初值为空对象（
+{exports: {}}
+），但在一次次调用
+factory()
+函数后，
+module.exports
+对象内容已经包含了模块对外暴露的内容了。</p>
+<p>总结</p>
+<p>这一讲虽然标题包含“解析 Webpack 源码”，但我们并没有采用源码解读的方式展开，而是从打包器的设计原理入手，换一种角度进行 Webpack 源码解读，并最终动手实现了一个自己的简易打包器。</p>
+<p>实际上，打包过程主要分为两步：依赖解析（Dependency Resolution）和代码打包（Bundling）：</p>
+<p>在依赖解析过程中，我们通过 AST 技术，找到每个模块的依赖模块，并组合为最终的项目依赖树。</p>
+<p>在代码打包过程中，我们使用 Babel 对源代码进行编译，其中也包括了对 imports / exports（即对 ESM） 的编译。</p>
+<p>整个过程稍微有些抽象，需要你用心体会。</p>
+<p>主要内容总结为下图：</p>
+<p>在实际生产环节，打包器当然功能更多，比如需要考虑：code spliting 甚至 watch mode 以及 reloading 能力等。但是不管什么样的特性和能力，只要我们理清最初心，掌握最基本的思想，任何疑问都会迎刃而解。</p>
+<p>-&ndash; ### 精选评论 ##### *帅： &gt; 妙啊~</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/">前端基础建设与架构30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/14%E4%BA%92%E9%80%9A%E6%9C%89%E6%97%A0%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E8%B7%A8%E8%AF%AD%E8%A8%80%E7%9A%84apm%E4%BA%A4%E4%BA%92%E5%8D%8F%E8%AE%AE/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">14互通有无：如何设计跨语言的APM交互协议？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/netty%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8Erpc%E5%AE%9E%E8%B7%B5/14%E4%B8%BE%E4%B8%80%E5%8F%8D%E4%B8%89netty%E9%AB%98%E6%80%A7%E8%83%BD%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86%E8%AE%BE%E8%AE%A1%E4%B8%8B/">
+            <span class="next-text nav-default">14举一反三：Netty高性能内存管理设计（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

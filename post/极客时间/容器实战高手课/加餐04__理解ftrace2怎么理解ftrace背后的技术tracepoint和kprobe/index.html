@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。
+前面两讲，我们分别学习了 perf 和 ftrace 这两个最重要 Linux tracing 工具。在学习过程中，我们把重点放在了这两个工具最基本的功能点上。
+不过你学习完这些之后，我们内核调试版图的知识点还没有全部点亮。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9004__%E7%90%86%E8%A7%A3ftrace2%E6%80%8E%E4%B9%88%E7%90%86%E8%A7%A3ftrace%E8%83%8C%E5%90%8E%E7%9A%84%E6%8A%80%E6%9C%AFtracepoint%E5%92%8Ckprobe/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9004__%E7%90%86%E8%A7%A3ftrace2%E6%80%8E%E4%B9%88%E7%90%86%E8%A7%A3ftrace%E8%83%8C%E5%90%8E%E7%9A%84%E6%8A%80%E6%9C%AFtracepoint%E5%92%8Ckprobe/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？">
+  <meta property="og:description" content="你好，我是程远。
+前面两讲，我们分别学习了 perf 和 ftrace 这两个最重要 Linux tracing 工具。在学习过程中，我们把重点放在了这两个工具最基本的功能点上。
+不过你学习完这些之后，我们内核调试版图的知识点还没有全部点亮。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？">
+  <meta itemprop="description" content="你好，我是程远。
+前面两讲，我们分别学习了 perf 和 ftrace 这两个最重要 Linux tracing 工具。在学习过程中，我们把重点放在了这两个工具最基本的功能点上。
+不过你学习完这些之后，我们内核调试版图的知识点还没有全部点亮。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4039">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？">
+  <meta name="twitter:description" content="你好，我是程远。
+前面两讲，我们分别学习了 perf 和 ftrace 这两个最重要 Linux tracing 工具。在学习过程中，我们把重点放在了这两个工具最基本的功能点上。
+不过你学习完这些之后，我们内核调试版图的知识点还没有全部点亮。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">加餐04__理解ftrace（2）：怎么理解ftrace背后的技术tracepoint和kprobe？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4039 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#tracepoint-和-kprobe-的应用举例">tracepoint 和 kprobe 的应用举例</a></li>
+      </ul>
+    </li>
+    <li><a href="#perf-list--grep-tracepoint">perf list | grep Tracepoint</a></li>
+    <li><a href="#find-syskerneldebugtracingevents--type-d--sort">find /sys/kernel/debug/tracing/events -type d | sort</a></li>
+    <li><a href="#-perf-stat--a--e-fsdo_sys_open----sleep-10"># perf stat -a -e fs:do_sys_open &ndash; sleep 10</a></li>
+    <li><a href="#pwd">pwd</a></li>
+    <li><a href="#echo-1--eventsfsdo_sys_openenable">echo 1 &gt; events/fs/do_sys_open/enable</a></li>
+    <li><a href="#cat-trace">cat trace</a></li>
+    <li><a href="#tracer-nop">tracer: nop</a></li>
+    <li><a href="#heading"></a></li>
+    <li><a href="#_------irqs-off">_&mdash;&ndash;=&gt; irqs-off</a></li>
+    <li><a href="#-_-----need-resched">/ _&mdash;-=&gt; need-resched</a></li>
+    <li><a href="#--_----hardirqsoftirq">| / _&mdash;=&gt; hardirq/softirq</a></li>
+    <li><a href="#--_---preempt-depth">|| / _&ndash;=&gt; preempt-depth</a></li>
+    <li><a href="#------delay">||| /     delay</a></li>
+    <li><a href="#task-pid---cpu------timestamp--function">TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION</a></li>
+    <li><a href="#---------------------------">| |       |   ||||       |         |</a></li>
+    <li><a href="#perf-probe---add-do_filp_open">perf probe &ndash;add do_filp_open</a></li>
+    <li><a href="#perf-stat--a--e-probedo_filp_open----sleep-10">perf stat -a -e probe:do_filp_open &ndash; sleep 10</a></li>
+    <li><a href="#echo-pkprobesmyprobe-do_filp_open-dfd0diu32-pathname00sistring--syskerneldebugtracingkprobe_event">echo &lsquo;p:kprobes/myprobe do_filp_open dfd=+0(%di):u32 pathname=+0(+0(%si)):string&rsquo; &gt; /sys/kernel/debug/tracing/kprobe_event</a></li>
+    <li><a href="#echo-1--syskerneldebugtracingeventskprobesmyprobeenable">echo 1 &gt; /sys/kernel/debug/tracing/events/kprobes/myprobe/enable</a></li>
+    <li><a href="#cat-syskerneldebugtracingtrace">cat /sys/kernel/debug/tracing/trace</a>
+      <ul>
+        <li><a href="#tracepoint">Tracepoint</a></li>
+        <li><a href="#kprobe">Kprobe</a></li>
+        <li><a href="#重点小结">重点小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。</p>
+<p>前面两讲，我们分别学习了 perf 和 ftrace 这两个最重要 Linux tracing 工具。在学习过程中，我们把重点放在了这两个工具最基本的功能点上。</p>
+<p>不过你学习完这些之后，我们内核调试版图的知识点还没有全部点亮。</p>
+<p>如果你再去查看一些 perf、ftrace 或者其他 Linux tracing 相关资料，你可能会常常看到两个单词，“tracepoint”和“kprobe”。你有没有好奇过，这两个名词到底是什么意思，它们和 perf、ftrace 这些工具又是什么关系呢？</p>
+<p>这一讲，我们就来学习这两个在 Linux tracing 系统中非常重要的概念，它们就是 <strong>tracepoint</strong> 和 <strong>kprobe</strong>。</p>
+<h2 id="tracepoint-和-kprobe-的应用举例">tracepoint 和 kprobe 的应用举例</h2>
+<p>如果你深入地去看一些 perf 或者 ftrace 的功能，这时候你会发现它们都有跟 tracepoint、kprobe 相关的命令。我们先来看几个例子，通过这几个例子，你可以大概先了解一下 tracepoint 和 kprobe 的应用，这样我们后面做详细的原理介绍时，你也会更容易理解。</p>
+<p>首先看看 tracepoint，tracepoint 其实就是在 Linux 内核的一些关键函数中埋下的 hook 点，这样在 tracing 的时候，我们就可以在这些固定的点上挂载调试的函数，然后查看内核的信息。</p>
+<p>我们通过下面的这个 <code>perf list</code> 命令，就可以看到所有的 tracepoints：</p>
+<h1 id="perf-list--grep-tracepoint">perf list | grep Tracepoint</h1>
+<p>alarmtimer:alarmtimer_cancel                       [Tracepoint event]<br>
+alarmtimer:alarmtimer_fired                        [Tracepoint event]<br>
+alarmtimer:alarmtimer_start                        [Tracepoint event]<br>
+alarmtimer:alarmtimer_suspend                      [Tracepoint event]<br>
+block:block_bio_backmerge                          [Tracepoint event]<br>
+block:block_bio_bounce                             [Tracepoint event]<br>
+block:block_bio_complete                           [Tracepoint event]<br>
+block:block_bio_frontmerge                         [Tracepoint event]<br>
+block:block_bio_queue                              [Tracepoint event]<br>
+…</p>
+<p>至于 ftrace，你在 tracefs 文件系统中，也会看到一样的 tracepoints：</p>
+<h1 id="find-syskerneldebugtracingevents--type-d--sort">find /sys/kernel/debug/tracing/events -type d | sort</h1>
+<p>/sys/kernel/debug/tracing/events<br>
+/sys/kernel/debug/tracing/events/alarmtimer<br>
+/sys/kernel/debug/tracing/events/alarmtimer/alarmtimer_cancel<br>
+/sys/kernel/debug/tracing/events/alarmtimer/alarmtimer_fired<br>
+/sys/kernel/debug/tracing/events/alarmtimer/alarmtimer_start<br>
+/sys/kernel/debug/tracing/events/alarmtimer/alarmtimer_suspend<br>
+/sys/kernel/debug/tracing/events/block<br>
+/sys/kernel/debug/tracing/events/block/block_bio_backmerge<br>
+/sys/kernel/debug/tracing/events/block/block_bio_bounce<br>
+/sys/kernel/debug/tracing/events/block/block_bio_complete<br>
+/sys/kernel/debug/tracing/events/block/block_bio_frontmerge</p>
+<p>…</p>
+<p>为了让你更好理解，我们就拿“do_sys_open”这个 tracepoint 做例子。在内核函数 do_sys_open() 中，有一个 trace_do_sys_open() 调用，其实它这就是一个 tracepoint：</p>
+<p>long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)<br>
+{<br>
+struct open_flags op;<br>
+int fd = build_open_flags(flags, mode, &amp;op);<br>
+struct filename *tmp;</p>
+<pre><code>    if (fd)  
+            return fd;  
+
+    tmp = getname(filename);  
+    if (IS_ERR(tmp))  
+            return PTR_ERR(tmp);  
+
+    fd = get_unused_fd_flags(flags);  
+    if (fd &gt;= 0) {  
+            struct file *f = do_filp_open(dfd, tmp, &amp;op);  
+            if (IS_ERR(f)) {  
+                    put_unused_fd(fd);  
+                    fd = PTR_ERR(f);  
+            } else {  
+                    fsnotify_open(f);  
+                    fd_install(fd, f);  
+                    trace_do_sys_open(tmp-&gt;name, flags, mode);  
+            }  
+    }  
+    putname(tmp);  
+    return fd;  
+</code></pre>
+<p>}</p>
+<p>接下来，我们可以通过 perf 命令，利用 tracepoint 来查看一些内核函数发生的频率，比如在节点上，统计 10 秒钟内调用 do_sys_open 成功的次数，也就是打开文件的次数。</p>
+<h1 id="-perf-stat--a--e-fsdo_sys_open----sleep-10"># perf stat -a -e fs:do_sys_open &ndash; sleep 10</h1>
+<p>Performance counter stats for &lsquo;system wide&rsquo;:</p>
+<pre><code>             7      fs:do_sys_open  
+
+  10.001954100 seconds time elapsed
+</code></pre>
+<p>同时，如果我们把 tracefs 中 do_sys_open 的 tracepoint 打开，那么在 ftrace 的 trace 输出里，就可以看到具体 do_sys_open 每次调用成功时，打开的文件名、文件属性、对应的进程等信息。</p>
+<h1 id="pwd">pwd</h1>
+<p>/sys/kernel/debug/tracing</p>
+<h1 id="echo-1--eventsfsdo_sys_openenable">echo 1 &gt; events/fs/do_sys_open/enable</h1>
+<h1 id="cat-trace">cat trace</h1>
+<h1 id="tracer-nop">tracer: nop</h1>
+<h1 id="heading"></h1>
+<h1 id="_------irqs-off">_&mdash;&ndash;=&gt; irqs-off</h1>
+<h1 id="-_-----need-resched">/ _&mdash;-=&gt; need-resched</h1>
+<h1 id="--_----hardirqsoftirq">| / _&mdash;=&gt; hardirq/softirq</h1>
+<h1 id="--_---preempt-depth">|| / _&ndash;=&gt; preempt-depth</h1>
+<h1 id="------delay">||| /     delay</h1>
+<h1 id="task-pid---cpu------timestamp--function">TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION</h1>
+<h1 id="---------------------------">| |       |   ||||       |         |</h1>
+<pre><code>     systemd-1     [011] .... 17133447.451839: do_sys_open: &quot;/proc/22597/cgroup&quot; 88000 666  
+        bash-4118  [009] .... 17133450.076026: do_sys_open: &quot;/&quot; 98800 0  
+ salt-minion-7101  [010] .... 17133450.478659: do_sys_open: &quot;/etc/hosts&quot; 88000 666  
+</code></pre>
+<p>systemd-journal-2199  [011] &hellip;. 17133450.487930: do_sys_open: &ldquo;/proc/6989/cgroup&rdquo; 88000 666<br>
+systemd-journal-2199  [011] &hellip;. 17133450.488019: do_sys_open: &ldquo;/var/log/journal/d4f76e4bf5414ac78e1c534ebe5d0a72&rdquo; 98800 0<br>
+systemd-journal-2199  [011] &hellip;. 17133450.488080: do_sys_open: &ldquo;/proc/6989/comm&rdquo; 88000 666<br>
+systemd-journal-2199  [011] &hellip;. 17133450.488114: do_sys_open: &ldquo;/proc/6989/cmdline&rdquo; 88000 666<br>
+systemd-journal-2199  [011] &hellip;. 17133450.488143: do_sys_open: &ldquo;/proc/6989/status&rdquo; 88000 666<br>
+systemd-journal-2199  [011] &hellip;. 17133450.488185: do_sys_open: &ldquo;/proc/6989/sessionid&rdquo; 88000 666<br>
+…</p>
+<p>请注意，Tracepoint 是在内核中固定的 hook 点，并不是在所有的函数中都有 tracepoint。</p>
+<p>比如在上面的例子里，我们看到 do_sys_open() 调用到了 do_filp_open()，但是 do_filp_open() 函数里是没有 tracepoint 的。那如果想看到 do_filp_open() 函数被调用的频率，或者 do_filp_open() 在被调用时传入参数的情况，我们又该怎么办呢？</p>
+<p>这时候，我们就需要用到 kprobe 了。kprobe 可以动态地在所有的内核函数（除了 inline 函数）上挂载 probe 函数。我们还是结合例子做理解，先看看 perf 和 ftraces 是怎么利用 kprobe 来做调试的。</p>
+<p>比如对于 do_filp_open() 函数，我们可以通过<code>perf probe</code>添加一下，然后用<code>perf stat</code> 看看在 10 秒钟的时间里，这个函数被调用到的次数。</p>
+<h1 id="perf-probe---add-do_filp_open">perf probe &ndash;add do_filp_open</h1>
+<h1 id="perf-stat--a--e-probedo_filp_open----sleep-10">perf stat -a -e probe:do_filp_open &ndash; sleep 10</h1>
+<p>Performance counter stats for &lsquo;system wide&rsquo;:</p>
+<pre><code>            11      probe:do_filp_open  
+
+  10.001489223 seconds time elapsed
+</code></pre>
+<p>我们也可以通过 ftrace 的 tracefs 给 do_filp_open() 添加一个 kprobe event，这样就能查看 do_filp_open() 每次被调用的时候，前面两个参数的值了。</p>
+<p>这里我要给你说明一下，在写入 kprobe_event 的时候，对于参数的定义我们用到了“%di”和“%si”。这是 x86 处理器里的寄存器，根据 x86 的Application Binary Interface 的文档，在函数被调用的时候，%di 存放了第一个参数，%si 存放的是第二个参数。</p>
+<h1 id="echo-pkprobesmyprobe-do_filp_open-dfd0diu32-pathname00sistring--syskerneldebugtracingkprobe_event">echo &lsquo;p:kprobes/myprobe do_filp_open dfd=+0(%di):u32 pathname=+0(+0(%si)):string&rsquo; &gt; /sys/kernel/debug/tracing/kprobe_event</h1>
+<p>完成上面的写入之后，我们再 enable 这个新建的 kprobe event。这样在 trace 中，我们就可以看到每次 do_filp_open()被调用时前两个参数的值了。</p>
+<h1 id="echo-1--syskerneldebugtracingeventskprobesmyprobeenable">echo 1 &gt; /sys/kernel/debug/tracing/events/kprobes/myprobe/enable</h1>
+<h1 id="cat-syskerneldebugtracingtrace">cat /sys/kernel/debug/tracing/trace</h1>
+<p>…<br>
+irqbalance-1328  [005] &hellip;. 2773211.189573: myprobe: (do_filp_open+0x0/0x100) dfd=4294967295 pathname=&quot;/proc/interrupts&quot;<br>
+irqbalance-1328  [005] &hellip;. 2773211.189740: myprobe: (do_filp_open+0x0/0x100) dfd=638399 pathname=&quot;/proc/stat&quot;<br>
+irqbalance-1328  [005] &hellip;. 2773211.189800: myprobe: (do_filp_open+0x0/0x100) dfd=638399 pathname=&quot;/proc/irq/8/smp_affinity&quot;<br>
+bash-15864 [004] &hellip;. 2773211.219048: myprobe: (do_filp_open+0x0/0x100) dfd=14819 pathname=&quot;/sys/kernel/debug/tracing/&quot;<br>
+bash-15864 [004] &hellip;. 2773211.891472: myprobe: (do_filp_open+0x0/0x100) dfd=6859 pathname=&quot;/sys/kernel/debug/tracing/&quot;<br>
+bash-15864 [004] &hellip;. 2773212.036449: myprobe: (do_filp_open+0x0/0x100) dfd=4294967295 pathname=&quot;/sys/kernel/debug/tracing/&quot;<br>
+bash-15864 [004] &hellip;. 2773212.197525: myprobe: (do_filp_open+0x0/0x100) dfd=638259 pathname=&quot;/sys/kernel/debug/tracing/<br>
+…</p>
+<p>好了，我们通过 perf 和 ftrace 的几个例子，简单了解了 tracepoint 和 kprobe 是怎么用的。那下面我们再来看看它们的实现原理。</p>
+<h2 id="tracepoint">Tracepoint</h2>
+<p>刚才，我们已经看到了内核函数 do_sys_open() 里调用了 trace_do_sys_open() 这个 treacepoint，那这个 tracepoint 是怎么实现的呢？我们还要再仔细研究一下。</p>
+<p>如果你在内核代码中，直接搜索“trace_do_sys_open”字符串的话，并不能找到这个函数的直接定义。这是因为在 Linux 中，每一个 tracepoint 的相关数据结构和函数，主要是通过&quot;DEFINE_TRACE&quot;和&quot;DECLARE_TRACE&quot;这两个宏来定义的。</p>
+<p>完整的“DEFINE_TRACE”和“DECLARE_TRACE”宏里，给每个 tracepoint 都定义了一组函数。在这里，我会选择最主要的几个函数，把定义一个 tracepoint 的过程给你解释一下。</p>
+<p>首先，我们来看“trace_##name”这个函数（提示一下，这里的“##”是 C 语言的预编译宏，表示把两个字符串连接起来）。</p>
+<p>对于每个命名为“name”的 tracepoint，这个宏都会帮助它定一个函数。这个函数的格式是这样的，以“trace_”开头，再加上 tracepoint 的名字。</p>
+<p>我们举个例子吧。比如说，对于“do_sys_open”这个 tracepoint，它生成的函数名就是 trace_do_sys_open。而这个函数会被内核函数 do_sys_open() 调用，从而实现了一个内核的 tracepoint。</p>
+<p>static inline void trace_##name(proto)                          \<br>
+{                                                               \<br>
+if (static_key_false(&amp;_<em>tracepoint</em>##name.key))         \<br>
+__DO_TRACE(&amp;_<em>tracepoint</em>##name,                \<br>
+TP_PROTO(data_proto),                   \<br>
+TP_ARGS(data_args),                     \<br>
+TP_CONDITION(cond), 0);                 \<br>
+if (IS_ENABLED(CONFIG_LOCKDEP) &amp;&amp; (cond)) {             \<br>
+rcu_read_lock_sched_notrace();                  \<br>
+rcu_dereference_sched(_<em>tracepoint</em>##name.funcs);\<br>
+rcu_read_unlock_sched_notrace();                \<br>
+}                                                       \<br>
+}</p>
+<p>在这个 tracepoint 函数里，主要的功能是这样实现的，通过 __DO_TRACE 来调用所有注册在这个 tracepoint 上的 probe 函数。</p>
+<p>#define __DO_TRACE(tp, proto, args, cond, rcuidle)                      \<br>
+…</p>
+<pre><code>            it_func_ptr = rcu_dereference_raw((tp)-&gt;funcs);         \  
+                                                                    \  
+            if (it_func_ptr) {                                      \  
+                    do {                                            \  
+                            it_func = (it_func_ptr)-&gt;func;          \  
+                            __data = (it_func_ptr)-&gt;data;           \  
+                            ((void(*)(proto))(it_func))(args);      \  
+                    } while ((++it_func_ptr)-&gt;func);                \  
+            }  
+</code></pre>
+<p>…</p>
+<p>…</p>
+<p>而 probe 函数的注册，它可以通过宏定义的“register_trace_##name”函数完成。</p>
+<pre><code>    static inline int                                               \  
+    register_trace_##name(void (*probe)(data_proto), void *data)    \  
+    {                                                               \  
+            return tracepoint_probe_register(&amp;__tracepoint_##name,  \  
+                                            (void *)probe, data);   \  
+    }
+</code></pre>
+<p>我们可以自己写一个简单kernel module来注册一个 probe 函数，把它注册到已有的 treacepoint 上。这样，这个 probe 函数在每次 tracepoint 点被调用到的时候就会被执行。你可以动手试一下。</p>
+<p>好了，说到这里，tracepoint 的实现方式我们就讲完了。简单来说<strong>就是在内核代码中需要被 trace 的地方显式地加上 hook 点，然后再把自己的 probe 函数注册上去，那么在代码执行的时候，就可以执行 probe 函数。</strong></p>
+<h2 id="kprobe">Kprobe</h2>
+<p>我们已经知道了，tracepoint 为内核 trace 提供了 hook 点，但是这些 hook 点需要在内核源代码中预先写好。如果在 debug 的过程中，我们需要查看的内核函数中没有 hook 点，就需要像前面 perf/ftrace 的例子中那样，要通过 Linux kprobe 机制来加载 probe 函数。</p>
+<p>那我们要怎么来理解 kprobe 的实现机制呢？</p>
+<p>你可以先从内核 samples 代码里，看一下</p>
+<p>kprobe_example.c代码。这段代码里实现了一个 kernel module，可以在内核中任意一个函数名 / 符号对应的代码地址上注册三个 probe 函数，分别是“pre_handler”、 “post_handler”和“fault_handler”。</p>
+<p>#define MAX_SYMBOL_LEN   64<br>
+static char symbol[MAX_SYMBOL_LEN] = &ldquo;_do_fork&rdquo;;<br>
+module_param_string(symbol, symbol, sizeof(symbol), 0644);</p>
+<p>/* For each probe you need to allocate a kprobe structure */<br>
+static struct kprobe kp = {<br>
+.symbol_name = symbol,<br>
+};</p>
+<p>…</p>
+<p>static int __init kprobe_init(void)<br>
+{<br>
+int ret;<br>
+kp.pre_handler = handler_pre;<br>
+kp.post_handler = handler_post;<br>
+kp.fault_handler = handler_fault;</p>
+<pre><code>        ret = register_kprobe(&amp;kp);  
+        if (ret &lt; 0) {  
+                    pr_err(&quot;register_kprobe failed, returned %d\n&quot;, ret);  
+                    return ret;  
+        }  
+        pr_info(&quot;Planted kprobe at %p\n&quot;, kp.addr);  
+        return 0;  
+</code></pre>
+<p>}</p>
+<p>当这个内核函数被执行的时候，已经注册的 probe 函数也会被执行（handler_fault 只有在发生异常的时候才会被调用到）。</p>
+<p>比如，我们加载的这个 kernel module 不带参数，那么缺省的情况就是这样的：在“_do_fork”内核函数的入口点注册了这三个 probe 函数。</p>
+<p>当 _do_fork() 函数被调用到的时候，换句话说，也就是创建新的进程时，我们通过 dmesg 就可以看到 probe 函数的输出了。</p>
+<p>[8446287.087641] &lt;_do_fork&gt; pre_handler: p-&gt;addr = 0x00000000d301008e, ip = ffffffffb1e8c9d1, flags = 0x246<br>
+[8446287.087643] &lt;_do_fork&gt; post_handler: p-&gt;addr = 0x00000000d301008e, flags = 0x246<br>
+[8446288.019731] &lt;_do_fork&gt; pre_handler: p-&gt;addr = 0x00000000d301008e, ip = ffffffffb1e8c9d1, flags = 0x246<br>
+[8446288.019733] &lt;_do_fork&gt; post_handler: p-&gt;addr = 0x00000000d301008e, flags = 0x246<br>
+[8446288.022091] &lt;_do_fork&gt; pre_handler: p-&gt;addr = 0x00000000d301008e, ip = ffffffffb1e8c9d1, flags = 0x246<br>
+[8446288.022093] &lt;_do_fork&gt; post_handler: p-&gt;addr = 0x00000000d301008e, flags = 0x246</p>
+<p>kprobe 的基本工作原理其实也很简单。当 kprobe 函数注册的时候，其实就是把目标地址上内核代码的指令码，替换成了“cc”，也就是 int3 指令。这样一来，当内核代码执行到这条指令的时候，就会触发一个异常而进入到 Linux int3 异常处理函数 do_int3() 里。</p>
+<p>在 do_int3() 这个函数里，如果发现有对应的 kprobe 注册了 probe，就会依次执行注册的 pre_handler()，原来的指令，最后是 post_handler()。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/36325651f318918c2fc7f584d78d74fe.png" alt=""></p>
+<p>理论上 kprobe 其实只要知道内核代码中任意一条指令的地址，就可以为这个地址注册 probe 函数，kprobe 结构中的“addr”成员就可以接受内核中的指令地址。</p>
+<p>static int __init kprobe_init(void)<br>
+{<br>
+int ret;<br>
+kp.addr = (kprobe_opcode_t <em>)0xffffffffb1e8ca02; /</em> 把一条指令的地址赋值给 kprobe.addr */<br>
+kp.pre_handler = handler_pre;<br>
+kp.post_handler = handler_post;<br>
+kp.fault_handler = handler_fault;</p>
+<pre><code>    ret = register_kprobe(&amp;kp);  
+    if (ret &lt; 0) {  
+            pr_err(&quot;register_kprobe failed, returned %d\n&quot;, ret);  
+            return ret;  
+    }  
+    pr_info(&quot;Planted kprobe at %p\n&quot;, kp.addr);  
+    return 0;  
+</code></pre>
+<p>}</p>
+<p>还要说明的是，如果内核可以使用我们上一讲 ftrace 对函数的 trace 方式，也就是函数头上预留了“callq &lt;__fentry__&gt;”的 5 个字节（在启动的时候被替换成了 nop）。Kprobe 对于函数头指令的 trace 方式，也会用“ftrace_caller”指令替换的方式，而不再使用 int3 指令替换。</p>
+<p>不论是哪种替换方式，kprobe 的基本实现原理都是一样的，那就是<strong>把目标指令替换，替换的指令可以使程序跑到一个特定的 handler 里，去执行 probe 的函数。</strong></p>
+<h2 id="重点小结">重点小结</h2>
+<p>这一讲我们主要学习了 tracepoint 和 kprobe，这两个概念在 Linux tracing 系统中非常重要。</p>
+<p>为什么说它们重要呢？因为从 Linux tracing 系统看，我的理解是可以大致分成大致这样三层。</p>
+<p>第一层是最基础的提供数据的机制，这里就包含了 tracepoints、kprobes，还有一些别的 events，比如 perf 使用的 HW/SW events。</p>
+<p>第二层是进行数据收集的工具，这里包含了 ftrace、perf，还有 ebpf。</p>
+<p>第三层是用户层工具。虽然有了第二层，用户也可以得到数据。不过，对于大多数用户来说，第二层使用的友好程度还不够，所以又有了这一层。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/37d7c662a9feb383e41ba7b010a6dc4a.png" alt=""></p>
+<p>很显然，如果要对 Linux 内核调试，很难绕过 tracepoint 和 kprobe。如果不刨根问底的话，前面我们讲的 perf、trace 工具对你来说还是黑盒。因为你只是知道了这些工具怎么用，但是并不知道它们依赖的底层技术。</p>
+<p>在后面介绍 ebpf 的时候，我们还会继续学习 ebpf 是如何使用 tracepoint 和 kprobe 来做 Linux tracing 的，希望你可以把相关知识串联起来。</p>
+<h2 id="思考题">思考题</h2>
+<p>想想看，当我们用 kprobe 为一个内核函数注册了 probe 之后，怎样能看到对应内核函数的第一条指令被替换了呢？</p>
+<p>欢迎你在留言区记录你的思考或者疑问。如果这一讲对你有帮助，也欢迎你转发给同事、朋友，跟他们一起交流、进步。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9003__%E7%90%86%E8%A7%A3ftrace1%E6%80%8E%E4%B9%88%E5%BA%94%E7%94%A8ftrace%E6%9F%A5%E7%9C%8B%E9%95%BF%E5%BB%B6%E6%97%B6%E5%86%85%E6%A0%B8%E5%87%BD%E6%95%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">加餐03__理解ftrace（1）：怎么应用ftrace查看长延时内核函数？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/%E5%8A%A0%E9%A4%9005__ebpf%E6%80%8E%E4%B9%88%E6%9B%B4%E5%8A%A0%E6%B7%B1%E5%85%A5%E5%9C%B0%E6%9F%A5%E7%9C%8B%E5%86%85%E6%A0%B8%E4%B8%AD%E7%9A%84%E5%87%BD%E6%95%B0/">
+            <span class="next-text nav-default">加餐05__eBPF：怎么更加深入地查看内核中的函数？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

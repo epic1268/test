@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20_JavaScript编译器（一）：V8的解析和编译过程 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是宫文学。从这一讲开始，我们就进入另一个非常重要的编译器：V8 编译器。
+V8 是谷歌公司在 2008 年推出的一款 JavaScript 编译器，它也可能是世界上使用最广泛的编译器。即使你不是编程人员，你每天也会运行很多次 V8，因为 JavaScript 是 Web 的语言，我们在电脑和手机上浏览的每个页面，几乎都会运行一点 JavaScript 脚本。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/20_javascript%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%80v8%E7%9A%84%E8%A7%A3%E6%9E%90%E5%92%8C%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/20_javascript%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%80v8%E7%9A%84%E8%A7%A3%E6%9E%90%E5%92%8C%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20_JavaScript编译器（一）：V8的解析和编译过程">
+  <meta property="og:description" content="你好，我是宫文学。从这一讲开始，我们就进入另一个非常重要的编译器：V8 编译器。
+V8 是谷歌公司在 2008 年推出的一款 JavaScript 编译器，它也可能是世界上使用最广泛的编译器。即使你不是编程人员，你每天也会运行很多次 V8，因为 JavaScript 是 Web 的语言，我们在电脑和手机上浏览的每个页面，几乎都会运行一点 JavaScript 脚本。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="编译原理实战课">
+
+  <meta itemprop="name" content="20_JavaScript编译器（一）：V8的解析和编译过程">
+  <meta itemprop="description" content="你好，我是宫文学。从这一讲开始，我们就进入另一个非常重要的编译器：V8 编译器。
+V8 是谷歌公司在 2008 年推出的一款 JavaScript 编译器，它也可能是世界上使用最广泛的编译器。即使你不是编程人员，你每天也会运行很多次 V8，因为 JavaScript 是 Web 的语言，我们在电脑和手机上浏览的每个页面，几乎都会运行一点 JavaScript 脚本。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5744">
+  <meta itemprop="keywords" content="编译原理实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20_JavaScript编译器（一）：V8的解析和编译过程">
+  <meta name="twitter:description" content="你好，我是宫文学。从这一讲开始，我们就进入另一个非常重要的编译器：V8 编译器。
+V8 是谷歌公司在 2008 年推出的一款 JavaScript 编译器，它也可能是世界上使用最广泛的编译器。即使你不是编程人员，你每天也会运行很多次 V8，因为 JavaScript 是 Web 的语言，我们在电脑和手机上浏览的每个页面，几乎都会运行一点 JavaScript 脚本。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20_JavaScript编译器（一）：V8的解析和编译过程</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5744 字 </span>
+          <span class="more-meta"> 预计阅读 12 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#初步了解-v8">初步了解 V8</a></li>
+        <li><a href="#超级快的解析过程词法分析和语法分析">超级快的解析过程（词法分析和语法分析）</a></li>
+        <li><a href="#编译成字节码">编译成字节码</a></li>
+        <li><a href="#编译成机器码">编译成机器码</a></li>
+        <li><a href="#课程小结">课程小结</a></li>
+        <li><a href="#一课一思">一课一思</a></li>
+        <li><a href="#参考资料">参考资料</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是宫文学。从这一讲开始，我们就进入另一个非常重要的编译器：V8 编译器。</p>
+<p>V8 是谷歌公司在 2008 年推出的一款 JavaScript 编译器，它也可能是世界上使用最广泛的编译器。即使你不是编程人员，你每天也会运行很多次 V8，因为 JavaScript 是 Web 的语言，我们在电脑和手机上浏览的每个页面，几乎都会运行一点 JavaScript 脚本。</p>
+<p>扩展：V8 这个词，原意是 8 缸的发动机，换算成排量，大约是 4.0 排量，属于相当强劲的发动机了。它的编译器，叫做 Ignition，是点火装置的意思。而它最新的 JIT 编译器，叫做 TurboFan，是涡轮风扇发动机的意思。</p>
+<p>在浏览器诞生的早期，就开始支持 JavaScript 了。但在 V8 推出以后，它重新定义了 Web 应用可以胜任的工作。到今天，在浏览器里，我们可以运行很多高度复杂的应用，比如办公套件等，这些都得益于以 V8 为代表的 JavaScript 引擎的进步。2008 年 V8 发布时，就已经比当时的竞争对手快 10 倍了；到目前，它的速度又已经提升了 10 倍以上。从中你可以看到，编译技术有多大的潜力可挖掘！</p>
+<p>对 JavaScript 编译器来说，它最大的挑战就在于，当我们打开一个页面的时候，源代码的下载、解析（Parse）、编译（Compile）和执行，都要在很短的时间内完成，否则就会影响到用户的体验。</p>
+<p>**那么，V8 是如何做到既编译得快，又要运行得快的呢？**所以接下来，我将会花两讲的时间，来带你一起剖析一下 V8 里面的编译技术。在这个过程中，你能了解到 V8 是如何完成前端解析、后端优化等功能的，它都有哪些突出的特点；另外，了解了 V8 的编译原理，对你以后编写更容易优化的程序，也会非常有好处。</p>
+<p>今天这一讲，我们先来透彻了解一下 V8 的编译过程，以及每个编译阶段的工作原理，看看它跟我们已经了解的其他编译器相比，有什么不同。</p>
+<h2 id="初步了解-v8">初步了解 V8</h2>
+<p>首先，按照惯例，我们肯定要下载 V8 的源代码。按照官方文档中的步骤，你可以下载源代码，并在本地编译。注意，你最好把它编译成 Debug 模式，这样便于用调试工具去跟踪它的执行，所以你要使用下面的命令来进行编译。</p>
+<p>tools/dev/gm.py x64.debug</p>
+<p>编译完毕以后，进入 v8/out/x64.debug 目录，你可以运行./d8，这就是编译好的 V8 的命令行工具。如果你用过 Node.js，那么 d8 的使用方法，其实跟它几乎是完全一样的，因为 Node.js 就封装了一个 V8 引擎。你还可以用 GDB 或 LLDB 工具来调试 d8，这样你就可以知道，它是怎么编译和运行 JavaScript 程序了。</p>
+<p>而 v8/src 目录下的，就是 V8 的源代码了。V8 是用 C++ 编写的。你可以重点关注这几个目录中的代码，它们是与编译有关的功能，而别的代码主要是运行时功能：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/9f768493aad9781471ed8b1165a9bef9.png" alt=""></p>
+<p>V8 的编译器的构成跟 Java 的编译器很像，它们都有从源代码编译到字节码的编译器，也都有解释器（叫 Ignition），也都有 JIT 编译器（叫 TurboFan）。你可以看下 V8 的编译过程的图例。在这个图中，你能注意到两个陌生的节点：<strong>流处理节点（Stream）和预解析器（PreParser）</strong>，这是 V8 编译过程中比较有特色的两个处理阶段。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/6af690e972a9aed06dc3f76fb52b5903.png" alt=""></p>
+<p>图 1：V8 的编译过程</p>
+<p>注意：这是比较新的 V8 版本的架构。在更早的版本里，有时会用到两个 JIT 编译器，类似于 HotSpot 的 C1 和 C2，分别强调编译速度和优化效果。在更早的版本里，还没有字节码解释器。现在的架构，引入了字节码解释器，其速度够快，所以就取消了其中一级的 JIT 编译器。</p>
+<p>下面我们就进入到 V8 编译过程中的各个阶段，去了解一些编译器的细节。</p>
+<h2 id="超级快的解析过程词法分析和语法分析">超级快的解析过程（词法分析和语法分析）</h2>
+<p>首先，我们来了解一下 V8 解析源代码的过程。我在开头就已经说过，V8 解析源代码的速度必须要非常快才行。源代码边下载边解析完毕，在这个过程中，用户几乎感觉不到停顿。<strong>那它是如何实现的呢？</strong></p>
+<p>有两篇文章就非常好地解释了 V8 解析速度快的原因。</p>
+<p>一个是“optimizing the scanner”这篇文章，它解释了 V8 在词法分析上做的优化。V8 的作者们真是锱铢必较地在每一个可能优化的步骤上去做优化，他们所采用的技术很具备参考价值。</p>
+<p>那我就按照我对这篇文章的理解，来给你解释一下 V8 解析速度快的原因吧：</p>
+<p>第一个原因，是 <strong>V8 的整个解析过程是流（Stream）化的</strong>，也就是一边从网络下载源代码，一边解析。在下载后，各种不同的编码还被统一转化为 UTF-16 编码单位，这样词法解析器就不需要处理多种编码了。</p>
+<p>第二个原因，是<strong>识别标识符时所做的优化</strong>，这也让 V8 的解析速度更快了一点。你应该知道，标识符的第一个字符（ID_START）只允许用字母、下划线和 $ 来表示，而之后的字符（ID_CONTINUE）还可以包括数字。所以，当词法解析器遇到一个字符的时候，我们首先要判断它是否是合法的 ID_START。</p>
+<p>**那么，这样一个逻辑，通常你会怎么写？**我一般想也不想，肯定是这样的写法：</p>
+<p>if(ch &gt;= &lsquo;A&rsquo; &amp;&amp; ch &lt;= &lsquo;Z&rsquo; || ch &gt;=&lsquo;a&rsquo; &amp;&amp; ch&lt;=&lsquo;z&rsquo; || ch == &lsquo;$&rsquo; || ch == &lsquo;_&rsquo;){<br>
+return true;<br>
+}</p>
+<p>但你要注意这里的一个问题，<strong>if 语句中的判断条件需要做多少个运算？</strong></p>
+<p>最坏的情况下，要做 6 次比较运算和 3 次逻辑“或”运算。不过，V8 的作者们认为这太奢侈了。所以他们通过查表的方法，来识别每个 ASCII 字符是否是合法的标识符开头字符。</p>
+<p>这相当于准备了一张大表，每个字符在里面对应一个位置，标明了该字符是否是合法的标识符开头字符。这是典型的牺牲空间来换效率的方法。虽然你在阅读代码的时候，会发现它调用了几层函数来实现这个功能，但这些函数其实是内联的，并且在编译优化以后，产生的指令要少很多，所以这个方法的性能更高。</p>
+<p>第三个原因，是<strong>如何从标识符中挑出关键字</strong>。</p>
+<p>与 Java 的编译器一样，JavaScript 的 Scanner，也是把标识符和关键字一起识别出来，然后再从中挑出关键字。所以，你可以认为这是一个最佳实践。那你应该也会想到，识别一个字符串是否是关键字的过程，使用的方法仍然是查表。查表用的技术是“<strong>完美哈希（perfect hashing）</strong>”，也就是每个关键字对应的哈希值都是不同的，不会发生碰撞。并且，计算哈希值只用了三个元素：前两个字符（ID_START、ID_CONTINUE），以及字符串的长度，不需要把每个字符都考虑进来，进一步降低了计算量。</p>
+<p>文章里还有其他细节，比如通过缩窄对 Unicode 字符的处理范围来进行优化，等等。从中你能体会到 V8 的作者们在提升性能方面，无所不用其极的设计思路。</p>
+<p>除了词法分析，在语法分析方面，V8 也做了很多的优化来保证高性能。其中，最重要的是“<strong>懒解析</strong>”技术（lazy parsing）。</p>
+<p>一个页面中包含的代码，并不会马上被程序用到。如果在一开头就把它们全部解析成 AST 并编译成字节码，就会产生很多开销：占用了太多 CPU 时间；过早地占用内存；编译后的代码缓存到硬盘上，导致磁盘 IO 的时间很长，等等。</p>
+<p>所以，所有浏览器中的 JavaScript 编译器，都采用了懒解析技术。在 V8 里，首先由预解析器，也就是 Preparser 粗略地解析一遍程序，在正式运行某个函数的时候，编译器才会按需解析这个函数。你要注意，Preparser 只检查语法的正确性，而基于上下文的检查则不是这个阶段的任务。你如果感兴趣的话，可以深入阅读一下这篇介绍 Preparser 的文章，我在这里就不重复了。</p>
+<p>你可以在终端测试一下懒解析和完整解析的区别。针对 foo.js 示例程序，你输入“./d8 – ast-print foo.js”命令。</p>
+<p>function add(a,b){<br>
+return a + b;<br>
+}</p>
+<p>//add(1,2)    //一开始，先不调用 add 函数</p>
+<p>得到的输出结果是：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/2927be9309fa819e4d3563dbc9ece097.png" alt=""></p>
+<p>里面有一个没有名字的函数（也就是程序的顶层函数），并且它记录了一个 add 函数的声明，仅此而已。你可以看到，Preparser 的解析结果确实够粗略。</p>
+<p>而如果你把 foo.js 中最后一行的注释去掉，调用一下 add 函数，再次让 d8 运行一下 foo.js，就会输出完整解析后的 AST，你可以看看二者相差有多大：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/9ecb9a94158f4c2fee41674c52c648cc.png" alt=""></p>
+<p>最后，你可以去看看正式的 Parser（在 parser.h、parser-base.h、parser.cc 代码中）。学完了这么多编译器的实现机制以后，以你现在的经验，打开一看，你就能知道，这又是用手写的递归下降算法实现的。</p>
+<p>在看算法的过程中，我一般第一个就会去看它是如何处理二元表达式的。因为二元表达式看上去很简单，但它需要解决一系列难题，包括左递归、优先级和结合性。</p>
+<p>V8 的 Parser 中，对于二元表达式的处理，采取的也是一种很常见的算法：<strong>操作符优先级解析器</strong>（Operator-precedence parser）。这跟 Java 的 Parser 也很像，它本质上是自底向上的一个 LR(1) 算法。所以我们可以得出结论，在手写语法解析器的时候，遇到二元表达式，采用操作符优先级的方法，算是最佳实践了！</p>
+<p>好了，现在我们了解了 V8 的解析过程，那 V8 是如何把 AST 编译成字节码和机器码并运行的呢？我们接着来看看它的编译过程。</p>
+<h2 id="编译成字节码">编译成字节码</h2>
+<p>我们在执行刚才的 foo.js 文件时，加上“–print-bytecode”参数，就能打印出生成的字节码了。其中，add 函数的字节码如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/ea71931aee3a80154b290f4a99c4f66b.png" alt=""></p>
+<p>怎么理解这几行字节码呢？我来给你解释一下：</p>
+<ol>
+<li>Ldar a1：把参数 1 从寄存器加载到累加器（Ld=load，a=accumulator, r=register）。</li>
+<li>Add a0, [0]：把参数 0 加到累加器上。</li>
+<li>Return：返回（返回值在累加器上）。</li>
+</ol>
+<p>不过，要想充分理解这几行简单的字节码，你还需要真正理解 Ignition 的设计。因为这些字节码是由 Ignition 来解释执行的。</p>
+<p>Ignition 是一个基于寄存器的解释器。它把函数的参数、变量等保存在寄存器里。不过，这里的寄存器并不是物理寄存器，而是指栈帧中的一个位置。下面是一个示例的栈帧：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/729502cbbec327d19497bf3073cc70b3.png" alt=""></p>
+<p>图 2：Ignition 的栈帧</p>
+<p>这个栈帧里包含了执行函数所需要的所有信息：</p>
+<ol>
+<li>参数和本地变量。</li>
+<li>临时变量：它是在计算表达式的时候会用到的。比如，计算 2+3+4 的时候，就需要引入一个临时变量。</li>
+<li>上下文：用来在函数闭包之间维护状态。</li>
+<li>pc：调用者的代码地址。</li>
+</ol>
+<p>栈帧里的 a0、a1、r0、r1 这些都是寄存器的名称，可以在指令里引用。而在字节码里，会用一个操作数的值代替。</p>
+<p>整个栈帧的长度是在编译成字节码的时候就计算好了的。这就让 Ignition 的栈帧能适应不同架构对栈帧对齐的要求。比如 AMD64 架构的 CPU，它就要求栈帧是 16 位对齐的。</p>
+<p>Ignition 也用到了一些物理寄存器，来提高运算的性能：</p>
+<ol>
+<li>**累加器：**在做算术运算的时候，一定会用到累加器作为指令的其中一个操作数，所以它就不用在指令里体现了；指令里只要指定另一个操作数（寄存器）就行了。</li>
+<li>**字节码数组寄存器：**指向当前正在解释执行的字节码数组开头的指针。</li>
+<li>**字节码偏移量寄存器：**当前正在执行的指令，在字节码数组中的偏移量（与 pc 寄存器的作用一样）。</li>
+<li>…</li>
+</ol>
+<p>Ignition 是我们见到的第一个寄存器机，它跟我们之前见到的 Java 和 Python 的栈机有明显的不同。所以，你可以先思考一下，Ignition 会有什么特点呢？</p>
+<p>我来给你总结一下吧。</p>
+<ol>
+<li>它在指令里会引用寄存器作为操作数，寄存器在进入函数时就被分配了存储位置，在函数运行时，栈帧的结构是不变的。而对比起来，栈机的指令从操作数栈里获取操作数，操作数栈随着函数的执行会动态伸缩。</li>
+<li>Ignition 还引入了累加器这个物理寄存器作为缺省的操作数。这样既降低了指令的长度，又能够加快执行速度。</li>
+</ol>
+<p>当然，Ignition 没有像生成机器码那样，用一个寄存器分配算法，让本地变量、参数等也都尽量采用物理寄存器。这样做的原因，一方面是因为，寄存器分配算法会增加编译的时间；另一方面，这样不利于代码在解释器和 TurboFan 生成的机器代码之间来回切换（因为它要在调用约定之间做转换）。采用固定格式的栈帧，Ignition 就能够在从机器代码切换回来的时候，很容易地设置正确的解释器栈帧状态。</p>
+<p>我把更多的字节码指令列在了下面，你可以仔细看一看 Ignition 都有哪些指令，从而加深对 Ignition 解释运行机制的理解。同时，你也可以跟我们已经学过的 Java 和 Python 的字节码做个对比。这样呀，你对字节码、解释器的了解就更丰富了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/e3080a66fc45abc220cbe50de198ecbe.png" alt=""></p>
+<p>来源：Ignition Design Doc</p>
+<h2 id="编译成机器码">编译成机器码</h2>
+<p>好，前面我提到了，V8 也有自己的 JIT 编译器，叫做 TurboFan。在学过 Java 的 JIT 编译器以后，你可以预期到，TurboFan 也会有一些跟 Java JIT 编译器类似的特性，比如它们都是把字节码编译生成机器码，都是针对热点代码才会启动即时编译的。那接下来，我们就来验证一下自己的想法，并一起来看看 TurboFan 的运行效果究竟如何。</p>
+<p>我们来看一个示例程序 add.js：</p>
+<p>function add(a,b){<br>
+return a+b;<br>
+}</p>
+<p>for (i = 0; i&lt;100000; i++){<br>
+add(i, i+1);<br>
+if (i%1000==0)<br>
+console.log(i);<br>
+}</p>
+<p>你可以用下面的命令，要求 V8 打印出优化过程、优化后的汇编代码、注释等信息。其中，“–turbo-filter=add”参数会告诉 V8，只优化 add 函数，否则的话，V8 会把 add 函数内联到外层函数中去。</p>
+<p>./d8 &ndash;trace-opt-verbose \<br>
+&ndash;trace-turbo \<br>
+&ndash;turbo-filter=add \<br>
+&ndash;print-code \<br>
+&ndash;print-opt-code \<br>
+&ndash;code-comments \<br>
+add.js</p>
+<p>注释：你用./d8 &ndash;help，就能列出 V8 可以使用的各种选项及其说明，我把上面几个选项的含义解释一下。 –trace-opt-verbose：跟踪优化过程，并输出详细信息 –trace-turbo：跟踪 TurboFan 的运行过程 –print-code：打印生成的代码 –print-opt-code：打印优化的代码 –code-comment：在汇编代码里输出注释</p>
+<p>程序一开头是解释执行的。在循环了 24000 次以后，V8 认为这是热点代码，于是启动了 Turbofan 做即时编译。</p>
+<p>最后生成的汇编代码有好几十条指令。不过你可以看到，大部分指令是用于初始化栈帧，以及处理逆优化的情况。真正用于计算的指令，是下面几行指令：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/f095e1c26da77f0086560d6e6b14ae9b.png" alt=""></p>
+<p>对这些汇编代码的解读，以及这些指令的产生和优化过程，我会在下一讲继续给你讲解。</p>
+<h2 id="课程小结">课程小结</h2>
+<p>今天这讲，我们从总体上考察了 V8 的编译过程，我希望你记住几个要点：</p>
+<ol>
+<li>首先，是<strong>编译速度</strong>。由于 JavaScript 是在浏览器下载完页面后马上编译并执行，它对编译速度有更高的要求。因此，V8 使用了一边下载一边编译的技术：懒解析技术。并且，在解析阶段，V8 也比其他编译器更加关注处理速度，你可以从中学到通过查表减少计算量的技术。</li>
+<li>其次，我们认识了一种新的<strong>解释器 Ignition</strong>，它是基于寄存器的解释器，或者叫寄存器机。Ignition 比起栈机来，更有性能优势。</li>
+<li>最后，我们初步使用了一下 V8 的<strong>即时编译器 TurboFan</strong>。在下一讲中，我们会更细致地探讨 TurboFan 的特性。</li>
+</ol>
+<p>按照惯例，这一讲的思维导图我也给你整理出来了，供你参考：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/5b5c83d12cb2a3b284be0c22415cf77b.png" alt=""></p>
+<h2 id="一课一思">一课一思</h2>
+<p>你能否把 Ignition 的字节码和 Java、Python 的字节码对比一下。看看它们有哪些共同之处，有哪些不同之处？</p>
+<p>欢迎在留言区分享你的答案，也欢迎你把今天的内容分享给更多的朋友。</p>
+<h2 id="参考资料">参考资料</h2>
+<ol>
+<li>这两篇文章分析了 V8 的解析器为什么速度非常快：Blazingly fast parsing, part 1: optimizing the scanner，Blazingly fast parsing, part 2: lazy parsing</li>
+<li>这篇文章描述了 Ignition 的设计：Ignition Design Doc，我在 GitHub 上也放了一个拷贝</li>
+<li>这篇文章有助于你了解 Ignition 的字节码：Understanding V8’s bytecode</li>
+<li>V8 项目的官网，这里有一些重要的博客文章和文档</li>
+</ol>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/">编译原理实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8C%81%E7%BB%AD%E4%BA%A4%E4%BB%9836%E8%AE%B2/20_immutable%E4%BB%BB%E4%BD%95%E5%8F%98%E6%9B%B4%E9%83%BD%E9%9C%80%E8%A6%81%E5%8F%91%E5%B8%83/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20_Immutable！任何变更都需要发布</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/20_spark%E7%9A%84%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E4%B8%8B/">
+            <span class="next-text nav-default">20_Spark的性能优化案例分析（下）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

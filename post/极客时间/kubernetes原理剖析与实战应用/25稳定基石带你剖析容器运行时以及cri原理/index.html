@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25稳定基石：带你剖析容器运行时以及CRI原理 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。
+那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/25%E7%A8%B3%E5%AE%9A%E5%9F%BA%E7%9F%B3%E5%B8%A6%E4%BD%A0%E5%89%96%E6%9E%90%E5%AE%B9%E5%99%A8%E8%BF%90%E8%A1%8C%E6%97%B6%E4%BB%A5%E5%8F%8Acri%E5%8E%9F%E7%90%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/25%E7%A8%B3%E5%AE%9A%E5%9F%BA%E7%9F%B3%E5%B8%A6%E4%BD%A0%E5%89%96%E6%9E%90%E5%AE%B9%E5%99%A8%E8%BF%90%E8%A1%8C%E6%97%B6%E4%BB%A5%E5%8F%8Acri%E5%8E%9F%E7%90%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25稳定基石：带你剖析容器运行时以及CRI原理">
+  <meta property="og:description" content="当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。
+那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes原理剖析与实战应用">
+
+  <meta itemprop="name" content="25稳定基石：带你剖析容器运行时以及CRI原理">
+  <meta itemprop="description" content="当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。
+那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2709">
+  <meta itemprop="keywords" content="Kubernetes原理剖析与实战应用">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25稳定基石：带你剖析容器运行时以及CRI原理">
+  <meta name="twitter:description" content="当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。
+那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25稳定基石：带你剖析容器运行时以及CRI原理</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2709 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。</p>
+<p>那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？</p>
+<p>今天我们就来了解一下。</p>
+<p>容器运行时 （Container Runtime）</p>
+<p>Kubelet 负责运行具体的 Pod，并维护其整个生命周期，为 Pod 提供存储、网络等必要的资源。但 Kubelet 本身并不负责真正的容器创建和逻辑管理，这些全部都是通过容器运行时（Container Runtime）完成的。大家平常熟知的 Docker 其实就是一种容器运行时，除此之外，还有containerd、cri-o、kata、gVisor 等等。</p>
+<p>下图就是 Kubelet 跟容器运行时进行的交互图：</p>
+<p>图 1：Kubelet 跟容器运行的交互图</p>
+<p>Kubelet 负责跟 kube-apiserver 进行数据同步，获取新的 Pod，并上报本机 Pod 的各个状态数据。Kubelet 通过调用容器运行时的接口完成容器的创建、容器状态的查询等工作。下图就是使用 Docker 作为容器的运行时。</p>
+<p>图 2：使用 Docker 作为容器的运行</p>
+<p>Docker 作为 Kubelet 内置支持的主要容器运行时，也是目前使用最为官方的容器运行时之一。</p>
+<p>除了 Docker，在 Kubernetes v1.5 之前，Kubelet 还内置了对 rkt 的支持。在这个阶段，如果我们想要自己去定义容器运行时，或者更改容器运行时的部分逻辑行为，是非常痛苦的，需要通过修改 Kubelet 的代码来实现。这些改动如果更新到上游社区，也会给社区造成很大的困扰，毕竟 Kubelet 自身的稳定性关乎着整个集群的稳定性。因此，这些改动在上游社区的合并通常都很谨慎，往往就需要开发者自己维护这些代码，维护成本非常高，也不方便升级。</p>
+<p>介于这一点，很多开发者都希望 Kubernetes 可以支持更多的容器运行时。因此，从 v1.5 版本开始，社区引入了 CRI（Container Runtime Interface）来解决这个问题。</p>
+<p>CRI 接口的引入带来了两个好处：一是它很好地将 Kubelet 与容器运行时进行了解耦，这样我们每次对容器运行时进行更新升级等操作时，都再不需要对 Kubelet 做任何的更改；二是解放了 Kubelet，减少了 Kubelet 的负担，能够保证 Kubernetes 的代码质量和整个系统的稳定性。</p>
+<p>下面我们就来了解一下CRI。</p>
+<p>CRI</p>
+<p>CRI 接口可以分为两部分。</p>
+<p>一个是容器运行时服务 RuntimeService，它主要负责管理 Pod 和容器的生命周期，比如创建容器、删除容器、查询容器状态等等。下面就是用Protocol Buffers定义的 RuntimeService 的接口：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">// Runtime service defines the public APIs for remote container runtimes
+</span></span><span class="line"><span class="cl">service RuntimeService {
+</span></span><span class="line"><span class="cl">    // Version returns the runtime name, runtime version, and runtime API version.
+</span></span><span class="line"><span class="cl">    rpc Version(VersionRequest) returns (VersionResponse) {}
+</span></span><span class="line"><span class="cl">    // RunPodSandbox creates and starts a pod-level sandbox. Runtimes must ensure
+</span></span><span class="line"><span class="cl">    // the sandbox is in the ready state on success.
+</span></span><span class="line"><span class="cl">    rpc RunPodSandbox(RunPodSandboxRequest) returns (RunPodSandboxResponse) {}
+</span></span><span class="line"><span class="cl">    // Start a sandbox pod which was forced to stop by external factors.
+</span></span><span class="line"><span class="cl">    // Network plugin returns same IPs when input same pod names and namespaces
+</span></span><span class="line"><span class="cl">    rpc StartPodSandbox(StartPodSandboxRequest) returns (StartPodSandboxResponse) {}
+</span></span><span class="line"><span class="cl">    // StopPodSandbox stops any running process that is part of the sandbox and
+</span></span><span class="line"><span class="cl">    // reclaims network resources (e.g., IP addresses) allocated to the sandbox.
+</span></span><span class="line"><span class="cl">    // If there are any running containers in the sandbox, they must be forcibly
+</span></span><span class="line"><span class="cl">    // terminated.
+</span></span><span class="line"><span class="cl">    // This call is idempotent, and must not return an error if all relevant
+</span></span><span class="line"><span class="cl">    // resources have already been reclaimed. kubelet will call StopPodSandbox
+</span></span><span class="line"><span class="cl">    // at least once before calling RemovePodSandbox. It will also attempt to
+</span></span><span class="line"><span class="cl">    // reclaim resources eagerly, as soon as a sandbox is not needed. Hence,
+</span></span><span class="line"><span class="cl">    // multiple StopPodSandbox calls are expected.
+</span></span><span class="line"><span class="cl">    rpc StopPodSandbox(StopPodSandboxRequest) returns (StopPodSandboxResponse) {}
+</span></span><span class="line"><span class="cl">    // RemovePodSandbox removes the sandbox. If there are any running containers
+</span></span><span class="line"><span class="cl">    // in the sandbox, they must be forcibly terminated and removed.
+</span></span><span class="line"><span class="cl">    // This call is idempotent, and must not return an error if the sandbox has
+</span></span><span class="line"><span class="cl">    // already been removed.
+</span></span><span class="line"><span class="cl">    rpc RemovePodSandbox(RemovePodSandboxRequest) returns (RemovePodSandboxResponse) {}
+</span></span><span class="line"><span class="cl">    // PodSandboxStatus returns the status of the PodSandbox. If the PodSandbox is not
+</span></span><span class="line"><span class="cl">    // present, returns an error.
+</span></span><span class="line"><span class="cl">    rpc PodSandboxStatus(PodSandboxStatusRequest) returns (PodSandboxStatusResponse) {}
+</span></span><span class="line"><span class="cl">    // ListPodSandbox returns a list of PodSandboxes.
+</span></span><span class="line"><span class="cl">    rpc ListPodSandbox(ListPodSandboxRequest) returns (ListPodSandboxResponse) {}
+</span></span><span class="line"><span class="cl">    // CreateContainer creates a new container in specified PodSandbox
+</span></span><span class="line"><span class="cl">    rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // StartContainer starts the container.
+</span></span><span class="line"><span class="cl">    rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // StopContainer stops a running container with a grace period (i.e., timeout).
+</span></span><span class="line"><span class="cl">    // This call is idempotent, and must not return an error if the container has
+</span></span><span class="line"><span class="cl">    // already been stopped.
+</span></span><span class="line"><span class="cl">    // TODO: what must the runtime do after the grace period is reached?
+</span></span><span class="line"><span class="cl">    rpc StopContainer(StopContainerRequest) returns (StopContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // RemoveContainer removes the container. If the container is running, the
+</span></span><span class="line"><span class="cl">    // container must be forcibly removed.
+</span></span><span class="line"><span class="cl">    // This call is idempotent, and must not return an error if the container has
+</span></span><span class="line"><span class="cl">    // already been removed.
+</span></span><span class="line"><span class="cl">    rpc RemoveContainer(RemoveContainerRequest) returns (RemoveContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // PauseContainer pauses the container.
+</span></span><span class="line"><span class="cl">    rpc PauseContainer(PauseContainerRequest) returns (PauseContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // UnpauseContainer unpauses the container.
+</span></span><span class="line"><span class="cl">    rpc UnpauseContainer(UnpauseContainerRequest) returns (UnpauseContainerResponse) {}
+</span></span><span class="line"><span class="cl">    // ListContainers lists all containers by filters.
+</span></span><span class="line"><span class="cl">    rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+</span></span><span class="line"><span class="cl">    // ContainerStatus returns status of the container. If the container is not
+</span></span><span class="line"><span class="cl">    // present, returns an error.
+</span></span><span class="line"><span class="cl">    rpc ContainerStatus(ContainerStatusRequest) returns (ContainerStatusResponse) {}
+</span></span><span class="line"><span class="cl">    // UpdateContainerResources updates ContainerConfig of the container.
+</span></span><span class="line"><span class="cl">    rpc UpdateContainerResources(UpdateContainerResourcesRequest) returns (UpdateContainerResourcesResponse) {}
+</span></span><span class="line"><span class="cl">    // ReopenContainerLog asks runtime to reopen the stdout/stderr log file
+</span></span><span class="line"><span class="cl">    // for the container. This is often called after the log file has been
+</span></span><span class="line"><span class="cl">    // rotated. If the container is not running, container runtime can choose
+</span></span><span class="line"><span class="cl">    // to either create a new log file and return nil, or return an error.
+</span></span><span class="line"><span class="cl">    // Once it returns error, new container log file MUST NOT be created.
+</span></span><span class="line"><span class="cl">    rpc ReopenContainerLog(ReopenContainerLogRequest) returns (ReopenContainerLogResponse) {}
+</span></span><span class="line"><span class="cl">    // ExecSync runs a command in a container synchronously.
+</span></span><span class="line"><span class="cl">    rpc ExecSync(ExecSyncRequest) returns (ExecSyncResponse) {}
+</span></span><span class="line"><span class="cl">    // Exec prepares a streaming endpoint to execute a command in the container.
+</span></span><span class="line"><span class="cl">    rpc Exec(ExecRequest) returns (ExecResponse) {}
+</span></span><span class="line"><span class="cl">    // Attach prepares a streaming endpoint to attach to a running container.
+</span></span><span class="line"><span class="cl">    rpc Attach(AttachRequest) returns (AttachResponse) {}
+</span></span><span class="line"><span class="cl">    // PortForward prepares a streaming endpoint to forward ports from a PodSandbox.
+</span></span><span class="line"><span class="cl">    rpc PortForward(PortForwardRequest) returns (PortForwardResponse) {}
+</span></span><span class="line"><span class="cl">    // ContainerStats returns stats of the container. If the container does not
+</span></span><span class="line"><span class="cl">    // exist, the call returns an error.
+</span></span><span class="line"><span class="cl">    rpc ContainerStats(ContainerStatsRequest) returns (ContainerStatsResponse) {}
+</span></span><span class="line"><span class="cl">    // ListContainerStats returns stats of all running containers.
+</span></span><span class="line"><span class="cl">    rpc ListContainerStats(ListContainerStatsRequest) returns (ListContainerStatsResponse) {}
+</span></span><span class="line"><span class="cl">    // UpdateRuntimeConfig updates the runtime configuration based on the given request.
+</span></span><span class="line"><span class="cl">    rpc UpdateRuntimeConfig(UpdateRuntimeConfigRequest) returns (UpdateRuntimeConfigResponse) {}
+</span></span><span class="line"><span class="cl">    // Status returns the status of the runtime.
+</span></span><span class="line"><span class="cl">    rpc Status(StatusRequest) returns (StatusResponse) {}
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>另一个部分是镜像服务 ImageService，主要负责容器镜像的生命周期管理，比如拉取镜像、删除镜像、查询镜像等等，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">// ImageService defines the public APIs for managing images.
+</span></span><span class="line"><span class="cl">service ImageService {
+</span></span><span class="line"><span class="cl">    // ListImages lists existing images.
+</span></span><span class="line"><span class="cl">    rpc ListImages(ListImagesRequest) returns (ListImagesResponse) {}
+</span></span><span class="line"><span class="cl">    // ImageStatus returns the status of the image. If the image is not
+</span></span><span class="line"><span class="cl">    // present, returns a response with ImageStatusResponse.Image set to
+</span></span><span class="line"><span class="cl">    // nil.
+</span></span><span class="line"><span class="cl">    rpc ImageStatus(ImageStatusRequest) returns (ImageStatusResponse) {}
+</span></span><span class="line"><span class="cl">    // PullImage pulls an image with authentication config.
+</span></span><span class="line"><span class="cl">    rpc PullImage(PullImageRequest) returns (PullImageResponse) {}
+</span></span><span class="line"><span class="cl">    // RemoveImage removes the image.
+</span></span><span class="line"><span class="cl">    // This call is idempotent, and must not return an error if the image has
+</span></span><span class="line"><span class="cl">    // already been removed.
+</span></span><span class="line"><span class="cl">    rpc RemoveImage(RemoveImageRequest) returns (RemoveImageResponse) {}
+</span></span><span class="line"><span class="cl">    // ImageFSInfo returns information of the filesystem that is used to store images.
+</span></span><span class="line"><span class="cl">    rpc ImageFsInfo(ImageFsInfoRequest) returns (ImageFsInfoResponse) {}
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每一个容器运行时都需要自己实现一个 CRI shim，即完成对 CRI 这个抽象接口的具体实现。这样容器运行时就可以接收来自 Kubelet 的请求。</p>
+<p>我们现在就来看看有了 CRI 接口以后，Kubelet 是如何和容器运行时进行交互的，见下图：</p>
+<p>图 3：Kubelet 与容器运行时的交互)</p>
+<p>从上图可以看出，新增的 CRI shim 是 Kubelet 和容器运行时之间的交互纽带，Kubelet 只需要跟 CRI shim 进行交互。Kubelet 调用 CRI shim 的接口，CRI shim 响应请求后会调用底层的运行容器时，完成对容器的相关操作。</p>
+<p>这里我们需要将 Kubelet、CRI shim 以及容器运行时都部署在同一个节点上。一般来说，大多数的容器运行时都默认实现了 CRI 的接口，比如containerd。</p>
+<p>目前 Kubelet 内部内置了对 Docker 的 CRI shim 的实现，见下图：</p>
+<p>图 4：Kubelet 内置对 CRI shim 的实现</p>
+<p>而对于其他的容器运行时，比如containerd，我们就需要配置 kubelet 的 &ndash;container-runtime 参数为 remote，并设置 &ndash;container-runtime-endpoint 为对应的容器运行时的监听地址。</p>
+<p>Kubernetes 自 v1.10 版本已经完成了和 containerd 1.1版本 的 GA 集成，你可以直接按照这份文档来部署 containerd 作为你的容器运行时。</p>
+<p>图 5：部署 containerd</p>
+<p>containerd 1.1 版本已经内置了对 CRI 的实现，比直接使用 Docker 的性能要高很多。</p>
+<p>写在最后</p>
+<p>Kubernetes 作为容器编排调度领域的事实标准，其优秀的架构设计还体现在其可扩展接口上。比如 CRI 提供了简单易用的扩展接口，方便各个容器运行时跟 Kubelet 进行交互接入，极大地方便了用户进行定制化。</p>
+<p>通过 CRI 对容器运行时进行抽象，我们无须修改 Kubelet 就可以天然地支持多种容器运行时，这极大地方便了开发者的对接，也减少了升级和维护成本。CRI 的出现也促进了容器运行时的繁荣，也为强隔离、多租户等复杂的场景带来了更多的选择。</p>
+<p>除了 CRI 以外，在 Kubernetes 中还可以为不同的 Pod 设置不同的容器运行时（Container Runtime），以提供性能与安全性之间的平衡。从 1.12 版本开始，Kuberentes 就提供了 RuntimeClass 来实现这个功能。你可以阅读这份官方文档，来学习如何使用 RuntimeClass。</p>
+<p>如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/">Kubernetes原理剖析与实战应用</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/25%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%8E%A5%E5%8F%A3%E9%99%90%E6%B5%81%E5%92%8C%E9%99%8D%E7%BA%A7/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25如何实现接口限流和降级？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/netty%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8Erpc%E5%AE%9E%E8%B7%B5/25%E8%BF%9C%E7%A8%8B%E9%80%9A%E4%BF%A1%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E8%AE%BE%E8%AE%A1%E4%BB%A5%E5%8F%8A%E7%BC%96%E8%A7%A3%E7%A0%81%E7%9A%84%E5%AE%9E%E7%8E%B0/">
+            <span class="next-text nav-default">25远程通信：通信协议设计以及编解码的实现</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

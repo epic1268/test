@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>05工具实践：基准测试JMH，精确测量方法性能 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content=" title: &ldquo;05工具实践：基准测试JMH，精确测量方法性能&rdquo; draft: false date: 2024-06-14 keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 上一课时，我们了解到一些外部工具可以获取系统的性能数据。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/05%E5%B7%A5%E5%85%B7%E5%AE%9E%E8%B7%B5%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95jmh%E7%B2%BE%E7%A1%AE%E6%B5%8B%E9%87%8F%E6%96%B9%E6%B3%95%E6%80%A7%E8%83%BD/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/05%E5%B7%A5%E5%85%B7%E5%AE%9E%E8%B7%B5%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95jmh%E7%B2%BE%E7%A1%AE%E6%B5%8B%E9%87%8F%E6%96%B9%E6%B3%95%E6%80%A7%E8%83%BD/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="05工具实践：基准测试JMH，精确测量方法性能">
+  <meta property="og:description" content="title: “05工具实践：基准测试JMH，精确测量方法性能” draft: false date: 2024-06-14 keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 上一课时，我们了解到一些外部工具可以获取系统的性能数据。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java 性能优化实战21讲">
+
+  <meta itemprop="name" content="05工具实践：基准测试JMH，精确测量方法性能">
+  <meta itemprop="description" content="title: “05工具实践：基准测试JMH，精确测量方法性能” draft: false date: 2024-06-14 keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 上一课时，我们了解到一些外部工具可以获取系统的性能数据。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5130">
+  <meta itemprop="keywords" content="Java 性能优化实战21讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="05工具实践：基准测试JMH，精确测量方法性能">
+  <meta name="twitter:description" content="title: “05工具实践：基准测试JMH，精确测量方法性能” draft: false date: 2024-06-14 keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间] categories: [Java 性能优化实战21讲] tags: [极客时间] comment: true toc: true autoCollapseToc: true 上一课时，我们了解到一些外部工具可以获取系统的性能数据。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">05工具实践：基准测试JMH，精确测量方法性能</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5130 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#autocollapsetoc-true">title: &ldquo;05工具实践：基准测试JMH，精确测量方法性能&rdquo;
+draft: false
+date: 2024-06-14
+keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间]
+categories: [Java 性能优化实战21讲]
+tags: [极客时间]
+comment: true
+toc: true
+autoCollapseToc: true</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <hr>
+<h2 id="autocollapsetoc-true">title: &ldquo;05工具实践：基准测试JMH，精确测量方法性能&rdquo;
+draft: false
+date: 2024-06-14
+keywords: [05工具实践：基准测试JMH，精确测量方法性能, Java 性能优化实战21讲, 极客时间]
+categories: [Java 性能优化实战21讲]
+tags: [极客时间]
+comment: true
+toc: true
+autoCollapseToc: true</h2>
+<p>上一课时，我们了解到一些外部工具可以获取系统的性能数据。</p>
+<p>但有时候，我们想要测量某段具体代码的性能情况，这时经常会写一些统计执行时间的代码，这些代码穿插在我们的逻辑中，进行一些简单的计时运算。比如下面这几行：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">long start = System.currentTimeMillis(); 
+</span></span><span class="line"><span class="cl">//logic 
+</span></span><span class="line"><span class="cl">long cost = System.currentTimeMillis() - start; 
+</span></span><span class="line"><span class="cl">System.out.println(&#34;Logic cost : &#34; + cost);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可惜的是，这段代码的统计结果，并不一定准确。举个例子来说，JVM 在执行时，会对一些代码块，或者一些频繁执行的逻辑，进行 JIT 编译和内联优化，在得到一个稳定的测试结果之前，需要先循环上万次进行预热。预热前和预热后的性能差别非常大。</p>
+<p>另外，从 01 课时我们就知道，评估性能，有很多的指标，如果这些指标数据，每次都要手工去算的话，那肯定是枯燥乏味且低效的。</p>
+<p>JMH—基准测试工具</p>
+<p>JMH（the Java Microbenchmark Harness）就是这样一个能做基准测试的工具。如果你通过 04 课时介绍的一系列外部工具，定位到了热点代码，要测试它的性能数据，评估改善情况，就可以交给 JMH。它的测量精度非常高，可达纳秒级别。</p>
+<p>JMH 已经在 JDK 12中被包含，其他版本的需要自行引入 maven，坐标如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;dependencies&gt; 
+</span></span><span class="line"><span class="cl">        &lt;dependency&gt; 
+</span></span><span class="line"><span class="cl">            &lt;groupId&gt;org.openjdk.jmh&lt;/groupId&gt; 
+</span></span><span class="line"><span class="cl">            &lt;artifactId&gt;jmh-core&lt;/artifactId&gt; 
+</span></span><span class="line"><span class="cl">            &lt;version&gt;1.23&lt;/version&gt; 
+</span></span><span class="line"><span class="cl">        &lt;/dependency&gt; 
+</span></span><span class="line"><span class="cl">        &lt;dependency&gt; 
+</span></span><span class="line"><span class="cl">            &lt;groupId&gt;org.openjdk.jmh&lt;/groupId&gt; 
+</span></span><span class="line"><span class="cl">            &lt;artifactId&gt;jmh-generator-annprocess&lt;/artifactId&gt; 
+</span></span><span class="line"><span class="cl">            &lt;version&gt;1.23&lt;/version&gt; 
+</span></span><span class="line"><span class="cl">            &lt;scope&gt;provided&lt;/scope&gt; 
+</span></span><span class="line"><span class="cl">        &lt;/dependency&gt; 
+</span></span><span class="line"><span class="cl">&lt;/dependencies&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面，我们介绍一下这个工具的使用。</p>
+<p>JMH 是一个 jar 包，它和单元测试框架 JUnit 非常像，可以通过注解进行一些基础配置。这部分配置有很多是可以通过 main 方法的 OptionsBuilder 进行设置的。</p>
+<p>上图是一个典型的 JMH 程序执行的内容。通过开启多个进程，多个线程，先执行预热，然后执行迭代，最后汇总所有的测试数据进行分析。在执行前后，还可以根据粒度处理一些前置和后置操作。</p>
+<p>一段简单的 JMH 代码如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@BenchmarkMode(Mode.Throughput) 
+</span></span><span class="line"><span class="cl">@OutputTimeUnit(TimeUnit.MILLISECONDS) 
+</span></span><span class="line"><span class="cl">@State(Scope.Thread) 
+</span></span><span class="line"><span class="cl">@Warmup(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS) 
+</span></span><span class="line"><span class="cl">@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS) 
+</span></span><span class="line"><span class="cl">@Fork(1) 
+</span></span><span class="line"><span class="cl">@Threads(2) 
+</span></span><span class="line"><span class="cl">public class BenchmarkTest { 
+</span></span><span class="line"><span class="cl">    @Benchmark 
+</span></span><span class="line"><span class="cl">    public long shift() { 
+</span></span><span class="line"><span class="cl">        long t = 455565655225562L; 
+</span></span><span class="line"><span class="cl">        long a = 0; 
+</span></span><span class="line"><span class="cl">        for (int i = 0; i &lt; 1000; i++) { 
+</span></span><span class="line"><span class="cl">            a = t &gt;&gt; 30; 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        return a; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl">    @Benchmark 
+</span></span><span class="line"><span class="cl">    public long div() { 
+</span></span><span class="line"><span class="cl">        long t = 455565655225562L; 
+</span></span><span class="line"><span class="cl">        long a = 0; 
+</span></span><span class="line"><span class="cl">        for (int i = 0; i &lt; 1000; i++) { 
+</span></span><span class="line"><span class="cl">            a = t / 1024 / 1024 / 1024; 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        return a; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl">    public static void main(String[] args) throws Exception { 
+</span></span><span class="line"><span class="cl">        Options opts = new OptionsBuilder() 
+</span></span><span class="line"><span class="cl">                .include(BenchmarkTest.class.getSimpleName()) 
+</span></span><span class="line"><span class="cl">                .resultFormat(ResultFormatType.JSON) 
+</span></span><span class="line"><span class="cl">                .build(); 
+</span></span><span class="line"><span class="cl">        new Runner(opts).run(); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面，我们逐一介绍一下比较关键的注解和参数。</p>
+<p>关键注解</p>
+<p>1. @Warmup</p>
+<p>样例如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Warmup( 
+</span></span><span class="line"><span class="cl">iterations = 5, 
+</span></span><span class="line"><span class="cl">time = 1, 
+</span></span><span class="line"><span class="cl">timeUnit = TimeUnit.SECONDS)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们不止一次提到预热 warmup 这个注解，可以用在类或者方法上，进行预热配置。可以看到，它有几个配置参数：</p>
+<p>timeUnit：时间的单位，默认的单位是秒；</p>
+<p>iterations：预热阶段的迭代数；</p>
+<p>time：每次预热的时间；</p>
+<p>batchSize：批处理大小，指定了每次操作调用几次方法。</p>
+<p>上面的注解，意思是对代码预热总计 5 秒（迭代 5 次，每次一秒）。预热过程的测试数据，是不记录测量结果的。</p>
+<p>我们可以看一下它执行的效果：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># Warmup: 3 iterations, 1 s each 
+</span></span><span class="line"><span class="cl"># Warmup Iteration   1: 0.281 ops/ns 
+</span></span><span class="line"><span class="cl"># Warmup Iteration   2: 0.376 ops/ns 
+</span></span><span class="line"><span class="cl"># Warmup Iteration   3: 0.483 ops/ns
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一般来说，基准测试都是针对比较小的、执行速度相对较快的代码块，这些代码有很大的可能性被 JIT 编译、内联，所以在编码时保持方法的精简，是一个好的习惯。具体优化过程，我们将在 18 课时介绍。</p>
+<p>说到预热，就不得不提一下在分布式环境下的服务预热。在对服务节点进行发布的时候，通常也会有预热过程，逐步放量到相应的服务节点，直到服务达到最优状态。如下图所示，负载均衡负责这个放量过程，一般是根据百分比进行放量。</p>
+<p>2. @Measurement</p>
+<p>样例如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Measurement( 
+</span></span><span class="line"><span class="cl">iterations = 5,
+</span></span><span class="line"><span class="cl">time = 1,
+</span></span><span class="line"><span class="cl">timeUnit = TimeUnit.SECONDS)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Measurement 和 Warmup 的参数是一样的，不同于预热，它指的是真正的迭代次数。</p>
+<p>我们能够从日志中看到这个执行过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># Measurement: 5 iterations, 1 s each 
+</span></span><span class="line"><span class="cl">Iteration   1: 1646.000 ns/op 
+</span></span><span class="line"><span class="cl">Iteration   2: 1243.000 ns/op 
+</span></span><span class="line"><span class="cl">Iteration   3: 1273.000 ns/op 
+</span></span><span class="line"><span class="cl">Iteration   4: 1395.000 ns/op 
+</span></span><span class="line"><span class="cl">Iteration   5: 1423.000 ns/op
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>虽然经过预热之后，代码都能表现出它的最优状态，但一般和实际应用场景还是有些出入。如果你的测试机器性能很高，或者你的测试机资源利用已经达到了极限，都会影响测试结果的数值。</p>
+<p>所以，通常情况下，我都会在测试时，给机器充足的资源，保持一个稳定的环境。在分析结果时，也会更加关注不同代码实现方式下的性能差异 ，而不是测试数据本身。</p>
+<p>3. @BenchmarkMode</p>
+<p>此注解用来指定基准测试类型，对应 Mode 选项，用来修饰类和方法都可以。这里的 value，是一个数组，可以配置多个统计维度。比如：</p>
+<p>@BenchmarkMode({Throughput,Mode.AverageTime})，统计的就是吞吐量和平均执行时间两个指标。</p>
+<p>所谓的模式，其实就是我们第 01 课时里说的一些指标，在 JMH 中，可以分为以下几种：</p>
+<p>Throughput： 整体吞吐量，比如 QPS，单位时间内的调用量等；</p>
+<p>AverageTime： 平均耗时，指的是每次执行的平均时间。如果这个值很小不好辨认，可以把统计的单位时间调小一点；</p>
+<p>SampleTime： 随机取样，这和我们在第一课时里聊到的 TP 值是一个概念；</p>
+<p>SingleShotTime： 如果你想要测试仅仅一次的性能，比如第一次初始化花了多长时间，就可以使用这个参数，其实和传统的 main 方法没有什么区别；</p>
+<p>All： 所有的指标，都算一遍，你可以设置成这个参数看下效果。</p>
+<p>我们拿平均时间，看一下一个大体的执行结果：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Result &#34;com.github.xjjdog.tuning.BenchmarkTest.shift&#34;: 
+</span></span><span class="line"><span class="cl">  2.068 ±(99.9%) 0.038 ns/op [Average] 
+</span></span><span class="line"><span class="cl">  (min, avg, max) = (2.059, 2.068, 2.083), stdev = 0.010 
+</span></span><span class="line"><span class="cl">  CI (99.9%): [2.030, 2.106] (assumes normal distribution)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于我们声明的时间单位是纳秒，本次 shift 方法的平均响应时间就是 2.068 纳秒。</p>
+<p>我们也可以看下最终的耗时时间：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Benchmark            Mode  Cnt  Score   Error  Units 
+</span></span><span class="line"><span class="cl">BenchmarkTest.div    avgt    5  2.072 ± 0.053  ns/op 
+</span></span><span class="line"><span class="cl">BenchmarkTest.shift  avgt    5  2.068 ± 0.038  ns/op
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>由于是平均数，这里的 Error 值的是误差（或者波动）的意思。</p>
+<p>可以看到，在衡量这些指标的时候，都有一个时间维度，它就是通过 @OutputTimeUnit 注解进行配置的。</p>
+<p>这个就比较简单了，它指明了基准测试结果的时间类型。可用于类或者方法上，一般选择秒、毫秒、微秒，纳秒那是针对的速度非常快的方法。</p>
+<p>举个例子，@BenchmarkMode(Mode.Throughput) 和 @OutputTimeUnit(TimeUnit.MILLISECONDS) 进行组合，代表的就是每毫秒的吞吐量。</p>
+<p>如下面的关于吞吐量的结果，就是以毫秒计算的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Benchmark             Mode  Cnt       Score       Error   Units 
+</span></span><span class="line"><span class="cl">BenchmarkTest.div    thrpt    5  482999.685 ±  6415.832  ops/ms 
+</span></span><span class="line"><span class="cl">BenchmarkTest.shift  thrpt    5  480599.263 ± 20752.609  ops/ms
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>OutputTimeUnit 注解同样可以修饰类或者方法，通过更改时间级别，可以获取更加易读的结果。</p>
+<p>4. @Fork</p>
+<p>fork 的值一般设置成 1，表示只使用一个进程进行测试；如果这个数字大于 1，表示会启用新的进程进行测试；但如果设置成 0，程序依然会运行，不过是这样是在用户的 JVM 进程上运行的，可以看下下面的提示，但不推荐这么做。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># Fork: N/A, test runs in the host VM 
+</span></span><span class="line"><span class="cl"># *** WARNING: Non-forked runs may silently omit JVM options, mess up profilers, disable compiler hints, etc. *** 
+</span></span><span class="line"><span class="cl"># *** WARNING: Use non-forked runs only for debugging purposes, not for actual performance runs. ***
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那么 fork 到底是在进程还是线程环境里运行呢？</p>
+<p>我们追踪一下 JMH 的源码，发现每个 fork 进程是单独运行在 Proccess 进程里的，这样就可以做完全的环境隔离，避免交叉影响。</p>
+<p>它的输入输出流，通过 Socket 连接的模式，发送到我们的执行终端。</p>
+<p>在这里分享一个小技巧。其实 fork 注解有一个参数叫作 jvmArgsAppend，我们可以通过它传递一些 JVM 的参数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Fork(value = 3, jvmArgsAppend = {&#34;-Xmx2048m&#34;, &#34;-server&#34;, &#34;-XX:+AggressiveOpts&#34;})
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在平常的测试中，也可以适当增加 fork 数，来减少测试的误差。</p>
+<p>5. @Threads</p>
+<p>fork 是面向进程的，而 Threads 是面向线程的。指定了这个注解以后，将会开启并行测试。如果配置了 Threads.MAX，则使用和处理机器核数相同的线程数。</p>
+<p>这个和我们平常编码中的习惯也是相同的，并不是说开的线程越多越好。线程多了，操作系统就需要耗费更多的时间在上下文切换上，造成了整体性能的下降。</p>
+<p>6. @Group</p>
+<p>@Group 注解只能加在方法上，用来把测试方法进行归类。如果你单个测试文件中方法比较多，或者需要将其归类，则可以使用这个注解。</p>
+<p>与之关联的 @GroupThreads 注解，会在这个归类的基础上，再进行一些线程方面的设置。这两个注解都很少使用，除非是非常大的性能测试案例。</p>
+<p>7. @State</p>
+<p>@State 指定了在类中变量的作用范围，用于声明某个类是一个“状态”，可以用 Scope 参数用来表示该状态的共享范围。这个注解必须加在类上，否则提示无法运行。</p>
+<p>Scope 有如下三种值。</p>
+<p>Benchmark ：表示变量的作用范围是某个基准测试类。</p>
+<p>Thread ：每个线程一份副本，如果配置了 Threads 注解，则每个 Thread 都拥有一份变量，它们互不影响。</p>
+<p>Group ：联系上面的 @Group 注解，在同一个 Group 里，将会共享同一个变量实例。</p>
+<p>在 JMHSample04DefaultState 测试文件中，演示了变量 x 的默认作用范围是 Thread，关键代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@State(Scope.Thread) 
+</span></span><span class="line"><span class="cl">public class JMHSample_04_DefaultState { 
+</span></span><span class="line"><span class="cl">    double x = Math.PI; 
+</span></span><span class="line"><span class="cl">    @Benchmark 
+</span></span><span class="line"><span class="cl">    public void measure() { 
+</span></span><span class="line"><span class="cl">        x++; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>8. @Setup 和 @TearDown</p>
+<p>和单元测试框架 JUnit 类似，@Setup 用于基准测试前的初始化动作，@TearDown 用于基准测试后的动作，来做一些全局的配置。</p>
+<p>这两个注解，同样有一个 Level 值，标明了方法运行的时机，它有三个取值。</p>
+<p>Trial ：默认的级别，也就是 Benchmark 级别。</p>
+<p>Iteration ：每次迭代都会运行。</p>
+<p>Invocation ：每次方法调用都会运行，这个是粒度最细的。</p>
+<p>如果你的初始化操作，是和方法相关的，那最好使用 Invocation 级别。但大多数场景是一些全局的资源，比如一个 Spring 的 DAO，那么就使用默认的 Trial，只初始化一次就可以。</p>
+<p>9. @Param</p>
+<p>@Param 注解只能修饰字段，用来测试不同的参数，对程序性能的影响。配合 @State注解，可以同时制定这些参数的执行范围。</p>
+<p>代码样例如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="err">@</span><span class="n">BenchmarkMode</span><span class="p">(</span><span class="n">Mode</span><span class="o">.</span><span class="n">AverageTime</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">OutputTimeUnit</span><span class="p">(</span><span class="n">TimeUnit</span><span class="o">.</span><span class="n">NANOSECONDS</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">Warmup</span><span class="p">(</span><span class="n">iterations</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">timeUnit</span> <span class="o">=</span> <span class="n">TimeUnit</span><span class="o">.</span><span class="n">SECONDS</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">Measurement</span><span class="p">(</span><span class="n">iterations</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">time</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">timeUnit</span> <span class="o">=</span> <span class="n">TimeUnit</span><span class="o">.</span><span class="n">SECONDS</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">Fork</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="err">@</span><span class="n">State</span><span class="p">(</span><span class="n">Scope</span><span class="o">.</span><span class="n">Benchmark</span><span class="p">)</span> 
+</span></span><span class="line"><span class="cl"><span class="n">public</span> <span class="k">class</span> <span class="n">JMHSample_27_Params</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Param</span><span class="p">({</span><span class="s2">&#34;1&#34;</span><span class="p">,</span> <span class="s2">&#34;31&#34;</span><span class="p">,</span> <span class="s2">&#34;65&#34;</span><span class="p">,</span> <span class="s2">&#34;101&#34;</span><span class="p">,</span> <span class="s2">&#34;103&#34;</span><span class="p">})</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">arg</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Param</span><span class="p">({</span><span class="s2">&#34;0&#34;</span><span class="p">,</span> <span class="s2">&#34;1&#34;</span><span class="p">,</span> <span class="s2">&#34;2&#34;</span><span class="p">,</span> <span class="s2">&#34;4&#34;</span><span class="p">,</span> <span class="s2">&#34;8&#34;</span><span class="p">,</span> <span class="s2">&#34;16&#34;</span><span class="p">,</span> <span class="s2">&#34;32&#34;</span><span class="p">})</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">int</span> <span class="n">certainty</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Benchmark</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">boolean</span> <span class="n">bench</span><span class="p">()</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">BigInteger</span><span class="o">.</span><span class="n">valueOf</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span><span class="o">.</span><span class="n">isProbablePrime</span><span class="p">(</span><span class="n">certainty</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="k">static</span> <span class="n">void</span> <span class="n">main</span><span class="p">(</span><span class="ne">String</span><span class="p">[]</span> <span class="n">args</span><span class="p">)</span> <span class="n">throws</span> <span class="n">RunnerException</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">Options</span> <span class="n">opt</span> <span class="o">=</span> <span class="n">new</span> <span class="n">OptionsBuilder</span><span class="p">()</span> 
+</span></span><span class="line"><span class="cl">                <span class="o">.</span><span class="n">include</span><span class="p">(</span><span class="n">JMHSample_27_Params</span><span class="o">.</span><span class="k">class</span><span class="o">.</span><span class="n">getSimpleName</span><span class="p">())</span> 
+</span></span><span class="line"><span class="cl"><span class="o">//</span>                <span class="o">.</span><span class="n">param</span><span class="p">(</span><span class="s2">&#34;arg&#34;</span><span class="p">,</span> <span class="s2">&#34;41&#34;</span><span class="p">,</span> <span class="s2">&#34;42&#34;</span><span class="p">)</span> <span class="o">//</span> <span class="n">Use</span> <span class="n">this</span> <span class="n">to</span> <span class="n">selectively</span> <span class="n">constrain</span><span class="o">/</span><span class="n">override</span> <span class="n">parameters</span> 
+</span></span><span class="line"><span class="cl">                <span class="o">.</span><span class="n">build</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl"> 
+</span></span><span class="line"><span class="cl">        <span class="n">new</span> <span class="n">Runner</span><span class="p">(</span><span class="n">opt</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>值得注意的是，如果你设置了非常多的参数，这些参数将执行多次，通常会运行很长时间。比如参数 1 M 个，参数 2 N 个，那么总共要执行 M*N 次。</p>
+<p>下面是一个执行结果的截图：</p>
+<p>10. @CompilerControl</p>
+<p>这可以说是一个非常有用的功能了。</p>
+<p>Java 中方法调用的开销是比较大的，尤其是在调用量非常大的情况下。拿简单的getter/setter 方法来说，这种方法在 Java 代码中大量存在。我们在访问的时候，就需要创建相应的栈帧，访问到需要的字段后，再弹出栈帧，恢复原程序的执行。</p>
+<p>如果能够把这些对象的访问和操作，纳入目标方法的调用范围之内，就少了一次方法调用，速度就能得到提升，这就是方法内联的概念。如下图所示，代码经过 JIT 编译之后，效率会有大的提升。</p>
+<p>这个注解可以用在类或者方法上，能够控制方法的编译行为，常用的有 3 种模式：</p>
+<p>强制使用内联（INLINE），禁止使用内联（DONT_INLINE），甚至是禁止方法编译（EXCLUDE）等。</p>
+<p>将结果图形化</p>
+<p>使用 JMH 测试的结果，可以二次加工，进行图形化展示。结合图表数据，更加直观。通过运行时，指定输出的格式文件，即可获得相应格式的性能测试结果。</p>
+<p>比如下面这行代码，就是指定输出 JSON 格式的数据：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">Options opt = new OptionsBuilder() 
+</span></span><span class="line"><span class="cl">    .resultFormat(ResultFormatType.JSON) 
+</span></span><span class="line"><span class="cl">    .build();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>1. JMH 支持 5 种格式结果</p>
+<p>TEXT 导出文本文件。</p>
+<p>CSV 导出 csv 格式文件。</p>
+<p>SCSV 导出 scsv 等格式的文件。</p>
+<p>JSON 导出成 json 文件。</p>
+<p>LATEX 导出到 latex，一种基于 ΤΕΧ 的排版系统。</p>
+<p>一般来说，我们导出成 CSV 文件，直接在 Excel 中操作，生成如下相应的图形就可以了。</p>
+<p>2. 结果图形化制图工具</p>
+<p>JMH Visualizer</p>
+<p>这里有一个开源的项目，通过导出 json 文件，上传至 JMH Visualizer（点击链接跳转），可得到简单的统计结果。由于很多操作需要鼠标悬浮在上面进行操作，所以个人认为它的展示方式并不是很好。</p>
+<p>JMH Visual Chart</p>
+<p>相比较而言， JMH Visual Chart（点击链接跳转）这个工具，就相对直观一些。</p>
+<p>meta-chart</p>
+<p>一个通用的 在线图表生成器（点击链接跳转），导出 CSV 文件后，做适当处理，即可导出精美图像。</p>
+<p>像 Jenkins 等一些持续集成工具，也提供了相应的插件，用来直接显示这些测试结果。</p>
+<p>小结</p>
+<p>本课时主要介绍了 基准测试工具— JMH，官方的 JMH 有非常丰富的示例，比如伪共享（FalseSharing）的影响等高级话题。我已经把它放在了 Gitee（点击链接跳转）上，你可以将其导入至 Idea 编辑器进行测试。</p>
+<p>JMH 这个工具非常好用，它可以使用确切的测试数据，来支持我们的分析结果。一般情况下，如果定位到热点代码，就需要使用基准测试工具进行专项优化，直到性能有了显著的提升。</p>
+<p>接下来的课程，将涉及对一些性能问题细节的验证，也会使用 JMH 进行进一步的分析。</p>
+<p>-&ndash; ### 精选评论 ##### **7540： &gt; 有源码不 ######     讲师回复： &gt;     <a href="https://gitee.com/xjjdog/tuning-lagou-res">https://gitee.com/xjjdog/tuning-lagou-res</a> ##### **方： &gt; 使用JMH的前提是定位到热点代码，如何定位热点代码？热点代码的特点有哪些？ ######     讲师回复： &gt;     并不仅仅是热点代码，执行的非常慢的接口也可以进行着重优化。这个问题非常好，这就是公司内监控平台和APM平台的重要性。目前比较主流的做法有类似Skywalking的探针（拉钩有课），也有大公司使用Spark Stream做实时的流式分析，实时输出方法调用的耗时和性能指标。如果没有这些工具，就只能靠业务感觉了。 ##### **俊： &gt; 我将JMH集成到公司项目，启动测试，fork线程启动失败，显示文件名或扩展名过长 ######     讲师回复： &gt;     专门做了一个512字符长的类试了一下，没有发现这个问题 ##### *苏： &gt; 老师,有没有别的方法可以测试接口响应速度的,或者方法 ######     讲师回复： &gt;     对于http，单个请求可以使用curl工具。 ”time curl $url&gt;/dev/null“ 统计类的可以用wrk或者jmeter 对于java调用，arthas或者skywalking之类的探针apm都可去做。 ##### **7718： &gt; 期待实战课程</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/">Java 性能优化实战21讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/netty%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8Erpc%E5%AE%9E%E8%B7%B5/05%E6%9C%8D%E5%8A%A1%E7%BC%96%E6%8E%92%E5%B1%82pipeline%E5%A6%82%E4%BD%95%E5%8D%8F%E8%B0%83%E5%90%84%E7%B1%BBhandler/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">05服务编排层：Pipeline如何协调各类Handler？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/05%E6%95%85%E9%9A%9C%E5%AE%9A%E4%BD%8Djavaviualvm%E7%AC%AC%E4%B8%80%E6%AC%BE%E5%A4%9A%E5%90%88%E4%B8%80%E7%9A%84%E8%BD%BB%E9%87%8F%E5%8F%AF%E8%A7%86%E5%8C%96%E5%B7%A5%E5%85%B7/">
+            <span class="next-text nav-default">05故障定位：JavaViualVM，第一款多合一的轻量可视化工具</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

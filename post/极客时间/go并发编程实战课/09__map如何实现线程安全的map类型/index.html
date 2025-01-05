@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>09__map：如何实现线程安全的map类型？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是鸟窝。
+哈希表（Hash Table）这个数据结构，我们已经非常熟悉了。它实现的就是 key-value 之间的映射关系，主要提供的方法包括 Add、Lookup、Delete 等。因为这种数据结构是一个基础的数据结构，每个 key 都会有一个唯一的索引值，通过索引可以很快地找到对应的值，所以使用哈希表进行数据的插入和读取都是很快的。Go 语言本身就内建了这样一个数据结构，也就是 map 数据类型。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/09__map%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8%E7%9A%84map%E7%B1%BB%E5%9E%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/09__map%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8%E7%9A%84map%E7%B1%BB%E5%9E%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="09__map：如何实现线程安全的map类型？">
+  <meta property="og:description" content="你好，我是鸟窝。
+哈希表（Hash Table）这个数据结构，我们已经非常熟悉了。它实现的就是 key-value 之间的映射关系，主要提供的方法包括 Add、Lookup、Delete 等。因为这种数据结构是一个基础的数据结构，每个 key 都会有一个唯一的索引值，通过索引可以很快地找到对应的值，所以使用哈希表进行数据的插入和读取都是很快的。Go 语言本身就内建了这样一个数据结构，也就是 map 数据类型。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go并发编程实战课">
+
+  <meta itemprop="name" content="09__map：如何实现线程安全的map类型？">
+  <meta itemprop="description" content="你好，我是鸟窝。
+哈希表（Hash Table）这个数据结构，我们已经非常熟悉了。它实现的就是 key-value 之间的映射关系，主要提供的方法包括 Add、Lookup、Delete 等。因为这种数据结构是一个基础的数据结构，每个 key 都会有一个唯一的索引值，通过索引可以很快地找到对应的值，所以使用哈希表进行数据的插入和读取都是很快的。Go 语言本身就内建了这样一个数据结构，也就是 map 数据类型。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7134">
+  <meta itemprop="keywords" content="Go并发编程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="09__map：如何实现线程安全的map类型？">
+  <meta name="twitter:description" content="你好，我是鸟窝。
+哈希表（Hash Table）这个数据结构，我们已经非常熟悉了。它实现的就是 key-value 之间的映射关系，主要提供的方法包括 Add、Lookup、Delete 等。因为这种数据结构是一个基础的数据结构，每个 key 都会有一个唯一的索引值，通过索引可以很快地找到对应的值，所以使用哈希表进行数据的插入和读取都是很快的。Go 语言本身就内建了这样一个数据结构，也就是 map 数据类型。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">09__map：如何实现线程安全的map类型？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7134 字 </span>
+          <span class="more-meta"> 预计阅读 15 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#map-的基本使用方法">map 的基本使用方法</a></li>
+        <li><a href="#使用-map-的-2-种常见错误">使用 map 的 2 种常见错误</a>
+          <ul>
+            <li><a href="#常见错误一未初始化">常见错误一：未初始化</a></li>
+            <li><a href="#常见错误二并发读写">常见错误二：并发读写</a></li>
+          </ul>
+        </li>
+        <li><a href="#如何实现线程安全的-map-类型">如何实现线程安全的 map 类型？</a>
+          <ul>
+            <li><a href="#加读写锁扩展-map支持并发读写">加读写锁：扩展 map，支持并发读写</a></li>
+            <li><a href="#分片加锁更高效的并发-map">分片加锁：更高效的并发 map</a></li>
+          </ul>
+        </li>
+        <li><a href="#应对特殊场景的-syncmap">应对特殊场景的 sync.Map</a>
+          <ul>
+            <li><a href="#syncmap-的实现">sync.Map 的实现</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是鸟窝。</p>
+<p>哈希表（Hash Table）这个数据结构，我们已经非常熟悉了。它实现的就是 key-value 之间的映射关系，主要提供的方法包括 Add、Lookup、Delete 等。因为这种数据结构是一个基础的数据结构，每个 key 都会有一个唯一的索引值，通过索引可以很快地找到对应的值，所以使用哈希表进行数据的插入和读取都是很快的。Go 语言本身就内建了这样一个数据结构，也就是 <strong>map 数据类型</strong>。</p>
+<p>今天呢，我们就先来学习 Go 语言内建的这个 map 类型，了解它的基本使用方法和使用陷阱，然后再学习如何实现线程安全的 map 类型，最后我还会给你介绍 Go 标准库中线程安全的 sync.Map 类型。学完了这节课，你可以学会几种可以并发访问的 map 类型。</p>
+<h2 id="map-的基本使用方法">map 的基本使用方法</h2>
+<p>Go 内建的 map 类型如下：</p>
+<p>map[K]V</p>
+<p>其中，<strong>key 类型的 K 必须是可比较的</strong>（comparable），也就是可以通过 == 和 != 操作符进行比较；value 的值和类型无所谓，可以是任意的类型，或者为 nil。</p>
+<p>在 Go 语言中，bool、整数、浮点数、复数、字符串、指针、Channel、接口都是可比较的，包含可比较元素的 struct 和数组，这俩也是可比较的，而 slice、map、函数值都是不可比较的。</p>
+<p>那么，上面这些可比较的数据类型都可以作为 map 的 key 吗？显然不是。通常情况下，我们会选择内建的基本类型，比如整数、字符串做 key 的类型，因为这样最方便。</p>
+<p>这里有一点需要注意，如果使用 struct 类型做 key 其实是有坑的，因为如果 struct 的某个字段值修改了，查询 map 时无法获取它 add 进去的值，如下面的例子：</p>
+<p>type mapKey struct {<br>
+key int<br>
+}</p>
+<p>func main() {<br>
+var m = make(map[mapKey]string)<br>
+var key = mapKey{10}</p>
+<pre><code>m[key] = &quot;hello&quot;  
+fmt.Printf(&quot;m[key]=%s\n&quot;, m[key])  
+
+
+// 修改 key 的字段的值后再次查询 map，无法获取刚才 add 进去的值  
+key.key = 100  
+fmt.Printf(&quot;再次查询 m[key]=%s\n&quot;, m[key])  
+</code></pre>
+<p>}</p>
+<p>那该怎么办呢？如果要使用 struct 作为 key，我们要保证 struct 对象在逻辑上是不可变的，这样才会保证 map 的逻辑没有问题。</p>
+<p>以上就是选取 key 类型的注意点了。接下来，我们看一下使用 map[key] 函数时需要注意的一个知识点。<strong>在 Go 中，map[key] 函数返回结果可以是一个值，也可以是两个值</strong>，这是容易让人迷惑的地方。原因在于，如果获取一个不存在的 key 对应的值时，会返回零值。为了区分真正的零值和 key 不存在这两种情况，可以根据第二个返回值来区分，如下面的代码的第 6 行、第 7 行：</p>
+<p>func main() {<br>
+var m = make(map[string]int)<br>
+m[&ldquo;a&rdquo;] = 0<br>
+fmt.Printf(&ldquo;a=%d; b=%d\n&rdquo;, m[&ldquo;a&rdquo;], m[&ldquo;b&rdquo;])</p>
+<pre><code>av, aexisted := m[&quot;a&quot;]  
+bv, bexisted := m[&quot;b&quot;]  
+fmt.Printf(&quot;a=%d, existed: %t; b=%d, existed: %t\n&quot;, av, aexisted, bv, bexisted)  
+</code></pre>
+<p>}</p>
+<p>map 是无序的，所以当遍历一个 map 对象的时候，迭代的元素的顺序是不确定的，无法保证两次遍历的顺序是一样的，也不能保证和插入的顺序一致。那怎么办呢？如果我们想要按照 key 的顺序获取 map 的值，需要先取出所有的 key 进行排序，然后按照这个排序的 key 依次获取对应的值。而如果我们想要保证元素有序，比如按照元素插入的顺序进行遍历，可以使用辅助的数据结构，比如orderedmap，来记录插入顺序。</p>
+<p>好了，总结下关于 map 我们需要掌握的内容：map 的类型是 map[key]，key 类型的 K 必须是可比较的，通常情况下，我们会选择内建的基本类型，比如整数、字符串做 key 的类型。如果要使用 struct 作为 key，我们要保证 struct 对象在逻辑上是不可变的。在 Go 中，map[key] 函数返回结果可以是一个值，也可以是两个值。map 是无序的，如果我们想要保证遍历 map 时元素有序，可以使用辅助的数据结构，比如orderedmap。</p>
+<h2 id="使用-map-的-2-种常见错误">使用 map 的 2 种常见错误</h2>
+<p>那接下来，我们来看使用 map 最常犯的两个错误，就是<strong>未初始化</strong>和<strong>并发读写</strong>。</p>
+<h3 id="常见错误一未初始化">常见错误一：未初始化</h3>
+<p>和 slice 或者 Mutex、RWmutex 等 struct 类型不同，map 对象必须在使用之前初始化。如果不初始化就直接赋值的话，会出现 panic 异常，比如下面的例子，m 实例还没有初始化就直接进行操作会导致 panic（第 3 行）:</p>
+<p>func main() {<br>
+var m map[int]int<br>
+m[100] = 100<br>
+}</p>
+<p>解决办法就是在第 2 行初始化这个实例（m := make(map[int]int)）。</p>
+<p>从一个 nil 的 map 对象中获取值不会 panic，而是会得到零值，所以下面的代码不会报错:</p>
+<p>func main() {<br>
+var m map[int]int<br>
+fmt.Println(m[100])<br>
+}</p>
+<p>这个例子很简单，我们可以意识到 map 的初始化问题。但有时候 map 作为一个 struct 字段的时候，就很容易忘记初始化了。</p>
+<p>type Counter struct {<br>
+Website      string<br>
+Start        time.Time<br>
+PageCounters map[string]int<br>
+}</p>
+<p>func main() {<br>
+var c Counter<br>
+c.Website = &ldquo;baidu.com&rdquo;</p>
+<pre><code>c.PageCounters[&quot;/&quot;]++  
+</code></pre>
+<p>}</p>
+<p>所以，关于初始化这一点，我再强调一下，目前还没有工具可以检查，我们只能记住“<strong>别忘记初始化</strong>”这一条规则。</p>
+<h3 id="常见错误二并发读写">常见错误二：并发读写</h3>
+<p>对于 map 类型，另一个很容易犯的错误就是并发访问问题。这个易错点，相当令人讨厌，如果没有注意到并发问题，程序在运行的时候就有可能出现并发读写导致的 panic。</p>
+<p>Go 内建的 map 对象不是线程（goroutine）安全的，并发读写的时候运行时会有检查，遇到并发问题就会导致 panic。</p>
+<p>我们一起看一个并发访问 map 实例导致 panic 的例子：</p>
+<p>func main() {<br>
+var m = make(map[int]int,10) // 初始化一个 map<br>
+go func() {<br>
+for {<br>
+m[1] = 1 //设置 key<br>
+}<br>
+}()</p>
+<pre><code>go func() {  
+    for {  
+        _ = m[2] //访问这个 map  
+    }  
+}()  
+select {}  
+</code></pre>
+<p>}</p>
+<p>虽然这段代码看起来是读写 goroutine 各自操作不同的元素，貌似 map 也没有扩容的问题，但是运行时检测到同时对 map 对象有并发访问，就会直接 panic。panic 信息会告诉我们代码中哪一行有读写问题，根据这个错误信息你就能快速定位出来是哪一个 map 对象在哪里出的问题了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/9d4a37c6349f3dff902bf45c8af92766.png" alt=""></p>
+<p>这个错误非常常见，是几乎每个人都会踩到的坑。其实，不只是我们写代码时容易犯这个错，一些知名的项目中也是屡次出现这个问题，比如 Docker issue 40772，在删除 map 对象的元素时忘记了加锁：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/42e1ecf472439a2427b0cdb397b61cc9.png" alt=""></p>
+<p>Docker issue 40772，Docker issue 35588、34540、39643 等等，也都有并发读写 map 的问题。</p>
+<p>除了 Docker 中，Kubernetes 的 issue 84431、72464、68647、64484、48045、45593、37560 等，以及 TiDB 的 issue 14960 和 17494 等，也出现了这个错误。</p>
+<p>这么多人都会踩的坑，有啥解决方案吗？肯定有，那接下来，我们就继续来看如何解决内建 map 的并发读写问题。</p>
+<h2 id="如何实现线程安全的-map-类型">如何实现线程安全的 map 类型？</h2>
+<p>避免 map 并发读写 panic 的方式之一就是加锁，考虑到读写性能，可以使用读写锁提供性能。</p>
+<h3 id="加读写锁扩展-map支持并发读写">加读写锁：扩展 map，支持并发读写</h3>
+<p>比较遗憾的是，目前 Go 还没有正式发布泛型特性，我们还不能实现一个通用的支持泛型的加锁 map。但是，将要发布的泛型方案已经可以验证测试了，离发布也不远了，也许发布之后 sync.Map 就支持泛型了。</p>
+<p>当然了，如果没有泛型支持，我们也能解决这个问题。我们可以通过 interface{}来模拟泛型，但还是要涉及接口和具体类型的转换，比较复杂，还不如将要发布的泛型方案更直接、性能更好。</p>
+<p>这里我以一个具体的 map 类型为例，来演示利用读写锁实现线程安全的 map[int]int 类型：</p>
+<p>type RWMap struct { // 一个读写锁保护的线程安全的 map<br>
+sync.RWMutex // 读写锁保护下面的 map 字段<br>
+m map[int]int<br>
+}<br>
+// 新建一个 RWMap<br>
+func NewRWMap(n int) *RWMap {<br>
+return &amp;RWMap{<br>
+m: make(map[int]int, n),<br>
+}<br>
+}<br>
+func (m *RWMap) Get(k int) (int, bool) { //从 map 中读取一个值<br>
+m.RLock()<br>
+defer m.RUnlock()<br>
+v, existed := m.m[k] // 在锁的保护下从 map 中读取<br>
+return v, existed<br>
+}</p>
+<p>func (m *RWMap) Set(k int, v int) { // 设置一个键值对<br>
+m.Lock()              // 锁保护<br>
+defer m.Unlock()<br>
+m.m[k] = v<br>
+}</p>
+<p>func (m *RWMap) Delete(k int) { //删除一个键<br>
+m.Lock()                   // 锁保护<br>
+defer m.Unlock()<br>
+delete(m.m, k)<br>
+}</p>
+<p>func (m *RWMap) Len() int { // map 的长度<br>
+m.RLock()   // 锁保护<br>
+defer m.RUnlock()<br>
+return len(m.m)<br>
+}</p>
+<p>func (m *RWMap) Each(f func(k, v int) bool) { // 遍历 map<br>
+m.RLock()             //遍历期间一直持有读锁<br>
+defer m.RUnlock()</p>
+<pre><code>for k, v := range m.m {  
+    if !f(k, v) {  
+        return  
+    }  
+}  
+</code></pre>
+<p>}</p>
+<p>正如这段代码所示，对 map 对象的操作，无非就是增删改查和遍历等几种常见操作。我们可以把这些操作分为读和写两类，其中，查询和遍历可以看做读操作，增加、修改和删除可以看做写操作。如例子所示，我们可以通过读写锁对相应的操作进行保护。</p>
+<h3 id="分片加锁更高效的并发-map">分片加锁：更高效的并发 map</h3>
+<p>虽然使用读写锁可以提供线程安全的 map，但是在大量并发读写的情况下，锁的竞争会非常激烈。我在第 4 讲中提到过，锁是性能下降的万恶之源之一。</p>
+<p>在并发编程中，我们的一条原则就是尽量减少锁的使用。一些单线程单进程的应用（比如 Redis 等），基本上不需要使用锁去解决并发线程访问的问题，所以可以取得很高的性能。但是对于 Go 开发的应用程序来说，并发是常用的一个特性，在这种情况下，我们能做的就是，<strong>尽量减少锁的粒度和锁的持有时间</strong>。</p>
+<p>你可以优化业务处理的代码，以此来减少锁的持有时间，比如将串行的操作变成并行的子任务执行。不过，这就是另外的故事了，今天我们还是主要讲对同步原语的优化，所以这里我重点讲如何减少锁的粒度。</p>
+<p><strong>减少锁的粒度常用的方法就是分片</strong>（Shard），将一把锁分成几把锁，每个锁控制一个分片。Go 比较知名的分片并发 map 的实现是orcaman/concurrent-map。</p>
+<p>它默认采用 32 个分片，<strong>GetShard 是一个关键的方法，能够根据 key 计算出分片索引</strong>。</p>
+<pre><code>var SHARD_COUNT = 32  
+
+// 分成 SHARD_COUNT 个分片的 map  
+</code></pre>
+<p>type ConcurrentMap []*ConcurrentMapShared</p>
+<p>// 通过 RWMutex 保护的线程安全的分片，包含一个 map<br>
+type ConcurrentMapShared struct {<br>
+items        map[string]interface{}<br>
+sync.RWMutex // Read Write mutex, guards access to internal map.<br>
+}</p>
+<p>// 创建并发 map<br>
+func New() ConcurrentMap {<br>
+m := make(ConcurrentMap, SHARD_COUNT)<br>
+for i := 0; i &lt; SHARD_COUNT; i++ {<br>
+m[i] = &amp;ConcurrentMapShared{items: make(map[string]interface{})}<br>
+}<br>
+return m<br>
+}</p>
+<p>// 根据 key 计算分片索引<br>
+func (m ConcurrentMap) GetShard(key string) *ConcurrentMapShared {<br>
+return m[uint(fnv32(key))%uint(SHARD_COUNT)]<br>
+}</p>
+<p>增加或者查询的时候，首先根据分片索引得到分片对象，然后对分片对象加锁进行操作：</p>
+<p>func (m ConcurrentMap) Set(key string, value interface{}) {<br>
+// 根据 key 计算出对应的分片<br>
+shard := m.GetShard(key)<br>
+shard.Lock() //对这个分片加锁，执行业务操作<br>
+shard.items[key] = value<br>
+shard.Unlock()<br>
+}</p>
+<p>func (m ConcurrentMap) Get(key string) (interface{}, bool) {<br>
+// 根据 key 计算出对应的分片<br>
+shard := m.GetShard(key)<br>
+shard.RLock()<br>
+// 从这个分片读取 key 的值<br>
+val, ok := shard.items[key]<br>
+shard.RUnlock()<br>
+return val, ok<br>
+}</p>
+<p>当然，除了 GetShard 方法，ConcurrentMap 还提供了很多其他的方法。这些方法都是通过计算相应的分片实现的，目的是保证把锁的粒度限制在分片上。</p>
+<p>好了，到这里我们就学会了解决 map 并发 panic 的两个方法：加锁和分片。</p>
+<p><strong>在我个人使用并发 map 的过程中，加锁和分片加锁这两种方案都比较常用，如果是追求更高的性能，显然是分片加锁更好，因为它可以降低锁的粒度，进而提高访问此 map 对象的吞吐。如果并发性能要求不是那么高的场景，简单加锁方式更简单。</strong></p>
+<p>接下来，我会继续给你介绍 sync.Map，这是 Go 官方线程安全 map 的标准实现。虽然是官方标准，反而是不常用的，为什么呢？一句话来说就是 map 要解决的场景很难描述，很多时候在做抉择时根本就不知道该不该用它。但是呢，确实有一些特定的场景，我们需要用到 sync.Map 来实现，所以还是很有必要学习这个知识点。具体什么场景呢，我慢慢给你道来。</p>
+<h2 id="应对特殊场景的-syncmap">应对特殊场景的 sync.Map</h2>
+<p>Go 内建的 map 类型不是线程安全的，所以 Go 1.9 中增加了一个线程安全的 map，也就是 sync.Map。但是，我们一定要记住，这个 sync.Map 并不是用来替换内建的 map 类型的，它只能被应用在一些特殊的场景里。</p>
+<p>那这些特殊的场景是啥呢？官方的文档中指出，在以下两个场景中使用 sync.Map，会比使用 map+RWMutex 的方式，性能要好得多：</p>
+<ol>
+<li>只会增长的缓存系统中，一个 key 只写入一次而被读很多次；</li>
+<li>多个 goroutine 为不相交的键集读、写和重写键值对。</li>
+</ol>
+<p>这两个场景说得都比较笼统，而且，这些场景中还包含了一些特殊的情况。所以，官方建议你针对自己的场景做性能评测，如果确实能够显著提高性能，再使用 sync.Map。</p>
+<p>这么来看，我们能用到 sync.Map 的场景确实不多。即使是 sync.Map 的作者 Bryan C. Mills，也很少使用 sync.Map，即便是在使用 sync.Map 的时候，也是需要临时查询它的 API，才能清楚记住它的功能。所以，我们可以把 sync.Map 看成一个生产环境中很少使用的同步原语。</p>
+<h3 id="syncmap-的实现">sync.Map 的实现</h3>
+<p>那 sync.Map 是怎么实现的呢？它是如何解决并发问题提升性能的呢？其实 sync.Map 的实现有几个优化点，这里先列出来，我们后面慢慢分析。</p>
+<ol>
+<li>空间换时间。通过冗余的两个数据结构（只读的 read 字段、可写的 dirty），来减少加锁对性能的影响。对只读字段（read）的操作不需要加锁。</li>
+<li>优先从 read 字段读取、更新、删除，因为对 read 字段的读取不需要锁。</li>
+<li>动态调整。miss 次数多了之后，将 dirty 数据提升为 read，避免总是从 dirty 中加锁读取。</li>
+<li>double-checking。加锁之后先还要再检查 read 字段，确定真的不存在才操作 dirty 字段。</li>
+<li>延迟删除。删除一个键值只是打标记，只有在提升 dirty 字段为 read 字段的时候才清理删除的数据。</li>
+</ol>
+<p>要理解 sync.Map 这些优化点，我们还是得深入到它的设计和实现上，去学习它的处理方式。</p>
+<p>我们先看一下 map 的数据结构：</p>
+<p>type Map struct {<br>
+mu Mutex<br>
+// 基本上你可以把它看成一个安全的只读的 map<br>
+// 它包含的元素其实也是通过原子操作更新的，但是已删除的 entry 就需要加锁操作了<br>
+read atomic.Value // readOnly</p>
+<pre><code>// 包含需要加锁才能访问的元素  
+// 包括所有在 read 字段中但未被 expunged（删除）的元素以及新加的元素  
+dirty map[interface{}]*entry  
+
+// 记录从 read 中读取 miss 的次数，一旦 miss 数和 dirty 长度一样了，就会把 dirty 提升为 read，并把 dirty 置空  
+misses int  
+</code></pre>
+<p>}</p>
+<p>type readOnly struct {<br>
+m       map[interface{}]*entry<br>
+amended bool // 当 dirty 中包含 read 没有的数据时为 true，比如新增一条数据<br>
+}</p>
+<p>// expunged 是用来标识此项已经删掉的指针<br>
+// 当 map 中的一个项目被删除了，只是把它的值标记为 expunged，以后才有机会真正删除此项<br>
+var expunged = unsafe.Pointer(new(interface{}))</p>
+<p>// entry 代表一个值<br>
+type entry struct {<br>
+p unsafe.Pointer // *interface{}<br>
+}</p>
+<p>如果 dirty 字段非 nil 的话，map 的 read 字段和 dirty 字段会包含相同的非 expunged 的项，所以如果通过 read 字段更改了这个项的值，从 dirty 字段中也会读取到这个项的新值，因为本来它们指向的就是同一个地址。</p>
+<p>dirty 包含重复项目的好处就是，一旦 miss 数达到阈值需要将 dirty 提升为 read 的话，只需简单地把 dirty 设置为 read 对象即可。不好的一点就是，当创建新的 dirty 对象的时候，需要逐条遍历 read，把非 expunged 的项复制到 dirty 对象中。</p>
+<p>接下来，我们就深入到源码去看看 sync.map 的实现。在看这部分源码的过程中，我们只要重点关注 Store、Load 和 Delete 这 3 个核心的方法就可以了。</p>
+<p>Store、Load 和 Delete 这三个核心函数的操作都是先从 read 字段中处理的，因为读取 read 字段的时候不用加锁。</p>
+<h4 id="store-方法">Store 方法</h4>
+<p>我们先来看 Store 方法，它是用来设置一个键值对，或者更新一个键值对的。</p>
+<p>func (m *Map) Store(key, value interface{}) {<br>
+read, _ := m.read.Load().(readOnly)<br>
+// 如果 read 字段包含这个项，说明是更新，cas 更新项目的值即可<br>
+if e, ok := read.m[key]; ok &amp;&amp; e.tryStore(&amp;value) {<br>
+return<br>
+}</p>
+<pre><code>// read 中不存在，或者 cas 更新失败，就需要加锁访问 dirty 了  
+m.mu.Lock()  
+read, _ = m.read.Load().(readOnly)  
+if e, ok := read.m[key]; ok { // 双检查，看看 read 是否已经存在了  
+    if e.unexpungeLocked() {  
+        // 此项目先前已经被删除了，通过将它的值设置为 nil，标记为 unexpunged  
+        m.dirty[key] = e  
+    }  
+    e.storeLocked(&amp;value) // 更新  
+} else if e, ok := m.dirty[key]; ok { // 如果 dirty 中有此项  
+    e.storeLocked(&amp;value) // 直接更新  
+} else { // 否则就是一个新的 key  
+    if !read.amended { //如果 dirty 为 nil  
+        // 需要创建 dirty 对象，并且标记 read 的 amended 为 true,  
+        // 说明有元素它不包含而 dirty 包含  
+        m.dirtyLocked()  
+        m.read.Store(readOnly{m: read.m, amended: true})  
+    }  
+    m.dirty[key] = newEntry(value) //将新值增加到 dirty 对象中  
+}  
+m.mu.Unlock()  
+</code></pre>
+<p>}</p>
+<p>可以看出，Store 既可以是新增元素，也可以是更新元素。如果运气好的话，更新的是已存在的未被删除的元素，直接更新即可，不会用到锁。如果运气不好，需要更新（重用）删除的对象、更新还未提升的 dirty 中的对象，或者新增加元素的时候就会使用到了锁，这个时候，性能就会下降。</p>
+<p>所以从这一点来看，sync.Map 适合那些只会增长的缓存系统，可以进行更新，但是不要删除，并且不要频繁地增加新元素。</p>
+<p>新加的元素需要放入到 dirty 中，如果 dirty 为 nil，那么需要从 read 字段中复制出来一个 dirty 对象：</p>
+<p>func (m *Map) dirtyLocked() {<br>
+if m.dirty != nil { // 如果 dirty 字段已经存在，不需要创建了<br>
+return<br>
+}</p>
+<pre><code>read, _ := m.read.Load().(readOnly) // 获取 read 字段  
+m.dirty = make(map[interface{}]*entry, len(read.m))  
+for k, e := range read.m { // 遍历 read 字段  
+    if !e.tryExpungeLocked() { // 把非 punged 的键值对复制到 dirty 中  
+        m.dirty[k] = e  
+    }  
+}  
+</code></pre>
+<p>}</p>
+<h4 id="load-方法">Load 方法</h4>
+<p>Load 方法用来读取一个 key 对应的值。它也是从 read 开始处理，一开始并不需要锁。</p>
+<p>func (m *Map) Load(key interface{}) (value interface{}, ok bool) {<br>
+// 首先从 read 处理<br>
+read, _ := m.read.Load().(readOnly)<br>
+e, ok := read.m[key]<br>
+if !ok &amp;&amp; read.amended { // 如果不存在并且 dirty 不为 nil(有新的元素)<br>
+m.mu.Lock()<br>
+// 双检查，看看 read 中现在是否存在此 key<br>
+read, _ = m.read.Load().(readOnly)<br>
+e, ok = read.m[key]<br>
+if !ok &amp;&amp; read.amended {//依然不存在，并且 dirty 不为 nil<br>
+e, ok = m.dirty[key]// 从 dirty 中读取<br>
+// 不管 dirty 中存不存在，miss 数都加 1<br>
+m.missLocked()<br>
+}<br>
+m.mu.Unlock()<br>
+}<br>
+if !ok {<br>
+return nil, false<br>
+}<br>
+return e.load() //返回读取的对象，e 既可能是从 read 中获得的，也可能是从 dirty 中获得的<br>
+}</p>
+<p>如果幸运的话，我们从 read 中读取到了这个 key 对应的值，那么就不需要加锁了，性能会非常好。但是，如果请求的 key 不存在或者是新加的，就需要加锁从 dirty 中读取。所以，读取不存在的 key 会因为加锁而导致性能下降，读取还没有提升的新值的情况下也会因为加锁性能下降。</p>
+<p>其中，missLocked 增加 miss 的时候，如果 miss 数等于 dirty 长度，会将 dirty 提升为 read，并将 dirty 置空。</p>
+<p>func (m *Map) missLocked() {<br>
+m.misses++ // misses 计数加一<br>
+if m.misses &lt; len(m.dirty) { // 如果没达到阈值 (dirty 字段的长度),返回<br>
+return<br>
+}<br>
+m.read.Store(readOnly{m: m.dirty}) //把 dirty 字段的内存提升为 read 字段<br>
+m.dirty = nil // 清空 dirty<br>
+m.misses = 0  // misses 数重置为 0<br>
+}</p>
+<h4 id="delete-方法">Delete 方法</h4>
+<p>sync.map 的第 3 个核心方法是 Delete 方法。在 Go 1.15 中欧长坤提供了一个 LoadAndDelete 的实现（go#issue 33762），所以 Delete 方法的核心改在了对 LoadAndDelete 中实现了。</p>
+<p>同样地，Delete 方法是先从 read 操作开始，原因我们已经知道了，因为不需要锁。</p>
+<p>func (m *Map) LoadAndDelete(key interface{}) (value interface{}, loaded bool) {<br>
+read, _ := m.read.Load().(readOnly)<br>
+e, ok := read.m[key]<br>
+if !ok &amp;&amp; read.amended {<br>
+m.mu.Lock()<br>
+// 双检查<br>
+read, _ = m.read.Load().(readOnly)<br>
+e, ok = read.m[key]<br>
+if !ok &amp;&amp; read.amended {<br>
+e, ok = m.dirty[key]<br>
+// 这一行长坤在 1.15 中实现的时候忘记加上了，导致在特殊的场景下有些 key 总是没有被回收<br>
+delete(m.dirty, key)<br>
+// miss 数加 1<br>
+m.missLocked()<br>
+}<br>
+m.mu.Unlock()<br>
+}<br>
+if ok {<br>
+return e.delete()<br>
+}<br>
+return nil, false<br>
+}</p>
+<p>func (m *Map) Delete(key interface{}) {<br>
+m.LoadAndDelete(key)<br>
+}<br>
+func (e *entry) delete() (value interface{}, ok bool) {<br>
+for {<br>
+p := atomic.LoadPointer(&amp;e.p)<br>
+if p == nil || p == expunged {<br>
+return nil, false<br>
+}<br>
+if atomic.CompareAndSwapPointer(&amp;e.p, p, nil) {<br>
+return *(*interface{})(p), true<br>
+}<br>
+}<br>
+}</p>
+<p>如果 read 中不存在，那么就需要从 dirty 中寻找这个项目。最终，如果项目存在就删除（将它的值标记为 nil）。如果项目不为 nil 或者没有被标记为 expunged，那么还可以把它的值返回。</p>
+<p>最后，我补充一点，sync.map 还有一些 LoadAndDelete、LoadOrStore、Range 等辅助方法，但是没有 Len 这样查询 sync.Map 的包含项目数量的方法，并且官方也不准备提供。如果你想得到 sync.Map 的项目数量的话，你可能不得不通过 Range 逐个计数。</p>
+<h2 id="总结">总结</h2>
+<p>Go 内置的 map 类型使用起来很方便，但是它有一个非常致命的缺陷，那就是它存在着并发问题，所以如果有多个 goroutine 同时并发访问这个 map，就会导致程序崩溃。所以 Go 官方 Blog 很早就提供了一种加锁的方法，还有后来提供了适用特定场景的线程安全的 sync.Map，还有第三方实现的分片式的 map，这些方法都可以应用于并发访问的场景。</p>
+<p>这里我给你的建议，也是 Go 开发者给的建议，就是通过性能测试，看看某种线程安全的 map 实现是否满足你的需求。</p>
+<p>当然还有一些扩展其它功能的 map 实现，比如带有过期功能的timedmap、使用红黑树实现的 key 有序的treemap等，因为和并发问题没有关系，就不详细介绍了。这里我给你提供了链接，你可以自己探索。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/c4f775ecf84e41b6873a3b4a532befc8.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<ol>
+<li>为什么 sync.Map 中的集合核心方法的实现中，如果 read 中项目不存在，加锁后还要双检查，再检查一次 read？</li>
+<li>你看到 sync.map 元素删除的时候只是把它的值设置为 nil，那么什么时候这个 key 才会真正从 map 对象中删除？</li>
+</ol>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得有所收获，也欢迎你把今天的内容分享给你的朋友或同事。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">Go并发编程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3java%E8%99%9A%E6%8B%9F%E6%9C%BA/09__jvm%E6%98%AF%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0invokedynamic%E7%9A%84%E4%B8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">09__JVM是怎么实现invokedynamic的？（下）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%85%A8%E6%A0%88%E5%B7%A5%E7%A8%8B%E5%B8%88%E4%BF%AE%E7%82%BC%E6%8C%87%E5%8D%97/09__mvc%E6%9E%B6%E6%9E%84%E8%A7%A3%E6%9E%90%E8%A7%86%E5%9B%BEview%E7%AF%87/">
+            <span class="next-text nav-default">09__MVC架构解析：视图（View）篇</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

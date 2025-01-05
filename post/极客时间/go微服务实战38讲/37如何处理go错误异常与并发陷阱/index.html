@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>37如何处理Go错误异常与并发陷阱？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="错误处理是软件开发中不可回避的问题，Go 中主要通过 error 和 panic 分别表示错误和异常，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些并发陷阱，这就需要我们在开发时额外注意。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/37%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86go%E9%94%99%E8%AF%AF%E5%BC%82%E5%B8%B8%E4%B8%8E%E5%B9%B6%E5%8F%91%E9%99%B7%E9%98%B1/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/37%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86go%E9%94%99%E8%AF%AF%E5%BC%82%E5%B8%B8%E4%B8%8E%E5%B9%B6%E5%8F%91%E9%99%B7%E9%98%B1/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="37如何处理Go错误异常与并发陷阱？">
+  <meta property="og:description" content="错误处理是软件开发中不可回避的问题，Go 中主要通过 error 和 panic 分别表示错误和异常，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些并发陷阱，这就需要我们在开发时额外注意。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go微服务实战38讲">
+
+  <meta itemprop="name" content="37如何处理Go错误异常与并发陷阱？">
+  <meta itemprop="description" content="错误处理是软件开发中不可回避的问题，Go 中主要通过 error 和 panic 分别表示错误和异常，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些并发陷阱，这就需要我们在开发时额外注意。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3906">
+  <meta itemprop="keywords" content="Go微服务实战38讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="37如何处理Go错误异常与并发陷阱？">
+  <meta name="twitter:description" content="错误处理是软件开发中不可回避的问题，Go 中主要通过 error 和 panic 分别表示错误和异常，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些并发陷阱，这就需要我们在开发时额外注意。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">37如何处理Go错误异常与并发陷阱？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3906 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>错误处理是软件开发中不可回避的问题，Go 中主要通过 error 和 panic 分别表示错误和异常，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些并发陷阱，这就需要我们在开发时额外注意。</p>
+<p>在本课时，我们就来介绍 Go 中的一些错误处理机制，并讲解如何去规避一些常见的并发陷阱。</p>
+<p>Errors are values</p>
+<p>错误处理是每个开发人员都需要面对的问题，在我过去接触的编程语言中，大多是通过try-catch 的方式对可能出现错误的代码块进行包装：程序运行 try 中代码，如果 try 中的代码运行出错，程序将会立即跳转到 catch 中执行异常处理逻辑。</p>
+<p>与其他的编程语言不同，Go 中倡导“Errors are values!”的处理思想，它将 error 作为一个返回值，来迫使调用者对 error 进行处理或者忽略。于是，在代码中我们将会编写大量的 if 判断语句对 error 进行判断，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">result, err := dothing(&#34;work&#34;)
+</span></span><span class="line"><span class="cl">if err != nil {
+</span></span><span class="line"><span class="cl">	log.Fatal(err)
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">// do other thing
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当项目的代码快速增长起来时，我们会发现代码中到处都是类似 err != nil 的判断片段。虽然这会使代码变得很烦琐，但是这种设计和约定也会鼓励开发人员明确检查和确定错误发生的位置。</p>
+<p>在 Go 中，error 接口定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">type error interface {
+</span></span><span class="line"><span class="cl">	Error() string
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最常用的 error 实现是 Go 标准库 errors 包中内置的 errorString，它是一个仅包含错误信息的error 实现，可以通过 errors.New 和 fmt.Errorf 函数创建。内置的 error 接口使得开发人员可以为错误添加任何所需的信息，error 可以是实现 Error() 方法的任何类型，比如我们可以为错误添加错误码和调用栈信息，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">type</span> <span class="n">Error</span> <span class="n">struct</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">Msg</span> <span class="n">string</span>
+</span></span><span class="line"><span class="cl">	<span class="n">Code</span> <span class="n">int32</span>
+</span></span><span class="line"><span class="cl">	<span class="n">St</span> <span class="p">[]</span><span class="n">uintptr</span> <span class="o">//</span> <span class="err">调用栈</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="o">//</span> <span class="err">获取调用栈信息</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="n">callers</span><span class="p">()</span> <span class="p">[]</span><span class="n">uintptr</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">var</span> <span class="n">pcs</span> <span class="p">[</span><span class="mi">32</span><span class="p">]</span><span class="n">uintptr</span>
+</span></span><span class="line"><span class="cl">	<span class="n">n</span> <span class="p">:</span><span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">Callers</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">pcs</span><span class="p">[:])</span>
+</span></span><span class="line"><span class="cl">	<span class="n">st</span> <span class="p">:</span><span class="o">=</span> <span class="n">pcs</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">n</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">st</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="n">New</span><span class="p">(</span><span class="n">code</span> <span class="n">int32</span><span class="p">,</span> <span class="n">msg</span> <span class="n">string</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="o">&amp;</span><span class="n">Error</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">Code</span><span class="p">:</span> <span class="n">int32</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">		<span class="n">Msg</span><span class="p">:</span>  <span class="n">msg</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">		<span class="n">St</span><span class="p">:</span> <span class="n">callers</span><span class="p">(),</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">e</span> <span class="o">*</span><span class="n">Error</span><span class="p">)</span> <span class="n">Error</span><span class="p">()</span> <span class="n">string</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="s2">&#34;OK&#34;</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s2">&#34;code:</span><span class="si">%d</span><span class="s2">, msg:</span><span class="si">%s</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">Code</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">Msg</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过断言的方式可以将 error 转化为特定的类型从而进行特异化处理，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">if e, ok := err.(*Error); ok {
+</span></span><span class="line"><span class="cl">	// 取出堆栈信息进行处理
+</span></span><span class="line"><span class="cl">	st := e.st
+</span></span><span class="line"><span class="cl">	// ....
+</span></span><span class="line"><span class="cl">}else {
+</span></span><span class="line"><span class="cl">	// 其他错误处理
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 Go 1.13 版本之后，errors 包中添加了 errors.Is 和 errors.As 函数：errors.Is 方法用来比较两个 error 是否相等，而 errors.As 函数用来判断 error 是否为特定类型。</p>
+<p>由于 error 是一个值，因此我们可以对其进行编程，简化 Go 错误处理的重复代码。在一些管道和循环的代码中，只要其中一次处理出现错误，就应该退出本次管道或者循环。寻常的做法是在每次迭代都检查错误，但为了让管道和循环的操作显得更加自然，我们可以将 error 封装到独立的方法或者变量中返回，以避免错误处理掩盖控制流程，如 gorm 中的 DB 设计所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">err := DB.Where(queryString, queryValue...).
+</span></span><span class="line"><span class="cl">		Table(&#34;table_name&#34;).
+</span></span><span class="line"><span class="cl">		Updates(map[string]interface{}{...}).Error
+</span></span><span class="line"><span class="cl">if err != nil{
+</span></span><span class="line"><span class="cl">	// 错误处理逻辑
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里 error 是从 gorm.DB 的 Error 成员变量中获取的。在数据库请求执行结束之后，程序才从 DB 中获取执行错误，这样的写法使得错误处理不会中断执行流程。但需要注意的是，无论如何简化 error 的设计，程序都要检查和处理错误，错误是无法避免的。</p>
+<p>defer、panic 和 recover</p>
+<p>错误一般是一些开发人员“意料之内”的错误，比如获取数据库连接失败等，这些都是在 Go 中通过 error 表达并可控。但当程序出现异常，如数组访问越界这类“意料之外”的错误时，它能够导致程序运行崩溃，此时就需要开发人员捕获异常并恢复程序的正常运行流程。</p>
+<p>接下来我们就介绍 defer、panic 和 recover 如何组合恢复运行时执行异常的 Go 程序。</p>
+<p>defer 是 Go 中提供的一种延迟执行机制，每次执行 defer，都会将对应的函数压入栈中。在函数返回或者 panic 异常结束时，Go 会依次从栈中取出延迟函数执行。</p>
+<p>在编程的时候，经常需要打开一些资源，比如数据库连接、文件等，在资源使用完成之后需要释放，不然有可能会造成资源泄漏。这个时候，我们可以通过 defer 语句在函数执行完之后，自动释放资源，避免在每个函数返回之前手动释放资源，减少冗余代码。</p>
+<p>defer 有三个比较重要的特点。第一个是按照调用 defer 的逆序执行，即后调用的在函数退出时先执行，后进先出。如下例子所示:</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;I register at first, but execute at last&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;I register at middle, execute at middle&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;I register at last, execute at first&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;test begin&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>预期的结果为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">test begin
+</span></span><span class="line"><span class="cl">I register at last, execute at first
+</span></span><span class="line"><span class="cl">I register at middle, execute at middle
+</span></span><span class="line"><span class="cl">I register at first, but execute at last
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二个特点是 defer 被定义时，参数变量会被立即解析，传递参数的值拷贝。在函数内使用的变量其实是对外部变量的一个拷贝，在函数体内，对变量更改也不会影响外部变量，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">i</span> <span class="p">:</span><span class="o">=</span> <span class="mi">10</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">&#34;defer i is </span><span class="si">%d</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">i</span> <span class="o">=</span> <span class="mi">20</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">&#34;current i is </span><span class="si">%d</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>预期结果为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">current i is 20
+</span></span><span class="line"><span class="cl">defer i is 10
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然而当 defer 以闭包的方式引用外部变量时，则会在延迟函数真正执行的时候，根据整个上下文确定当前的值，如下示例代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="n">i</span> <span class="p">:</span><span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">defer</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">			<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}()</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>预期的输出结果为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">5
+</span></span><span class="line"><span class="cl">5
+</span></span><span class="line"><span class="cl">5
+</span></span><span class="line"><span class="cl">5
+</span></span><span class="line"><span class="cl">5
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述例子为了演示简单，在 for 循环中使用了 defer，但在日常开发中，我建议你还是不要在循环中使用 defer。因为相较于直接调用，defer 的执行存在着额外的开销，例如 defer 会对其后需要的参数进行内存拷贝，还会对 defer 结构进行压栈出栈操作。因此，在循环中使用 defer 可能会带来较大的性能开销。</p>
+<p>defer 的第三个特点是可以读取并修改函数的命名返回值，如下面的例子所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">test</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="n">test</span><span class="p">()</span> <span class="p">(</span><span class="n">i</span> <span class="ne">int</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span> <span class="n">i</span><span class="o">++</span> <span class="p">}()</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="mi">1</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>预期的返回结果为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">2
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这是因为对于命名返回值，defer 和 return 的执行顺序如下：</p>
+<p>将 1 赋给 i；</p>
+<p>执行 i++；</p>
+<p>返回 i 作为函数返回值。</p>
+<p>defer 的内部实现为一个延迟调用链表，如下图所示：</p>
+<p>defer 延迟调用链表示意图</p>
+<p>其中，g 代表 goroutine 的数据结构。每个 goroutine 中都有一个 _defer 链表，当代码中遇到 defer 关键字时，Go 都会将 defer 相关的函数和参数封装到 _defer 结构体中，然后将其注册到当前 goroutine 的 _defer 链表的表头。在当前函数执行完毕之后，Go 会从 goroutine 的 _defer 链表头部取出来注册的 defer 执行并返回。</p>
+<p>_defer 结构体中存储 defer 执行相关的信息，定义如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">type _defer struct {
+</span></span><span class="line"><span class="cl">	siz       int32 // 参数与结果内存大小
+</span></span><span class="line"><span class="cl">	started   bool 
+</span></span><span class="line"><span class="cl">	heap      bool // 是否在堆上分配
+</span></span><span class="line"><span class="cl">	openDefer bool //是否经过开放编码优化
+</span></span><span class="line"><span class="cl">	sp        uintptr // 栈指针
+</span></span><span class="line"><span class="cl">	pc        uintptr // 调用方的程序计数器
+</span></span><span class="line"><span class="cl">	fn        *funcval // defer 传入的函数
+</span></span><span class="line"><span class="cl">	_panic    *_panic 
+</span></span><span class="line"><span class="cl">	link      *_defer // 下一个 _defer
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>panic 是一个内置函数，用于抛出程序执行的异常。它会终止其后将要执行的代码，并依次逆序执行 panic 所在函数可能存在的 defer 函数列表；然后返回该函数的调用方，如果函数的调用方中也有 defer 函数列表，也将被逆序执行，执行结束后再返回到上一层调用方，直到返回当前 goroutine 中的所有函数为止，最后报告异常，程序崩溃退出。异常可以直接通过 panic 函数调用抛出，也可能是因为运行时错误而引发，比如访问了空指针等。</p>
+<p>而recover 内置函数可用于捕获 panic，重新恢复程序正常执行流程，但是 recover 函数只有在 defer 内部使用才有效。如下面例子所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">err</span> <span class="p">:</span><span class="o">=</span> <span class="n">panicAndReturnErr</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">&#34;err is %+v</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;returned normally from panicAndReturnErr&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="n">panicAndReturnErr</span><span class="p">()</span> <span class="p">(</span><span class="n">err</span> <span class="n">error</span><span class="p">){</span>
+</span></span><span class="line"><span class="cl">	<span class="n">defer</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="o">//</span> <span class="err">从</span> <span class="n">panic</span> <span class="err">中恢复</span>
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="n">e</span> <span class="p">:</span><span class="o">=</span> <span class="n">recover</span><span class="p">();</span> <span class="n">e</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="o">//</span> <span class="err">打印栈信息</span>
+</span></span><span class="line"><span class="cl">			<span class="n">buf</span> <span class="p">:</span><span class="o">=</span> <span class="n">make</span><span class="p">([]</span><span class="n">byte</span><span class="p">,</span> <span class="mi">1024</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">			<span class="n">buf</span> <span class="o">=</span> <span class="n">buf</span><span class="p">[:</span><span class="n">runtime</span><span class="o">.</span><span class="n">Stack</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="bp">false</span><span class="p">)]</span>
+</span></span><span class="line"><span class="cl">			<span class="n">err</span> <span class="o">=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Errorf</span><span class="p">(</span><span class="s2">&#34;[PANIC]%v</span><span class="se">\n</span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">buf</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}()</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;panic begin&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">panic</span><span class="p">(</span><span class="s2">&#34;panic this game&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;panic over&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>预期的执行结果为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">panic begin
+</span></span><span class="line"><span class="cl">err is [PANIC]panic this game
+</span></span><span class="line"><span class="cl">goroutine 1 [running]:
+</span></span><span class="line"><span class="cl">main.panicAndReturnErr.func1(0xc000062f08)
+</span></span><span class="line"><span class="cl">	/Users/apple/Desktop/micro-go-course/section37/defer_example.go:21 +0xa1
+</span></span><span class="line"><span class="cl">panic(0x10ad640, 0x10eb360)
+</span></span><span class="line"><span class="cl">	/usr/local/go/src/runtime/panic.go:969 +0x166
+</span></span><span class="line"><span class="cl">main.panicAndReturnErr(0x0, 0x0)
+</span></span><span class="line"><span class="cl">	/Users/apple/Desktop/micro-go-course/section37/defer_example.go:26 +0xc2
+</span></span><span class="line"><span class="cl">main.main()
+</span></span><span class="line"><span class="cl">	/Users/apple/Desktop/micro-go-course/section37/defer_example.go:10 +0x26
+</span></span><span class="line"><span class="cl">returned normally from panicAndReturnErr
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从这个执行结果可以看出，panicAndReturnErr 函数在 panic 之后将会执行 defer 定义的延迟函数，恢复程序的正常执行逻辑。在上述例子中，我们在 defer 函数中使用 recover 函数帮助程序从 panic 中恢复过来，并获取异常堆栈信息组成 error 返回调用方。panicAndReturnErr 从 panic 中恢复后将直接返回，不会执行函数中 panic 后的其他代码。</p>
+<p>在日常开发中，对于可能出现执行异常的函数，如数组越界、操作空指针等，在函数中定义一个使用 recover 函数的 defer 延迟函数，有利提高程序执行的健壮性，避免程序运行时异常崩溃。</p>
+<p>常见的并发陷阱</p>
+<p>最后我们再来介绍与 Go 并发相关的几个小技巧，帮助你规避 Go 并发开发的一些陷阱。</p>
+<p>首先是循环并发时闭包传递参数的问题，如下错误例子所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="n">i</span> <span class="p">:</span><span class="o">=</span> <span class="mi">0</span> <span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">5</span> <span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">			<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;current i is &#34;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}()</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码极有可能的输出为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">current i is 5
+</span></span><span class="line"><span class="cl">current i is 5
+</span></span><span class="line"><span class="cl">current i is 5
+</span></span><span class="line"><span class="cl">current i is 5
+</span></span><span class="line"><span class="cl">current i is 5
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这是因为 i 使用的地址空间在循环中被复用，在 goroutine 执行时，i 的值可能在被主 goroutine 修改，而此时其他 goroutine 也在读取使用，从而导致了并发错误。针对这种错误可以通过复制拷贝或者传参拷贝的方式规避，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span>  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="n">i</span> <span class="p">:</span><span class="o">=</span> <span class="mi">0</span> <span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">5</span> <span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">go</span> <span class="k">func</span><span class="p">(</span><span class="n">v</span> <span class="ne">int</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">			<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s2">&#34;current i is&#34;</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}(</span><span class="n">i</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>前面介绍 panic 时我们了解到 panic 异常的出现会导致 Go 程序的崩溃。但其实即使 panic 是出现在其他启动的子 goroutine 中，也会导致 Go 程序的崩溃退出，同时 panic 只能捕获 goroutine 自身的异常，因此**对于每个启动的 goroutine，都需要在入口处捕获 panic，并尝试打印堆栈信息并进行异常处理，从而避免子 goroutine 的 panic 导致整个程序的崩溃退出。如下面的例子所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="n">RecoverPanic</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">从</span> <span class="n">panic</span> <span class="err">中恢复并打印栈信息</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="n">e</span> <span class="p">:</span><span class="o">=</span> <span class="n">recover</span><span class="p">();</span> <span class="n">e</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">buf</span> <span class="p">:</span><span class="o">=</span> <span class="n">make</span><span class="p">([]</span><span class="n">byte</span><span class="p">,</span> <span class="mi">1024</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="n">buf</span> <span class="o">=</span> <span class="n">buf</span><span class="p">[:</span><span class="n">runtime</span><span class="o">.</span><span class="n">Stack</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="bp">false</span><span class="p">)]</span>
+</span></span><span class="line"><span class="cl">		<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">&#34;[PANIC]%v</span><span class="se">\n</span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">buf</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="n">i</span><span class="p">:</span><span class="o">=</span> <span class="mi">0</span> <span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">5</span> <span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">go</span> <span class="k">func</span><span class="p">()</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="o">//</span> <span class="n">defer</span> <span class="err">注册</span> <span class="n">panic</span> <span class="err">捕获函数</span>
+</span></span><span class="line"><span class="cl">			<span class="n">defer</span> <span class="n">RecoverPanic</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">			<span class="n">dothing</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}()</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最后一个技巧是要善于结合使用 select、timer 和 context 进行超时控制。在 goroutine 中进行一些耗时较长的操作，最好都加上超时 timer，在并发的时候也要传递 context，这样在取消的时候就不会有遗漏，进而达到回收 goroutine 的目的，避免内存泄漏的发生。如下面的例子所示，通过 select 同时监听任务和定时器状态，在定时器到达而任务未完成之时，提前结束任务，清理资源并返回。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">select {
+</span></span><span class="line"><span class="cl">// do logic process
+</span></span><span class="line"><span class="cl">case msg &lt;- input:
+</span></span><span class="line"><span class="cl">   ....
+</span></span><span class="line"><span class="cl">// has been canceled
+</span></span><span class="line"><span class="cl">case &lt;-ctx.Done():
+</span></span><span class="line"><span class="cl">    // ...资源清理
+</span></span><span class="line"><span class="cl">    return
+</span></span><span class="line"><span class="cl">// 2 second timeout
+</span></span><span class="line"><span class="cl">case &lt;-time.After(time.Second * 2)
+</span></span><span class="line"><span class="cl">    // ...资源清理 
+</span></span><span class="line"><span class="cl">    return
+</span></span><span class="line"><span class="cl">default:
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>小结</p>
+<p>在本课时我们主要介绍了 Go 中常见的错误处理机制和一些并发开发技巧。</p>
+<p>Go 倡导将错误作为返回值返回给调用方，由调用方决定如何处理或者忽略错误。通过 defer 和 recover 内置函数，我们可以轻易地将运行时异常的 Go 程序恢复到正常执行流程。另外，Go 并发开发中存在不少的并发陷阱，这些都需要我们在开发中额外留意并规避。</p>
+<p>最后，对于 Go 中的错误处理和并发技巧，你还有哪些经验？欢迎在留言区与我分享。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/">Go微服务实战38讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/37%E4%BA%BA%E6%B0%91%E5%B8%81%E5%8D%87%E5%80%BC%E5%AF%B9%E6%88%91%E4%BB%AC%E6%9C%89%E4%BB%80%E4%B9%88%E5%BD%B1%E5%93%8D/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">37人民币升值对我们有什么影响？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/openresty%E4%BB%8E%E5%85%A5%E9%97%A8%E5%88%B0%E5%AE%9E%E6%88%98/38__%E8%A7%86%E9%A2%91%E5%B7%A7%E7%94%A8wrk%E5%92%8C%E7%81%AB%E7%84%B0%E5%9B%BE%E7%A7%91%E5%AD%A6%E5%AE%9A%E4%BD%8D%E6%80%A7%E8%83%BD%E7%93%B6%E9%A2%88/">
+            <span class="next-text nav-default">38__[视频]巧用wrk和火焰图，科学定位性能瓶颈</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20改写引擎：如何理解装饰器模式下的SQL改写实现机制？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="回想在“17 | 路由引擎：如何理解分片路由核心类 ShardingRouter 的运作机制？”课时中，我们在 BaseShardingEngine 的 Shard 方法中看到了 ShardingSphere 中另一个重要的概念，即 SQL 改写（Rewrite）。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/20%E6%94%B9%E5%86%99%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E7%90%86%E8%A7%A3%E8%A3%85%E9%A5%B0%E5%99%A8%E6%A8%A1%E5%BC%8F%E4%B8%8B%E7%9A%84sql%E6%94%B9%E5%86%99%E5%AE%9E%E7%8E%B0%E6%9C%BA%E5%88%B6/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/20%E6%94%B9%E5%86%99%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E7%90%86%E8%A7%A3%E8%A3%85%E9%A5%B0%E5%99%A8%E6%A8%A1%E5%BC%8F%E4%B8%8B%E7%9A%84sql%E6%94%B9%E5%86%99%E5%AE%9E%E7%8E%B0%E6%9C%BA%E5%88%B6/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20改写引擎：如何理解装饰器模式下的SQL改写实现机制？">
+  <meta property="og:description" content="回想在“17 | 路由引擎：如何理解分片路由核心类 ShardingRouter 的运作机制？”课时中，我们在 BaseShardingEngine 的 Shard 方法中看到了 ShardingSphere 中另一个重要的概念，即 SQL 改写（Rewrite）。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="ShardingSphere核心原理精讲">
+
+  <meta itemprop="name" content="20改写引擎：如何理解装饰器模式下的SQL改写实现机制？">
+  <meta itemprop="description" content="回想在“17 | 路由引擎：如何理解分片路由核心类 ShardingRouter 的运作机制？”课时中，我们在 BaseShardingEngine 的 Shard 方法中看到了 ShardingSphere 中另一个重要的概念，即 SQL 改写（Rewrite）。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6269">
+  <meta itemprop="keywords" content="ShardingSphere核心原理精讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20改写引擎：如何理解装饰器模式下的SQL改写实现机制？">
+  <meta name="twitter:description" content="回想在“17 | 路由引擎：如何理解分片路由核心类 ShardingRouter 的运作机制？”课时中，我们在 BaseShardingEngine 的 Shard 方法中看到了 ShardingSphere 中另一个重要的概念，即 SQL 改写（Rewrite）。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20改写引擎：如何理解装饰器模式下的SQL改写实现机制？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6269 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>回想在“17 | 路由引擎：如何理解分片路由核心类 ShardingRouter 的运作机制？”课时中，我们在 BaseShardingEngine 的 Shard 方法中看到了 ShardingSphere 中另一个重要的概念，即 SQL 改写（Rewrite）。</p>
+<p>SQL 改写在分库分表框架中通常位于路由之后，也是整个 SQL 执行流程中的重要环节，因为开发人员是面向逻辑库与逻辑表所书写的 SQL，并不能够直接在真实的数据库中执行，SQL 改写，用于将逻辑 SQL 改写为在真实数据库中可以正确执行的 SQL。</p>
+<p>事实上，我们已经在前面的案例中看到了 SQL 改写的应用场景，这个场景就是分布式主键的自动生成过程。在关系型数据库中，自增主键是常见的功能特性，而对于 ShardingSphere 而言，这也是 SQL 改写的典型应用场景。</p>
+<p>今天，我们就将基于自增主键这一场景来探讨 ShardingSphere 中 SQL 改写的实现过程。</p>
+<p>ShardingSphere 改写引擎基本结构</p>
+<p>让我们先来看一下 BaseShardingEngine 中，用于执行改写逻辑的 rewriteAndConvert 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Collection&lt;RouteUnit&gt; rewriteAndConvert(final String sql, final List&lt;Object&gt; parameters, final SQLRouteResult sqlRouteResult) { 
+</span></span><span class="line"><span class="cl">    //构建 SQLRewriteContext 
+</span></span><span class="line"><span class="cl">   SQLRewriteContext sqlRewriteContext = new     SQLRewriteContext(metaData.getRelationMetas(), sqlRouteResult.getSqlStatementContext(), sql, parameters); 
+</span></span><span class="line"><span class="cl">   //构建 ShardingSQLRewriteContextDecorator 对 SQLRewriteContext 进行装饰 
+</span></span><span class="line"><span class="cl">   new ShardingSQLRewriteContextDecorator(shardingRule, sqlRouteResult).decorate(sqlRewriteContext); 
+</span></span><span class="line"><span class="cl">   //判断是否根据数据脱敏列进行查询 
+</span></span><span class="line"><span class="cl">   boolean isQueryWithCipherColumn = shardingProperties.&lt;Boolean&gt;getValue(ShardingPropertiesConstant.QUERY_WITH_CIPHER_COLUMN); 
+</span></span><span class="line"><span class="cl">    //构建 EncryptSQLRewriteContextDecorator 对 SQLRewriteContext 进行装饰 
+</span></span><span class="line"><span class="cl">   new EncryptSQLRewriteContextDecorator(shardingRule.getEncryptRule(), isQueryWithCipherColumn).decorate(sqlRewriteContext); 
+</span></span><span class="line"><span class="cl">  //生成 SQLTokens 
+</span></span><span class="line"><span class="cl"> sqlRewriteContext.generateSQLTokens(); 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Collection&lt;RouteUnit&gt; result = new LinkedHashSet&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">    for (RoutingUnit each : sqlRouteResult.getRoutingResult().getRoutingUnits()) { 
+</span></span><span class="line"><span class="cl">        //构建 ShardingSQLRewriteEngine 
+</span></span><span class="line"><span class="cl">        ShardingSQLRewriteEngine sqlRewriteEngine = new ShardingSQLRewriteEngine(shardingRule, sqlRouteResult.getShardingConditions(), each); 
+</span></span><span class="line"><span class="cl">        //执行改写 
+</span></span><span class="line"><span class="cl">        SQLRewriteResult sqlRewriteResult = sqlRewriteEngine.rewrite(sqlRewriteContext); 
+</span></span><span class="line"><span class="cl">        //保存改写结果 
+</span></span><span class="line"><span class="cl">        result.add(new RouteUnit(each.getDataSourceName(), new SQLUnit(sqlRewriteResult.getSql(), sqlRewriteResult.getParameters()))); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码虽然内容不多，但却完整描述了实现 SQL 改写的整体流程，我们对核心代码都添加了注释，这里面涉及的核心类也很多，值得我们进行深入分析，相关核心类的整体结构如下：</p>
+<p>可以看到在整个类图中，SQLRewriteContext 处于中间位置，改写引擎 SQLRewriteEngine 和装饰器 SQLRewriteContextDecorator 都依赖于它。</p>
+<p>所以接下来，让我们先来看一下这个 SQLRewriteContext，并基于自增主键功能引出 SQL 改写引擎的基础组件 SQLToken。</p>
+<p>从自增主键功能看改写引擎中的核心类</p>
+<p>1. SQLRewriteContext</p>
+<p>从命名上讲，与 SQLStatementContext 类似，SQLRewriteContext 也是一个上下文对象，让我们来看 SQLRewriteContext 中的变量定义：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">//数据表和列的关系元数据 
+</span></span><span class="line"><span class="cl">private final RelationMetas relationMetas; 
+</span></span><span class="line"><span class="cl">//SQLStatement 上下文 
+</span></span><span class="line"><span class="cl">private final SQLStatementContext sqlStatementContext; 
+</span></span><span class="line"><span class="cl">//原始SQL 
+</span></span><span class="line"><span class="cl">private final String sql; 
+</span></span><span class="line"><span class="cl">//参数列表 
+</span></span><span class="line"><span class="cl">private final List&lt;Object&gt; parameters; 
+</span></span><span class="line"><span class="cl">//SQLToken 列表 
+</span></span><span class="line"><span class="cl">private final List&lt;SQLToken&gt; sqlTokens = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">//参数构建器 
+</span></span><span class="line"><span class="cl">private final ParameterBuilder parameterBuilder; 
+</span></span><span class="line"><span class="cl">//SQLToken 生成器 
+</span></span><span class="line"><span class="cl">private final SQLTokenGenerators sqlTokenGenerators = new SQLTokenGenerators();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这里，我们看到了前面已经介绍的 SQLStatementContext，也看到了新的 SQLToken 和 SQLTokenGenerators。随着今天内容的演进，这些对象都会逐一进行介绍，这里我们先明确 SQLRewriteContext 中保存着用于 SQL 改写的各种相关信息。</p>
+<p>2. SQLToken</p>
+<p>接下来，我们来看一下 SQLToken 对象，该对象在改写引擎中重要性很高，SQLRewriteEngine 正是基于 SQLToken 实现了 SQL 改写，SQLToken 类的定义如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@RequiredArgsConstructor 
+</span></span><span class="line"><span class="cl">@Getter 
+</span></span><span class="line"><span class="cl">public abstract class SQLToken implements Comparable&lt;SQLToken&gt; { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final int startIndex; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override 
+</span></span><span class="line"><span class="cl">    public final int compareTo(final SQLToken sqlToken) { 
+</span></span><span class="line"><span class="cl">        return startIndex - sqlToken.getStartIndex(); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>SQLToken 实际上是一个抽象类，在 ShardingSphere 中，存在了一大批 SQLToken 的子类。这些 SQLToken 多数跟 SQL 改写相关（这部分类的包名中包含 rewrite）；而有些在改写的基础上还与后面要讲到的数据脱敏功能相关（这部分类包名中还包含着 encrypt）。</p>
+<p>数据脱敏也是 ShardingSphere 提供的一项非常实用的功能，我们在讲到“模块六：ShardingSphere 源码解析之治理与集成”时会有专题对其进行介绍。</p>
+<p>同时，部分 SQLToken 位于 shardingsphere-rewrite-engine 工程中，而有些则位于 sharding-core-rewrite 工程中，这点也需要注意。</p>
+<p>结合 SQL 改写的常见场景，很多 SQLToken 的含义可以从字面意思上直接理解。例如，对 INSERT 语句而言，如果使用数据库自增主键，是不需要写入主键字段的，但数据库的自增主键无法满足分布式场景下的主键唯一性，因此 ShardingSphere 提供了分布式自增主键的生成策略，能够自动地替换数据库现有的自增主键。</p>
+<p>举例说明，我们案例中 health_record 表的主键是 record_id，假定原始的 SQL 为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">INSERT INTO health_record (user_id, level_id, remark) values (1, 1, &#34;remark1&#34;)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，上述 SQL 中并未包含自增主键，需要数据库自行填充，在 ShardingSphere 中配置了自增主键后，SQL 将被自动改写为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">INSERT INTO health_record (record_id, user_id, level_id, remark) values (&#34;471698773731577856&#34;, 1, 1, &#34;Remark1&#34;)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然，改写后的 SQL 将在 INSERT 语句中增加主键列名称，以及自动生成的自增主键值。</p>
+<p>从命名上看，GeneratedKeyInsertColumnToken 对应上述的自动主键填充的场景，这实际上属于常见的一种 SQL 改写策略，也就是补列，GeneratedKeyInsertColumnToken 的实现如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="n">final</span> <span class="k">class</span> <span class="n">GeneratedKeyInsertColumnToken</span> <span class="k">extends</span> <span class="n">SQLToken</span> <span class="n">implements</span> <span class="n">Attachable</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">private</span> <span class="n">final</span> <span class="ne">String</span> <span class="n">column</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">GeneratedKeyInsertColumnToken</span><span class="p">(</span><span class="n">final</span> <span class="ne">int</span> <span class="n">startIndex</span><span class="p">,</span> <span class="n">final</span> <span class="ne">String</span> <span class="n">column</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">super</span><span class="p">(</span><span class="n">startIndex</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">this</span><span class="o">.</span><span class="n">column</span> <span class="o">=</span> <span class="n">column</span><span class="p">;</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Override</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="ne">String</span> <span class="n">toString</span><span class="p">()</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="ne">String</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&#34;, </span><span class="si">%s</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">column</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>注意到这里多了一个 column 变量用于指定主键的所在列。我们再来跟踪 GeneratedKeyInsertColumnToken 的构造函数调用情况，发现这个类是通过 GeneratedKeyInsertColumnTokenGenerator 创建出来的。</p>
+<p>接下来，让我们一起看看 TokenGenerator。</p>
+<p>3. TokenGenerator</p>
+<p>顾名思义，TokenGenerator 的作用是专门负责生成具体的 Token，该接口定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLTokenGenerator {
+</span></span><span class="line"><span class="cl">    //判断是否要生成 SQLToken 
+</span></span><span class="line"><span class="cl">    boolean isGenerateSQLToken(SQLStatementContext sqlStatementContext); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该接口还有两个子接口，分别是负责生成单个 SQLToken 的 OptionalSQLTokenGenerator 和负责生成批量 SQLToken 的 CollectionSQLTokenGenerator：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="n">interface</span> <span class="n">OptionalSQLTokenGenerator</span> <span class="k">extends</span> <span class="n">SQLTokenGenerator</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span><span class="err">生成单个</span> <span class="n">SQLToken</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">SQLToken</span> <span class="n">generateSQLToken</span><span class="p">(</span><span class="n">SQLStatementContext</span> <span class="n">sqlStatementContext</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">public</span> <span class="n">interface</span> <span class="n">CollectionSQLTokenGenerator</span> <span class="k">extends</span> <span class="n">SQLTokenGenerator</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">    <span class="o">//</span><span class="err">生成批量</span> <span class="n">SQLToken</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">Collection</span><span class="o">&lt;</span><span class="err">?</span> <span class="k">extends</span> <span class="n">SQLToken</span><span class="o">&gt;</span> <span class="n">generateSQLTokens</span><span class="p">(</span><span class="n">SQLStatementContext</span> <span class="n">sqlStatementContext</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ShardingSphere，和 SQLToken 一样，TokenGenerator 的类层结构也比较复杂。对于 GeneratedKeyInsertColumnTokenGenerator 而言，它还有一个抽象的基类，即如下所示的 BaseGeneratedKeyTokenGenerator：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public abstract class BaseGeneratedKeyTokenGenerator implements OptionalSQLTokenGenerator, SQLRouteResultAware { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //是否生成 SQLToken 
+</span></span><span class="line"><span class="cl">    protected abstract boolean isGenerateSQLToken(InsertStatement insertStatement);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //生成 SQLToken 
+</span></span><span class="line"><span class="cl">	protected abstract SQLToken generateSQLToken(SQLStatementContext sqlStatementContext, GeneratedKey generatedKey); 
+</span></span><span class="line"><span class="cl">	
+</span></span><span class="line"><span class="cl">	… 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个抽象类留下了两个模板方法 isGenerateSQLToken 和 generateSQLToken，交由子类进行实现，在 GeneratedKeyInsertColumnTokenGenerator 中提供了这两个方法的实现过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="n">final</span> <span class="k">class</span> <span class="n">GeneratedKeyInsertColumnTokenGenerator</span> <span class="k">extends</span> <span class="n">BaseGeneratedKeyTokenGenerator</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Override</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">protected</span> <span class="n">boolean</span> <span class="n">isGenerateSQLToken</span><span class="p">(</span><span class="n">final</span> <span class="n">InsertStatement</span> <span class="n">insertStatement</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">Optional</span><span class="o">&lt;</span><span class="n">InsertColumnsSegment</span><span class="o">&gt;</span> <span class="n">sqlSegment</span> <span class="o">=</span> <span class="n">insertStatement</span><span class="o">.</span><span class="n">findSQLSegment</span><span class="p">(</span><span class="n">InsertColumnsSegment</span><span class="o">.</span><span class="k">class</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">sqlSegment</span><span class="o">.</span><span class="n">isPresent</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">sqlSegment</span><span class="o">.</span><span class="n">get</span><span class="p">()</span><span class="o">.</span><span class="n">getColumns</span><span class="p">()</span><span class="o">.</span><span class="n">isEmpty</span><span class="p">();</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Override</span> 
+</span></span><span class="line"><span class="cl">    <span class="n">protected</span> <span class="n">GeneratedKeyInsertColumnToken</span> <span class="n">generateSQLToken</span><span class="p">(</span><span class="n">final</span> <span class="n">SQLStatementContext</span> <span class="n">sqlStatementContext</span><span class="p">,</span> <span class="n">final</span> <span class="n">GeneratedKey</span> <span class="n">generatedKey</span><span class="p">)</span> <span class="p">{</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">Optional</span><span class="o">&lt;</span><span class="n">InsertColumnsSegment</span><span class="o">&gt;</span> <span class="n">sqlSegment</span> <span class="o">=</span> <span class="n">sqlStatementContext</span><span class="o">.</span><span class="n">getSqlStatement</span><span class="p">()</span><span class="o">.</span><span class="n">findSQLSegment</span><span class="p">(</span><span class="n">InsertColumnsSegment</span><span class="o">.</span><span class="k">class</span><span class="p">);</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">Preconditions</span><span class="o">.</span><span class="n">checkState</span><span class="p">(</span><span class="n">sqlSegment</span><span class="o">.</span><span class="n">isPresent</span><span class="p">());</span> 
+</span></span><span class="line"><span class="cl">       <span class="o">//</span><span class="err">构建</span> <span class="n">GeneratedKeyInsertColumnToken</span> 
+</span></span><span class="line"><span class="cl">        <span class="k">return</span> <span class="n">new</span> <span class="n">GeneratedKeyInsertColumnToken</span><span class="p">(</span><span class="n">sqlSegment</span><span class="o">.</span><span class="n">get</span><span class="p">()</span><span class="o">.</span><span class="n">getStopIndex</span><span class="p">(),</span> <span class="n">generatedKey</span><span class="o">.</span><span class="n">getColumnName</span><span class="p">());</span> 
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> 
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们看到在上述 generateSQLToken 方法中，通过利用在 SQL 解析引擎中获取的 InsertColumnsSegment 以及从用于生成分布式主键的 GeneratedKey 中获取对应的主键列，我们就可以构建一个 GeneratedKeyInsertColumnToken。</p>
+<p>装饰器 SQLRewriteContextDecorator</p>
+<p>现在，既然已经获取了 SQLToken，让我们再次回到前面提到的 SQLRewriteContext。我们知道 SQLRewriteContext 是一个上下文对象，保存着与 SQL 改写相关的很多数据信息，同时对于这些信息，其构建过程会根据不同的应用场景而有所不同。基于这些应用场景，ShardingSphere 的改写引擎提供了 SQLRewriteContextDecorator 接口：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLRewriteContextDecorator { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //对SQLRewriteContext 执行装饰 
+</span></span><span class="line"><span class="cl">    void decorate(SQLRewriteContext sqlRewriteContext); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>顾名思义，SQLRewriteContextDecorator 是一种装饰器模式的具体应用，在 ShardingSphere 中只存在两种具体的 SQLRewriteContextDecorator：一种是用于分片处理的 ShardingSQLRewriteContextDecorator，一种是用于数据脱敏的 EncryptSQLRewriteContextDecorator，我们将在“30 | 数据脱敏：如何基于改写引擎实现低侵入性数据脱敏方案？”中进行详细介绍。今天，我们关注的是前一种 ShardingSQLRewriteContextDecorator 的实现过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class ShardingSQLRewriteContextDecorator implements SQLRewriteContextDecorator { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final ShardingRule shardingRule; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final SQLRouteResult sqlRouteResult; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override 
+</span></span><span class="line"><span class="cl">    public void decorate(final SQLRewriteContext sqlRewriteContext) { 
+</span></span><span class="line"><span class="cl">         //参数改写 
+</span></span><span class="line"><span class="cl">        for (ParameterRewriter each : new ShardingParameterRewriterBuilder(shardingRule, sqlRouteResult).getParameterRewriters(sqlRewriteContext.getRelationMetas())) { 
+</span></span><span class="line"><span class="cl">            if (!sqlRewriteContext.getParameters().isEmpty() &amp;&amp; each.isNeedRewrite(sqlRewriteContext.getSqlStatementContext())) { 
+</span></span><span class="line"><span class="cl">                each.rewrite(sqlRewriteContext.getParameterBuilder(), sqlRewriteContext.getSqlStatementContext(), sqlRewriteContext.getParameters()); 
+</span></span><span class="line"><span class="cl">            } 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        //SQLTokenGenerators 初始化 
+</span></span><span class="line"><span class="cl">        sqlRewriteContext.addSQLTokenGenerators(new ShardingTokenGenerateBuilder(shardingRule, sqlRouteResult).getSQLTokenGenerators()); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码不长，包含了两部分内容：一个是参数改写，另一个是 SQLTokenGenerators 初始化，下面我将分别讲解：</p>
+<p>1. 参数改写</p>
+<p>参数改写部分又引入了几个新类。首当其冲的是 ParameterRewriter 以及构建它的 ParameterRewriterBuilder。</p>
+<p>（1）ParameterRewriter</p>
+<p>我们先来看 ParameterRewriter 的定义：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface ParameterRewriter { 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //判断是否需要改写 
+</span></span><span class="line"><span class="cl">    boolean isNeedRewrite(SQLStatementContext sqlStatementContext); 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //执行参数改写 
+</span></span><span class="line"><span class="cl">    void rewrite(ParameterBuilder parameterBuilder, SQLStatementContext sqlStatementContext, List&lt;Object&gt; parameters); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>基于自增主键功能，这里以 ShardingGeneratedKeyInsertValueParameterRewriter 为例看一下 ParameterRewriter 的实现方式，它的 isNeedRewrite 方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public boolean isNeedRewrite(final SQLStatementContext sqlStatementContext) { 
+</span></span><span class="line"><span class="cl">    return sqlStatementContext instanceof InsertSQLStatementContext &amp;&amp; sqlRouteResult.getGeneratedKey().isPresent() &amp;&amp; sqlRouteResult.getGeneratedKey().get().isGenerated(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然，输入的 SQL 应该是一种 InsertSQLStatement，并且只有在路由结果已经包含了 GeneratedKey 的情况下才执行这种改写。</p>
+<p>（2）ParameterRewriterBuilder</p>
+<p>在介绍 rewrite 方法之前，我们先来理解 ParameterBuilder 的概念，ParameterBuilder 是一种参数构建器：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface ParameterBuilder {
+</span></span><span class="line"><span class="cl">    List&lt;Object&gt; getParameters(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>ParameterBuilder 有两个实现类：分别是 StandardParameterBuilder 和 GroupedParameterBuilder。其中，GroupedParameterBuilder 保存着 StandardParameterBuilder 的一个集合，只适用于 InsertSQLStatement。</p>
+<p>了解了这层关系之后，我们再来看 ShardingGeneratedKeyInsertValueParameterRewriter 的 rewrite 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public void rewrite(final ParameterBuilder parameterBuilder, final SQLStatementContext sqlStatementContext, final List&lt;Object&gt; parameters) { 
+</span></span><span class="line"><span class="cl">        Preconditions.checkState(sqlRouteResult.getGeneratedKey().isPresent()); 
+</span></span><span class="line"><span class="cl">    ((GroupedParameterBuilder) parameterBuilder).setDerivedColumnName(sqlRouteResult.getGeneratedKey().get().getColumnName()); 
+</span></span><span class="line"><span class="cl">    Iterator&lt;Comparable&lt;?&gt;&gt; generatedValues = sqlRouteResult.getGeneratedKey().get().getGeneratedValues().descendingIterator(); 
+</span></span><span class="line"><span class="cl">    int count = 0; 
+</span></span><span class="line"><span class="cl">    int parametersCount = 0; 
+</span></span><span class="line"><span class="cl">    for (List&lt;Object&gt; each : ((InsertSQLStatementContext) sqlStatementContext).getGroupedParameters()) { 
+</span></span><span class="line"><span class="cl">        parametersCount += ((InsertSQLStatementContext) sqlStatementContext).getInsertValueContexts().get(count).getParametersCount(); 
+</span></span><span class="line"><span class="cl">        Comparable&lt;?&gt; generatedValue = generatedValues.next(); 
+</span></span><span class="line"><span class="cl">        if (!each.isEmpty()) { 
+</span></span><span class="line"><span class="cl">          //使用 GroupedParameterBuilder 进行补列和设置参数 
+</span></span><span class="line"><span class="cl">            ((GroupedParameterBuilder) parameterBuilder).getParameterBuilders().get(count).addAddedParameters(parametersCount, Lists.&lt;Object&gt;newArrayList(generatedValue)); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        count++; 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>因为这个 ParameterRewriter 面向 InsertSQLStatement，所以这里用到了 GroupedParameterBuilder，并通过 SQLRouteResult 获取 GeneratedKey。我们设置了 GroupedParameterBuilder 中的 DerivedColumnName 为 GeneratedKey 的主键 Column，并通过一个循环添加了对应的 Index 和 Parameter，也就是完成了所需的补列操作。</p>
+<p>这部分的操作实际上可以与 GeneratedKey 的生成过程结合起来一起看以便加深理解，在 “14 | 分布式主键：ShardingSphere 中有哪些分布式主键实现方式？”课时中提到的 createGeneratedKey 方法也是通过一个循环对 GeneratedKey 进行赋值。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private static GeneratedKey createGeneratedKey(final ShardingRule shardingRule, final InsertStatement insertStatement, final String generateKeyColumnName) { 
+</span></span><span class="line"><span class="cl">    GeneratedKey result = new GeneratedKey(generateKeyColumnName, true); 
+</span></span><span class="line"><span class="cl">    for (int i = 0; i &lt; insertStatement.getValueListCount(); i++) { 
+</span></span><span class="line"><span class="cl">            result.getGeneratedValues().add(shardingRule.generateKey(insertStatement.getTable().getTableName())); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>2. SQLTokenGenerator 初始化</p>
+<p>上文内容我们关注 ShardingSQLRewriteContextDecorator 中使用 ParameterRewriter 进行参数改写的过程，这是 decorate 方法中的第一部分内容。</p>
+<p>接下来我们继续讲解该方法的第二部分内容，即 为 SQLRewriteContext 添加 SQLTokenGenerator：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">//SQLTokenGenerators 初始化 
+</span></span><span class="line"><span class="cl">sqlRewriteContext.addSQLTokenGenerators(new ShardingTokenGenerateBuilder(shardingRule, sqlRouteResult).getSQLTokenGenerators());
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这句代码关注于 SQLTokenGenerator 的创建，所以出现了一个ShardingTokenGenerateBuilder：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLTokenGeneratorBuilder { 
+</span></span><span class="line"><span class="cl">    //获取 SQLTokenGenerator 列表 
+</span></span><span class="line"><span class="cl">    Collection&lt;SQLTokenGenerator&gt; getSQLTokenGenerators(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 SQLTokenGeneratorBuilder 的实现类 ShardingTokenGenerateBuilder 中，可以看到内置了很多 TokenGenerator，包含我们在前面提到过的 GeneratedKeyInsertColumnTokenGenerator：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Collection&lt;SQLTokenGenerator&gt; buildSQLTokenGenerators() { 
+</span></span><span class="line"><span class="cl">        Collection&lt;SQLTokenGenerator&gt; result = new LinkedList&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">        addSQLTokenGenerator(result, new TableTokenGenerator()); 
+</span></span><span class="line"><span class="cl">        … 
+</span></span><span class="line"><span class="cl">        addSQLTokenGenerator(result, new OffsetTokenGenerator()); 
+</span></span><span class="line"><span class="cl">        addSQLTokenGenerator(result, new RowCountTokenGenerator()); 
+</span></span><span class="line"><span class="cl">        addSQLTokenGenerator(result, new GeneratedKeyInsertColumnTokenGenerator()); 
+</span></span><span class="line"><span class="cl">        … 
+</span></span><span class="line"><span class="cl">        return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>改写引擎 SQLRewriteEngine</p>
+<p>在 ShardingSphere 中，SQLRewriteEngine 接口代表了改写引擎的入口：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLRewriteEngine { 
+</span></span><span class="line"><span class="cl">    //基于 SQLRewriteContext 执行 SQL 改写 
+</span></span><span class="line"><span class="cl">    SQLRewriteResult rewrite(SQLRewriteContext sqlRewriteContext); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>SQLRewriteEngine 接口只有一个方法，即根据输入的 SQLRewriteContext 返回一个 SQLRewriteResult 对象。我们通过前面的介绍已经了解到，可以通过装饰器类对 SQLRewriteContext 进行装饰，从而满足不同场景的需要。</p>
+<p>注意到 SQLRewriteEngine 接口只有两个实现类：分别是 DefaultSQLRewriteEngine 和 ShardingSQLRewriteEngine。我们重点关注 ShardingSQLRewriteEngine，但在介绍这个改写引擎类之前，我们先要介绍一下 SQLBuilder 接口，从定义上可以看出 SQLBuilder 的目的就是构建最终可以执行的 SQL 语句：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface SQLBuilder { 
+</span></span><span class="line"><span class="cl">    //生成 SQL 
+</span></span><span class="line"><span class="cl">    String toSQL(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>SQLBuilder 接口有一个抽象的实现类 AbstractSQLBuilder，它的 toSQL 方法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public final String toSQL() { 
+</span></span><span class="line"><span class="cl">    if (context.getSqlTokens().isEmpty()) { 
+</span></span><span class="line"><span class="cl">        return context.getSql(); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    Collections.sort(context.getSqlTokens()); 
+</span></span><span class="line"><span class="cl">    StringBuilder result = new StringBuilder(); 
+</span></span><span class="line"><span class="cl">    result.append(context.getSql().substring(0, context.getSqlTokens().get(0).getStartIndex())); 
+</span></span><span class="line"><span class="cl">   //根据 SQLToken 拼装目标 SQL 
+</span></span><span class="line"><span class="cl">    for (SQLToken each : context.getSqlTokens()) { 
+</span></span><span class="line"><span class="cl">        result.append(getSQLTokenText(each)); 
+</span></span><span class="line"><span class="cl">        result.append(getConjunctionText(each)); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result.toString(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，如果 SQLRewriteContext 的 sqlTokens 为空，就直接返回保存在 SQLRewriteContext 中的最终 SQL；反之，会构建一个保存 SQL的StringBuilder，然后依次添加每个 SQLTokenText 以及连接词 ConjunctionText，从而拼装成一个完整的 SQL 语句。注意到，这里获取 SQLTokenText 的方法是一个模板方法，需要 AbstractSQLBuilder 的子类进行实现：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">//获取 SQLToken 文本 
+</span></span><span class="line"><span class="cl">protected abstract String getSQLTokenText(SQLToken sqlToken);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>作为 AbstractSQLBuilder的一个实现类，ShardingSQLBuilder 的 getSQLTokenText 方法就包含了 SQL 改写的一些场景：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">protected String getSQLTokenText(final SQLToken sqlToken) { 
+</span></span><span class="line"><span class="cl">    if (sqlToken instanceof RoutingUnitAware) { 
+</span></span><span class="line"><span class="cl">        return ((RoutingUnitAware) sqlToken).toString(routingUnit); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    if (sqlToken instanceof LogicAndActualTablesAware) { 
+</span></span><span class="line"><span class="cl">        return ((LogicAndActualTablesAware) sqlToken).toString(getLogicAndActualTables()); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return sqlToken.toString(); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于输入的 SQLToken，这里有两个特殊的处理，即判断是否实现了 RoutingUnitAware 接口或 LogicAndActualTablesAware 接口。我们发现实现 RoutingUnitAware 接口的只有 ShardingInsertValuesToken；而实现 LogicAndActualTablesAware 的则有 IndexToken 和 TableToken 两个 SQLToken。</p>
+<p>这里以实现了 LogicAndActualTablesAware 的 TableToken 为例展开讨论。表名改写就是将逻辑表名改写为真实表名的过程，是一个典型的需要对 SQL 进行改写的场景。我们考虑最简单表名改写场景，如果逻辑 SQL 为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">SELECT user_name FROM user WHERE user_id = 1;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那么，这里的逻辑表名为 user。假设我们配置了分片键 user_id，并且 user_id = 1 的情况，将路由至分片表 user_1，那么改写之后的 SQL 应该为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">SELECT user_name FROM user_1 WHERE user_id = 1;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到这里的真实表名应该是 user_1 而不是 user，在用于改写表名的 TableToken 中，它的 toString 如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public String toString(final Map&lt;String, String&gt; logicAndActualTables) { 
+</span></span><span class="line"><span class="cl">    String actualTableName = logicAndActualTables.get(tableName.toLowerCase()); 
+</span></span><span class="line"><span class="cl">    actualTableName = null == actualTableName ? tableName.toLowerCase() : actualTableName; 
+</span></span><span class="line"><span class="cl">    return Joiner.on(&#34;&#34;).join(quoteCharacter.getStartDelimiter(), actualTableName, quoteCharacter.getEndDelimiter()); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的逻辑并不复杂，只是根据逻辑表名从 logicAndActualTables 中获取真实表名 actualTableName，然后进行字符串拼装而已。那么这个 logicAndActualTables 是从何而来呢？logicAndActualTables 的构建过程是在 ShardingSQLBuilder 中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private Map&lt;String, String&gt; getLogicAndActualTables() { 
+</span></span><span class="line"><span class="cl">    Map&lt;String, String&gt; result = new HashMap&lt;&gt;(); 
+</span></span><span class="line"><span class="cl">    Collection&lt;String&gt; tableNames = getContext().getSqlStatementContext().getTablesContext().getTableNames(); 
+</span></span><span class="line"><span class="cl">    for (TableUnit each : routingUnit.getTableUnits()) { 
+</span></span><span class="line"><span class="cl">        String logicTableName = each.getLogicTableName().toLowerCase(); 
+</span></span><span class="line"><span class="cl">        result.put(logicTableName, each.getActualTableName()); 
+</span></span><span class="line"><span class="cl">            result.putAll(getLogicAndActualTablesFromBindingTable(routingUnit.getMasterSlaveLogicDataSourceName(), each, tableNames)); 
+</span></span><span class="line"><span class="cl">    } 
+</span></span><span class="line"><span class="cl">    return result; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码实际上也只是做了数据结构的拼装，我们沿着这里的 getLogicAndActualTablesFromBindingTable 方法继续往下看，会发现根据 logicTable 获取 actualTable 的过程实际上是发生在 BindingTableRule 中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public String getBindingActualTable(final String dataSource, final String logicTable, final String otherActualTable) { 
+</span></span><span class="line"><span class="cl">        int index = -1; 
+</span></span><span class="line"><span class="cl">        for (TableRule each : tableRules) { 
+</span></span><span class="line"><span class="cl">            index = each.findActualTableIndex(dataSource, otherActualTable); 
+</span></span><span class="line"><span class="cl">            if (-1 != index) { 
+</span></span><span class="line"><span class="cl">                break; 
+</span></span><span class="line"><span class="cl">            } 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        if (-1 == index) { 
+</span></span><span class="line"><span class="cl">            throw new ShardingConfigurationException(&#34;Actual table [%s].[%s] is not in table config&#34;, dataSource, otherActualTable); 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        for (TableRule each : tableRules) { 
+</span></span><span class="line"><span class="cl">            if (each.getLogicTable().equals(logicTable.toLowerCase())) { 
+</span></span><span class="line"><span class="cl">                return each.getActualDataNodes().get(index).getTableName().toLowerCase(); 
+</span></span><span class="line"><span class="cl">            } 
+</span></span><span class="line"><span class="cl">        } 
+</span></span><span class="line"><span class="cl">        throw new ShardingConfigurationException(&#34;Cannot find binding actual table, data source: %s, logic table: %s, other actual table: %s&#34;, dataSource, logicTable, otherActualTable); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而 BindingTableRule 又依赖于 TableRule 中保存的 ActualDataNodes 来完成 ActualTableIndex和ActualTable 的计算。回想起我们在案例中配置的分库分表规则，这里再次感受到了以 TableRule 和 BindingTableRule为 代表的各种 Rule 对象在 ShardingSphere 的串联作用：</p>
+<p>当 ShardingSQLBuilder 完成 SQL 的构建之后，我们再回到 ShardingSQLRewriteEngine，这个时候我们对它的 rewrite 方法就比较明确了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override 
+</span></span><span class="line"><span class="cl">public SQLRewriteResult rewrite(final SQLRewriteContext sqlRewriteContext) { 
+</span></span><span class="line"><span class="cl">    return new SQLRewriteResult(new ShardingSQLBuilder(sqlRewriteContext, shardingRule, routingUnit).toSQL(), getParameters(sqlRewriteContext.getParameterBuilder())); 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>改写引擎的输出 SQLRewriteResult 对象就包含了最终的 SQL 以及配套的参数列表：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class SQLRewriteResult {
+</span></span><span class="line"><span class="cl">    private final String sql;
+</span></span><span class="line"><span class="cl">    private final List&lt;Object&gt; parameters; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>讲完 ShardingSQLRewriteEngine 之后，我们最后回到 BaseShardingEngine 的 rewriteAndConvert 方法。现在，该方法中除了 EncryptSQLRewriteContextDecorator 部分的内容涉及数据脱敏功能，其他的部分我们应该都能明白整体的执行流程。该方法最终返回的是一个 RouteUnit 列表，RouteUnit 中又包含了 SQLUnit：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class RouteUnit { 
+</span></span><span class="line"><span class="cl">    //目标数据源名 
+</span></span><span class="line"><span class="cl">    private final String dataSourceName; 
+</span></span><span class="line"><span class="cl">    //SQL 单元 
+</span></span><span class="line"><span class="cl">    private final SQLUnit sqlUnit; 
+</span></span><span class="line"><span class="cl">} 
+</span></span><span class="line"><span class="cl">	
+</span></span><span class="line"><span class="cl">public final class SQLUnit { 
+</span></span><span class="line"><span class="cl">    //目标 SQL 
+</span></span><span class="line"><span class="cl">    private final String sql; 
+</span></span><span class="line"><span class="cl">    //参数列表 
+</span></span><span class="line"><span class="cl">    private final List&lt;Object&gt; parameters; 
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到最终的结果实际上就是目标数据库、目标 SQL 以及相关参数，一旦我们获取了这些信息之后，我们就可以执行一条 SQL 语句。</p>
+<p>从源码解析到日常开发</p>
+<p>在今天的内容中，我们可以明显感受到装饰器模式的强大作用。装饰器模式允许向一个现有的对象添加新的功能，同时又不改变其结构，这种模式创建了一个装饰类，用来包装原有的类，并在保持类方法签名完整性的前提下，提供了额外的功能。</p>
+<p>同时，我们注意到在 ShardingSphere 中，装饰器模式的作用对象是一个 SQLRewriteContext 上下文对象，这是一种值得学习的做法。在日常开发过程中，我们可以把需要根据不同场景进行不同处理的信息存储在一个上下文对象中，然后基于装饰器模式对这些信息进行装饰。两者的无缝集成，可以在很多应用场景下，完成基于子类实现方式所不能完成的功能，从而为对象动态添加一些额外的职责。</p>
+<p>小结与预告</p>
+<p>今天，我们花了一个课时的时间完整介绍了 ShardingSphere 中改写引擎的基本结构和各个核心类。改写引擎在设计上使用了装饰器模式，完成了从逻辑 SQL 到目标 SQL 的改写过程，我们也针对自增主键和表名改写这两个典型的应用场景，给出了对应的实现原理和源码分析。</p>
+<p>请注意，改写引擎在 ShardingSphere 中不仅仅只用于这些场景，在后面的课程“30 | 数据脱敏：如何基于改写引擎实现低侵入性数据脱敏方案？”中，我们还会看到它在数据脱敏等场景下的应用。</p>
+<p>最后给你留一道思考题：ShardingSphere 中，如何通过装饰器模式对 SQL 改写的上下文进行装饰？欢迎你在留言区与大家讨论，我将逐一点评解答。</p>
+<p>现在，我们已经针对输入的逻辑 SQL 通过改写引擎获取了目标 SQL，有了目标 SQL 接下来就可以执行 SQL 了，这就是下一课时中要开始介绍的 ShardingSphere 执行引擎要做的事情。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/">ShardingSphere核心原理精讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/21%E8%AE%B2%E5%90%83%E9%80%8F%E5%AE%9E%E6%97%B6%E6%B5%81%E8%AE%A1%E7%AE%97/20%E5%9C%BA%E6%99%AF%E6%A1%88%E4%BE%8B%E5%A6%82%E4%BD%95%E7%94%A8flink%E5%AE%9E%E7%8E%B0%E5%AE%9E%E6%97%B6%E9%A3%8E%E6%8E%A7%E5%BC%95%E6%93%8E/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20场景案例：如何用Flink实现实时风控引擎？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/24%E8%AE%B2%E5%90%83%E9%80%8F%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%93/20%E5%85%B1%E8%AF%86%E7%AE%97%E6%B3%95%E4%B8%80%E6%AC%A1%E6%80%A7%E8%AF%B4%E6%B8%85%E6%A5%9Apaxoraft%E7%AD%89%E7%AE%97%E6%B3%95%E7%9A%84%E5%8C%BA%E5%88%AB/">
+            <span class="next-text nav-default">20共识算法：一次性说清楚Paxo、Raft等算法的区别</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

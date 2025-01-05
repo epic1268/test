@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>02_几行汇编几行C：实现一个最简单的内核 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+我们知道，在学习许多编程语言一开始的时候，都有一段用其语言编写的经典程序——Hello World。这不过是某一操作系统平台之上的应用程序，却心高气傲地问候世界。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/02_%E5%87%A0%E8%A1%8C%E6%B1%87%E7%BC%96%E5%87%A0%E8%A1%8Cc%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84%E5%86%85%E6%A0%B8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/02_%E5%87%A0%E8%A1%8C%E6%B1%87%E7%BC%96%E5%87%A0%E8%A1%8Cc%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84%E5%86%85%E6%A0%B8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="02_几行汇编几行C：实现一个最简单的内核">
+  <meta property="og:description" content="你好，我是 LMOS。
+我们知道，在学习许多编程语言一开始的时候，都有一段用其语言编写的经典程序——Hello World。这不过是某一操作系统平台之上的应用程序，却心高气傲地问候世界。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="02_几行汇编几行C：实现一个最简单的内核">
+  <meta itemprop="description" content="你好，我是 LMOS。
+我们知道，在学习许多编程语言一开始的时候，都有一段用其语言编写的经典程序——Hello World。这不过是某一操作系统平台之上的应用程序，却心高气傲地问候世界。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4851">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="02_几行汇编几行C：实现一个最简单的内核">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+我们知道，在学习许多编程语言一开始的时候，都有一段用其语言编写的经典程序——Hello World。这不过是某一操作系统平台之上的应用程序，却心高气傲地问候世界。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">02_几行汇编几行C：实现一个最简单的内核</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4851 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#pc-机的引导流程">PC 机的引导流程</a></li>
+        <li><a href="#hello-os-引导汇编代码">Hello OS 引导汇编代码</a></li>
+        <li><a href="#hello-os-的主函数">Hello OS 的主函数</a></li>
+        <li><a href="#控制计算机屏幕">控制计算机屏幕</a></li>
+        <li><a href="#编译和安装-hello-os">编译和安装 Hello OS</a></li>
+        <li><a href="#make-工具">make 工具</a></li>
+        <li><a href="#编译">编译</a></li>
+        <li><a href="#安装-hello-os">安装 Hello OS</a></li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>我们知道，在学习许多编程语言一开始的时候，都有一段用其语言编写的经典程序——Hello World。这不过是某一操作系统平台之上的应用程序，却心高气傲地问候世界。</p>
+<p>而我们学习操作系统的时候，那么也不妨撇开其它现有的操作系统，基于硬件，写一个最小的操作系统——Hello OS，先练练手、热热身，直观感受一下。</p>
+<h2 id="pc-机的引导流程">PC 机的引导流程</h2>
+<p>看标题就知道，写操作系统要用汇编和 C 语言，尽管这个 Hello OS 很小，但也要用到两种编程语言。其实，现有的商业操作系统都是用这两种语言开发出来的。</p>
+<p>先不用害怕，Hello OS 的代码量很少。</p>
+<p>其实，我们也不打算从 PC 的引导程序开始写起，原因是目前我们的知识储备还不够，所以先借用一下 GRUB 引导程序，只要我们的 PC 机上安装了 Ubuntu Linux 操作系统，GRUB 就已经存在了。这会大大降低我们开始的难度，也不至于打消你的热情。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/dc115bf80415bc7f40b876727d293382.png" alt=""></p>
+<p>那在写 Hello OS 之前，我们先要搞清楚 Hello OS 的引导流程，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/d3b0bb6c356f4e95278b46af84aa0a51.png" alt=""></p>
+<p>Hello OS 引导流程图</p>
+<p>简单解释一下，PC 机 BIOS 固件是固化在 PC 机主板上的 ROM 芯片中的，掉电也能保存，PC 机上电后的第一条指令就是 BIOS 固件中的，它负责<strong>检测和初始化 CPU、内存及主板平台</strong>，然后加载引导设备（大概率是硬盘）中的第一个扇区数据，到 0x7c00 地址开始的内存空间，再接着跳转到 0x7c00 处执行指令，在我们这里的情况下就是 GRUB 引导程序。</p>
+<p>当然，更先进的UEFI BIOS则不同，这里就不深入其中了，你可以通过链接自行了解。</p>
+<h2 id="hello-os-引导汇编代码">Hello OS 引导汇编代码</h2>
+<p>明白了 PC 机的启动流程，下面只剩下我们的 Hello OS 了，我们马上就去写好它。</p>
+<p>我们先来写一段汇编代码。这里我要特别说明一个问题：为什么不能直接用 C？</p>
+<p><strong>C 作为通用的高级语言，不能直接操作特定的硬件，而且 C 语言的函数调用、函数传参，都需要用栈。</strong></p>
+<p>栈简单来说就是一块内存空间，其中数据满足<strong>后进先出</strong>的特性，它由 CPU 特定的栈寄存器指向，所以我们要先用汇编代码处理好这些 C 语言的工作环境。</p>
+<p>;彭东 @ 2021.01.09<br>
+MBT_HDR_FLAGS EQU 0x00010003<br>
+MBT_HDR_MAGIC EQU 0x1BADB002 ;多引导协议头魔数<br>
+MBT_HDR2_MAGIC EQU 0xe85250d6 ;第二版多引导协议头魔数<br>
+global _start ;导出_start 符号<br>
+extern main ;导入外部的 main 函数符号<br>
+[section .start.text] ;定义.start.text 代码节<br>
+[bits 32] ;汇编成 32 位代码<br>
+_start:<br>
+jmp _entry<br>
+ALIGN 8<br>
+mbt_hdr:<br>
+dd MBT_HDR_MAGIC<br>
+dd MBT_HDR_FLAGS<br>
+dd -(MBT_HDR_MAGIC+MBT_HDR_FLAGS)<br>
+dd mbt_hdr<br>
+dd _start<br>
+dd 0<br>
+dd 0<br>
+dd _entry<br>
+;以上是 GRUB 所需要的头<br>
+ALIGN 8<br>
+mbt2_hdr:<br>
+DD MBT_HDR2_MAGIC<br>
+DD 0<br>
+DD mbt2_hdr_end - mbt2_hdr<br>
+DD -(MBT_HDR2_MAGIC + 0 + (mbt2_hdr_end - mbt2_hdr))<br>
+DW 2, 0<br>
+DD 24<br>
+DD mbt2_hdr<br>
+DD _start<br>
+DD 0<br>
+DD 0<br>
+DW 3, 0<br>
+DD 12<br>
+DD _entry<br>
+DD 0<br>
+DW 0, 0<br>
+DD 8<br>
+mbt2_hdr_end:<br>
+;以上是 GRUB2 所需要的头<br>
+;包含两个头是为了同时兼容 GRUB、GRUB2<br>
+ALIGN 8<br>
+_entry:<br>
+;关中断<br>
+cli<br>
+;关不可屏蔽中断<br>
+in al, 0x70<br>
+or al, 0x80<br>
+out 0x70,al<br>
+;重新加载 GDT<br>
+lgdt [GDT_PTR]<br>
+jmp dword 0x8 :_32bits_mode<br>
+_32bits_mode:<br>
+;下面初始化 C 语言可能会用到的寄存器<br>
+mov ax, 0x10<br>
+mov ds, ax<br>
+mov ss, ax<br>
+mov es, ax<br>
+mov fs, ax<br>
+mov gs, ax<br>
+xor eax,eax<br>
+xor ebx,ebx<br>
+xor ecx,ecx<br>
+xor edx,edx<br>
+xor edi,edi<br>
+xor esi,esi<br>
+xor ebp,ebp<br>
+xor esp,esp<br>
+;初始化栈，C 语言需要栈才能工作<br>
+mov esp,0x9000<br>
+;调用 C 语言函数 main<br>
+call main<br>
+;让 CPU 停止执行指令<br>
+halt_step:<br>
+halt<br>
+jmp halt_step<br>
+GDT_START:<br>
+knull_dsc: dq 0<br>
+kcode_dsc: dq 0x00cf9e000000ffff<br>
+kdata_dsc: dq 0x00cf92000000ffff<br>
+k16cd_dsc: dq 0x00009e000000ffff<br>
+k16da_dsc: dq 0x000092000000ffff<br>
+GDT_END:<br>
+GDT_PTR:<br>
+GDTLEN dw GDT_END-GDT_START-1<br>
+GDTBASE dd GDT_START</p>
+<p>以上的汇编代码（/lesson01/HelloOS/entry.asm）分为 4 个部分：</p>
+<p>1. 代码 1~40 行，用汇编定义的 GRUB 的多引导协议头，其实就是一定格式的数据，我们的 Hello OS 是用 GRUB 引导的，当然要遵循 <strong>GRUB 的多引导协议标准</strong>，让 GRUB 能识别我们的 Hello OS。之所以有两个引导头，是为了兼容 GRUB1 和 GRUB2。</p>
+<p>2. 代码 44~52 行，关掉中断，设定 CPU 的工作模式。你现在可能不懂，没事儿，后面 CPU 相关的课程我们会专门再研究它。</p>
+<p>3. 代码 54~73 行，初始化 CPU 的寄存器和 C 语言的运行环境。</p>
+<p>4. 代码 78~87 行，GDT_START 开始的，是 CPU 工作模式所需要的数据，同样，后面讲 CPU 时会专门介绍。</p>
+<h2 id="hello-os-的主函数">Hello OS 的主函数</h2>
+<p>到这，不知道你有没有发现一个问题？上面的汇编代码调用了 main 函数，而在其代码中并没有看到其函数体，而是从外部引入了一个符号。</p>
+<p>那是因为这个函数是用 C 语言写的在（/lesson01/HelloOS/main.c）中，最终它们分别由 nasm 和 GCC 编译成可链接模块，由 LD 链接器链接在一起，形成可执行的程序文件：</p>
+<p>//彭东 @ 2021.01.09<br>
+#include &ldquo;vgastr.h&rdquo;<br>
+void main()<br>
+{<br>
+printf(&ldquo;Hello OS!&rdquo;);<br>
+return;<br>
+}</p>
+<p>以上这段代码，你应该很熟悉了吧？不过这不是应用程序的 main 函数，而是 Hello OS 的 main 函数。</p>
+<p>其中的 printf 也不是应用程序库中的那个 printf 了，而是需要我们自己实现了。你可以先停下歇歇，再去实现 printf 函数。</p>
+<h2 id="控制计算机屏幕">控制计算机屏幕</h2>
+<p>接着我们再看下显卡，这和我们接下来要写的代码有直接关联。</p>
+<p>计算机屏幕显示往往是显卡的输出，显卡有很多形式：集成在主板的叫集显，做在 CPU 芯片内的叫核显，独立存在通过 PCIE 接口连接的叫独显，性能依次上升，价格也是。</p>
+<p>独显的高性能是游戏玩家们所钟爱的，3D 图形显示往往要涉及顶点处理、多边形的生成和变换、纹理、着色、打光、栅格化等。而这些任务的计算量超级大，所以独显往往有自己的 RAM、多达几百个运算核心的处理器。因此独显不仅仅是可以显示图像，而且可以执行大规模并行计算，比如“挖矿”。</p>
+<p>我们要在屏幕上显示字符，就要编程操作显卡。</p>
+<p>其实无论我们 PC 上是什么显卡，它们都支持一种叫 <strong>VESA</strong> 的标准，这种标准下有两种工作模式：字符模式和图形模式。显卡们为了兼容这种标准，不得不自己提供一种叫 VGABIOS 的固件程序。</p>
+<p>下面，我们来看看显卡的字符模式的工作细节。</p>
+<p>它把屏幕分成 24 行，每行 80 个字符，把这（24*80）个位置映射到以 0xb8000 地址开始的内存中，每两个字节对应一个字符，其中一个字节是字符的 ASCII 码，另一个字节为字符的颜色值。如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/b49d85672b194a8eb9ae95ee6d07677e.png" alt=""></p>
+<p>计算机显卡文本模式</p>
+<p>明白了显卡的字符模式的工作细节，下面我们开始写代码。</p>
+<p>这里先提个醒：<strong>C 语言字符串是以 0 结尾的，其字符编码通常是 utf8，而 utf8 编码对 ASCII 字符是兼容的，即英文字符的 ASCII 编码和 utf8 编码是相等的</strong>（关于utf8编码你可以自行了解）。</p>
+<p>//彭东 @ 2021.01.09<br>
+void _strwrite(char* string)<br>
+{<br>
+char* p_strdst = (char*)(0xb8000);//指向显存的开始地址<br>
+while (*string)<br>
+{<br>
+*p_strdst = *string++;<br>
+p_strdst += 2;<br>
+}<br>
+return;<br>
+}</p>
+<p>void printf(char* fmt, &hellip;)<br>
+{<br>
+_strwrite(fmt);<br>
+return;<br>
+}</p>
+<p>代码很简单，printf 函数直接调用了 _strwrite 函数，而 _strwrite 函数正是将字符串里每个字符依次定入到 0xb8000 地址开始的显存中，而 p_strdst 每次加 2，这也是为了跳过字符的颜色信息的空间。</p>
+<p>到这，Hello OS 相关的代码就写好了，下面就是编译和安装了。你可别以为这个事情就简单了，下面请跟着我去看一看。</p>
+<h2 id="编译和安装-hello-os">编译和安装 Hello OS</h2>
+<p>Hello OS 的代码都已经写好，这时就要进入安装测试环节了。在安装之前，我们要进行系统编译，即把每个代码模块编译最后链接成可执行的二进制文件。</p>
+<p>你可能觉得我在小题大做，编译不就是输入几条命令吗，这么简单的工作也值得一说？</p>
+<p>确实，对于我们 Hello OS 的编译工作来说特别简单，因为总共才三个代码文件，最多四条命令就可以完成。</p>
+<p>但是以后我们 Hello OS 的文件数量会爆炸式增长，一个成熟的商业操作系统更是多达几万个代码模块文件，几千万行的代码量，是这世间最复杂的软件工程之一。所以需要一个牛逼的工具来控制这个巨大的编译过程。</p>
+<h2 id="make-工具">make 工具</h2>
+<p>make 历史悠久，小巧方便，也是很多成熟操作系统编译所使用的构建工具。</p>
+<p>在软件开发中，make 是一个工具程序，它读取一个叫“makefile”的文件，也是一种文本文件，这个文件中写好了构建软件的规则，它能根据这些规则自动化构建软件。</p>
+<p>makefile 文件中规则是这样的：首先有一个或者多个构建目标称为“target”；目标后面紧跟着用于构建该目标所需要的文件，目标下面是构建该目标所需要的命令及参数。</p>
+<p>与此同时，它也检查文件的依赖关系，如果需要的话，它会调用一些外部软件来完成任务。</p>
+<p>第一次构建目标后，下一次执行 make 时，它会根据该目标所依赖的文件是否更新决定是否编译该目标，如果所依赖的文件没有更新且该目标又存在，那么它便不会构建该目标。这种特性非常有利于编译程序源代码。</p>
+<p>任何一个 Linux 发行版中都默认自带这个 make 程序，所以不需要额外的安装工作，我们直接使用即可。</p>
+<p>为了让你进一步了解 make 的使用，接下来我们一起看一个有关 makefile 的例子：</p>
+<p>CC = gcc #定义一个宏 CC 等于 gcc<br>
+CFLAGS = -c #定义一个宏 CFLAGS 等于-c<br>
+OBJS_FILE = file.c file1.c file2.c file3.c file4.c #定义一个宏<br>
+.PHONY : all everything #定义两个伪目标 all、everything<br>
+all:everything #伪目标 all 依赖于伪目标 everything<br>
+everything :$( OBJS_FILE) #伪目标 everything 依赖于 OBJS_FILE，而 OBJS_FILE 是宏会被<br>
+#替换成 file.c file1.c file2.c file3.c file4.c<br>
+%.o : %.c<br>
+$(CC) $(CFLAGS) -o $@ $&lt;</p>
+<p>我来解释一下这个例子：</p>
+<p>make 规定“#”后面为注释，make 处理 makefile 时会自动丢弃。</p>
+<p>makefile 中可以定义宏，方法是<strong>在一个字符串后跟一个“=”或者“:=”符号</strong>，引用宏时要用“$(宏名)”，宏最终会在宏出现的地方替换成相应的字符串，例如：$(CC) 会被替换成 gcc，$( OBJS_FILE) 会被替换成 file.c file1.c file2.c file3.c file4.c。</p>
+<p>.PHONY 在 makefile 中表示定义伪目标。所谓伪目标，就是它不代表一个真正的文件名，在执行 make 时可以指定这个目标来执行其所在规则定义的命令。但是伪目标可以依赖于另一个伪目标或者文件，例如：all 依赖于 everything，everything 最终依赖于 file.c file1.c file2.c file3.c file4.c。</p>
+<p>虽然我们会发现，everything 下面并没有相关的执行命令，但是下面有个通用规则：“%.o : %.c”。其中的“%”表示通配符，表示所有以“.o”结尾的文件依赖于所有以“.c”结尾的文件。</p>
+<p>例如：file.c、file1.c、file2.c、file3.c、file4.c，通过这个通用规则会自动转换为依赖关系：file.o: file.c、file1.o: file1.c、file2.o: file2.c、file3.o: file3.c、file4.o: file4.c。</p>
+<p>然后，针对这些依赖关系，分别会执行：$(CC) $(CFLAGS) -o $@ $&lt; 命令，当然最终会转换为：gcc –c –o xxxx.o xxxx.c，这里的“xxxx”表示一个具体的文件名。</p>
+<h2 id="编译">编译</h2>
+<p>下面我们用一张图来描述我们 Hello OS 的编译过程，如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/498550f661634a6c9d41e8df8a32e06d.png" alt=""></p>
+<p>Hello OS 编译过程</p>
+<h2 id="安装-hello-os">安装 Hello OS</h2>
+<p>经过上述流程，我们就会得到 Hello OS.bin 文件，但是我们还要让 GRUB 能够找到它，才能在计算机启动时加载它。这个过程我们称为安装，不过这里没有写安装程序，得我们手动来做。</p>
+<p>经研究发现，GRUB 在启动时会加载一个 grub.cfg 的文本文件，根据其中的内容执行相应的操作，其中一部分内容就是启动项。</p>
+<p>GRUB 首先会显示启动项到屏幕，然后让我们选择启动项，最后 GRUB 根据启动项对应的信息，加载 OS 文件到内存。</p>
+<p>下面来看看我们 Hello OS 的启动项：</p>
+<p>menuentry &lsquo;HelloOS&rsquo; {<br>
+insmod part_msdos #GRUB 加载分区模块识别分区<br>
+insmod ext2 #GRUB 加载 ext 文件系统模块识别 ext 文件系统<br>
+set root=&lsquo;hd0,msdos4&rsquo; #注意 boot 目录挂载的分区，这是我机器上的情况<br>
+multiboot2 /boot/HelloOS.bin #GRUB 以 multiboot2 协议加载 HelloOS.bin<br>
+boot #GRUB 启动 HelloOS.bin<br>
+}</p>
+<p>如果你不知道你的 boot 目录挂载的分区，可以在 Linux 系统的终端下输入命令：df /boot/，就会得到如下结果：</p>
+<p>文件系统          1K-块    已用     可用      已用% 挂载点<br>
+/dev/sda4      48752308 8087584 38158536   18%    /</p>
+<p>其中的“sda4”就是硬盘的第四个分区，但是 GRUB 的 menuentry 中不能写 sda4，而是要写“hd0,msdos4”，这是 GRUB 的命名方式，hd0 表示第一块硬盘，结合起来就是第一块硬盘的第四个分区。</p>
+<p>把上面启动项的代码插入到你的 Linux 机器上的 /boot/grub/grub.cfg 文件中，然后把 Hello OS.bin 文件复制到 /boot/ 目录下，最后重启计算机，你就可以看到 Hello OS 的启动选项了。</p>
+<p>选择 Hello OS，按下 Enter 键，这样就可以成功启动我们自己的 Hello OS 了。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>有没有很开心？我们终于看到我们自己的 OS 运行了，就算它再简单也是我们自己的 OS。下面我们再次回顾下这节课的重点。</p>
+<p>首先，我们了解了从按下 PC 机电源开关开始，PC 机的引导过程。它从 CPU 上电，到加载 BIOS 固件，再由 BIOS 固件对计算机进行自检和默认的初始化，并加载 GRUB 引导程序，最后由 GRUB 加载具体的操作系统。</p>
+<p>其次，就到了我们这节课最难的部分，即用汇编语言和 C 语言实现我们的 Hello OS。</p>
+<p>第一步，用汇编程序初始化 CPU 的寄存器、设置 CPU 的工作模式和栈，最重要的是<strong>加入了 GRUB 引导协议头</strong>；第二步，切换到 C 语言，用 C 语言写好了<strong>主函数和控制显卡输出的函数</strong>，其间还了解了显卡的一些工作细节。</p>
+<p>最后，就是编译和安装 Hello OS 了。我们用了 make 工具编译整个代码，其实 make 会根据一些规则调用具体的 nasm、gcc、ld 等编译器，然后形成 Hello OS.bin 文件，你把这个文件写复制到 boot 分区，写好 GRUB 启动项，这样就好了。</p>
+<p>这里只是上上手，下面我们还会去准备一些别的东西，然后就真正开始了。但你此刻也许还有很多问题没有搞清楚，比如重新加载 GDT、关中断等，先不要担心，我们后面会一一解决的。</p>
+<p>本节课的配套代码，你可以从这里下载。</p>
+<h2 id="思考题">思考题</h2>
+<p>以上 printf 函数定义，其中有个形式参数很奇怪，请你思考下：为什么是“…”形式参数，这个形式参数有什么作用？</p>
+<p>欢迎你在留言区分享你的思考或疑问。</p>
+<p>我是 LMOS，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/02_%E5%9F%BA%E7%A1%80%E7%AF%87%E4%BA%8C_page_cache%E6%98%AF%E6%80%8E%E6%A0%B7%E4%BA%A7%E7%94%9F%E5%92%8C%E9%87%8A%E6%94%BE%E7%9A%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">02_基础篇（二）_Page_Cache是怎样产生和释放的？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E6%9E%B6%E6%9E%84/02_%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1%E7%9A%84%E5%8E%86%E5%8F%B2%E8%83%8C%E6%99%AF/">
+            <span class="next-text nav-default">02_架构设计的历史背景</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

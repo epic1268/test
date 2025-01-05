@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>Android_JVM_TI机制详解（内含福利彩蛋） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是孙鹏飞。
+在专栏卡顿优化的分析中，绍文提到可以利用 JVM TI 机制获得更加非常丰富的顿现场信息，包括内存申请、线程创建、类加载、GC 信息等。
+JVM TI 机制究竟是什么？它为什么如此的强大？怎么样将它应用到我们的工作中？今天我们一起来解开它神秘的面纱。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/android_jvm_ti%E6%9C%BA%E5%88%B6%E8%AF%A6%E8%A7%A3%E5%86%85%E5%90%AB%E7%A6%8F%E5%88%A9%E5%BD%A9%E8%9B%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/android_jvm_ti%E6%9C%BA%E5%88%B6%E8%AF%A6%E8%A7%A3%E5%86%85%E5%90%AB%E7%A6%8F%E5%88%A9%E5%BD%A9%E8%9B%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="Android_JVM_TI机制详解（内含福利彩蛋）">
+  <meta property="og:description" content="你好，我是孙鹏飞。
+在专栏卡顿优化的分析中，绍文提到可以利用 JVM TI 机制获得更加非常丰富的顿现场信息，包括内存申请、线程创建、类加载、GC 信息等。
+JVM TI 机制究竟是什么？它为什么如此的强大？怎么样将它应用到我们的工作中？今天我们一起来解开它神秘的面纱。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Android开发高手课">
+
+  <meta itemprop="name" content="Android_JVM_TI机制详解（内含福利彩蛋）">
+  <meta itemprop="description" content="你好，我是孙鹏飞。
+在专栏卡顿优化的分析中，绍文提到可以利用 JVM TI 机制获得更加非常丰富的顿现场信息，包括内存申请、线程创建、类加载、GC 信息等。
+JVM TI 机制究竟是什么？它为什么如此的强大？怎么样将它应用到我们的工作中？今天我们一起来解开它神秘的面纱。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5760">
+  <meta itemprop="keywords" content="Android开发高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Android_JVM_TI机制详解（内含福利彩蛋）">
+  <meta name="twitter:description" content="你好，我是孙鹏飞。
+在专栏卡顿优化的分析中，绍文提到可以利用 JVM TI 机制获得更加非常丰富的顿现场信息，包括内存申请、线程创建、类加载、GC 信息等。
+JVM TI 机制究竟是什么？它为什么如此的强大？怎么样将它应用到我们的工作中？今天我们一起来解开它神秘的面纱。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">Android_JVM_TI机制详解（内含福利彩蛋）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5760 字 </span>
+          <span class="more-meta"> 预计阅读 12 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#jvm-ti-介绍">JVM TI 介绍</a></li>
+        <li><a href="#jvm-ti-agent-开发">JVM TI Agent 开发</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#相关资料">相关资料</a></li>
+        <li><a href="#福利彩蛋">福利彩蛋</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是孙鹏飞。</p>
+<p>在专栏<a href="./73277.md">卡顿优化</a>的分析中，绍文提到可以利用 JVM TI 机制获得更加非常丰富的顿现场信息，包括内存申请、线程创建、类加载、GC 信息等。</p>
+<p>JVM TI 机制究竟是什么？它为什么如此的强大？怎么样将它应用到我们的工作中？今天我们一起来解开它神秘的面纱。</p>
+<h2 id="jvm-ti-介绍">JVM TI 介绍</h2>
+<p>JVM TI 全名是<a href="./jvmti.md#SpecificationIntro">Java Virtual Machine Tool Interface</a>，是开发虚拟机监控工具使用的编程接口，它可以监控 JVM 内部事件的执行，也可以控制 JVM 的某些行为，可以实现调试、监控、线程分析、覆盖率分析工具等。</p>
+<p>JVM TI 属于<a href="./architecture.md">Java Platform Debugger Architecture</a>中的一员，在 Debugger Architecture 上 JVM TI 可以算作一个 back-end，通过 JDWP 和 front-end JDI 去做交互。需要注意的是，Android 内的 JDWP 并不是基于 JVM TI 开发的。</p>
+<p>从 Java SE 5 开始，Java 平台调试体系就使用 JVM TI 替代了之前的 JVMPI 和 JVMDI。如果你对这部分背景还不熟悉，强烈推荐先阅读下面这几篇文章：</p>
+<ul>
+<li><a href="./index.md">深入 Java 调试体系：第 1 部分，JPDA 体系概览</a></li>
+<li><a href="./index.md">深入 Java 调试体系：第 2 部分，JVMTI 和 Agent 实现</a></li>
+<li><a href="./index.md">深入 Java 调试体系：第 3 部分，JDWP 协议及实现</a></li>
+<li><a href="./index.md">深入 Java 调试体系：第 4 部分，Java 调试接口（JDI）</a></li>
+</ul>
+<p>虽然 Java 已经使用了 JVM TI 很多年，但从源码上看在 Android 8.0 才<a href="./openjdkjvmti.md">集成</a>了 JVM TI v1.2，主要是需要在 Runtime 中支持修改内存中的 Dex 和监控全局的事件。有了 JVM TI 的支持，我们可以实现很多调试工具没有实现的功能，或者定制我们自己的 Debug 工具来获取我们关心的数据。</p>
+<p>现阶段已经有工具使用 JVM TI 技术，比如 Android Studio 的 Profilo 工具和 Linkedin 的<a href="./dexmaker-mockito-inline.md">dexmaker-mockito-inline</a>工具。Android Studio 使用 JVM TI 机制实现了实时的内存监控，对象分配切片、GC 事件、Memory Alloc Diff 功能，非常强大；dexmaker 使用该机制实现 Mock final methods 和 static methods。</p>
+<p><strong>1. JVM TI 支持的功能</strong></p>
+<p>在介绍 JVM TI 的实现原理之前，我们先来看一下 JVM TI 提供了什么功能？我们可以利用这些功能做些什么？</p>
+<p><strong>线程相关事件 -&gt; 监控线程创建堆栈、锁信息</strong></p>
+<ul>
+<li>ThreadStart：线程在执行方法前产生线程启动事件。</li>
+<li>ThreadEnd：线程结束事件。</li>
+<li>MonitorWait：wait 方法调用后。</li>
+<li>MonitorWaited：wait 方法完成等待。</li>
+<li>MonitorContendedEnter：当线程试图获取一个已经被其他线程持有的对象锁时。</li>
+<li>MonitorContendedEntered：当线程获取到对象锁继续执行时。</li>
+</ul>
+<p><strong>类加载准备事件 -&gt; 监控类加载</strong></p>
+<ul>
+<li>ClassFileLoadHook：在类加载之前触发。</li>
+<li>ClassLoad：某个类首次被加载。</li>
+<li>ClassPrepare：某个类的准备阶段完成。</li>
+</ul>
+<p><strong>异常事件 -&gt; 监控异常信息</strong></p>
+<ul>
+<li>Exception：有异常抛出的时候。</li>
+<li>ExceptionCatch：当捕获到一个异常时候。</li>
+</ul>
+<p><strong>调试相关</strong></p>
+<ul>
+<li>SingleStep：步进事件，可以实现相当细粒度的字节码执行序列，这个功能可以探查多线程下的字节码执行序列。</li>
+<li>Breakpoint：当线程执行到一个带断点的位置，断点可以通过 JVMTI SetBreakpoint 方法来设置。</li>
+</ul>
+<p><strong>方法执行</strong></p>
+<ul>
+<li>FramePop：当方法执行到 retrun 指令或者出现异常时候产生，手动调用 NofityFramePop JVM TI 函数也可产生该事件。</li>
+<li>MethodEntry：当开始执行一个 Java 方法的时候。</li>
+<li>MethodExit：当方法执行完成后，产生异常退出时。</li>
+<li>FieldAccess：当访问了设置了观察点的属性时产生事件，观察点使用 SetFieldAccessWatch 函数设置。</li>
+<li>FieldModification：当设置了观察点的属性值被修改后，观察点使用 SetFieldModificationWatch 设置。</li>
+</ul>
+<p><strong>GC -&gt; 监控 GC 事件与时间</strong></p>
+<ul>
+<li>GarbageCollectionStart：GC 启动时。</li>
+<li>GarbageCollectionFinish：GC 结束后。</li>
+</ul>
+<p><strong>对象事件 -&gt; 监控内存分配</strong></p>
+<ul>
+<li>ObjectFree：GC 释放一个对象时。</li>
+<li>VMObjectAlloc：虚拟机分配一个对象的时候。</li>
+</ul>
+<p><strong>其他</strong></p>
+<ul>
+<li>NativeMethodBind：在首次调用本地方法时或者调用 JNI RegisterNatives 的时候产生该事件，通过该回调可以将一个 JNI 调用切换到指定的方法上。</li>
+</ul>
+<p>通过上面的事件描述可以大概了解到 JVM TI 支持什么功能，详细的回调函数参数可以从 JVM TI<a href="./jvmti.md">规范文档</a>里获取到，<strong>我们可以通过这些功能实们定制的性能监控、数据采集、行为修改等工具。</strong></p>
+<p><strong>2. JVM TI 实现原理</strong></p>
+<p>JVM TI Agent 的启动需要虚拟机的支持，我们的 Agent 和虚拟机运行在同一个进程中，虚拟机通过 dlopen 打开我们的 Agent 动态链接库，然后通过 Agent_OnAttach 方法来调用我们定义的初始化逻辑。</p>
+<p>JVM TI 的原理其实很简单，以 VmObjectAlloc 事件为例，当我们通过 SetEventNotificationMode 函数设置 JVMTI_EVENT_VM_OBJECT_ALLOC 回调的时候，最终会调用到 art::Runtime::Current() -&gt; GetHeap() -&gt; SetAllocationListener(listener);</p>
+<p>在这个方法中，listener 是 JVM TI 实现的一个虚拟机提供的 art::gc::AllocationListener 回调，当虚拟机分配对象内存的时候会调用该回调，源码可见<a href="./heap-inl.h.md#194">heap-inl.h#194</a>，同时在该回调函数里也会调用我们之前设置的 callback 方法，这样事件和相关的数据就会透传到我们的 Agent 里，来实现完成事件的监听。</p>
+<p>类似 atrace 和 StrictMode，JVM TI 的每个事件都需要在源码中埋点支持。感兴趣的同学，可以挑选一些事件在源码中进一步跟踪。</p>
+<h2 id="jvm-ti-agent-开发">JVM TI Agent 开发</h2>
+<p>JVM TI Agent 程序使用 C/C++ 语言开发，也可以使用其他支持 C 语言调用语言开发，比如 Rust。</p>
+<p>JVM TI 所涉及的常量、函数、事件、数据类型都定义在 jvmti.h 文件中，我们需要下载该文件到项目中引用使用，你可以从 Android 项目里下载它的<a href="./include.md">头文件</a>。</p>
+<p>JVM TI Agent 的产出是一个 so 文件，在 Android 里通过系统提供的<a href="./Debug.md#attachJvmtiAgent%28kotlin.String%2C+kotlin.String%2C+java.lang.ClassLoader%29">Debug.attachJvmtiAgent</a>方法来启动一个 JVM TI Agent 程序。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static fun attachJvmtiAgent(library: String, options: String?, classLoader: ClassLoader?): Unit
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>library 是 so 文件的绝对地址。需要注意的是 API Level 为 28，而且需要应用开启了<a href="./application-element.md#debug">android:debuggable</a>才可以使用，<strong>不过我们可以通过强制开启 debug 来在 release 版里启动 JVM TI 功能</strong>。</p>
+<p>Android 下的 JVM TI Agent 在被虚拟机加载后会及时调用 Agent_OnAttach 方法，这个方法可以当作是 Agent 程序的 main 函数，所以我们需要在程序里实现下面的函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">extern &#34;C&#34; JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options,void *reserved)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你可以在这个方法里进行初始化操作。</p>
+<p>通过 JavaVM::GetEnv 函数拿到 jvmtiEnv* 环境指针（Environment Pointer），通过该指针可以访问 JVM TI 提供的函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmtiEnv *jvmti_env;jint result = vm-&gt;GetEnv((void **) &amp;jvmti_env, JVMTI_VERSION_1_2);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过 AddCapabilities 函数来开启需要的功能，也可以通过下面的方法开启所有的功能，不过开启所有的功能对虚拟机的性能有所影响。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void SetAllCapabilities(jvmtiEnv *jvmti) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    jvmtiCapabilities caps;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    jvmtiError error;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    error = jvmti-&gt;GetPotentialCapabilities(&amp;caps);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    error = jvmti-&gt;AddCapabilities(&amp;caps);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>GetPotentialCapabilities 函数可以获取当前环境支持的功能集合，通过 jvmtiCapabilities 结构体返回，该结构体里标明了支持的所有功能，可以通过<a href="./jvmti.h.md#712">jvmti.h</a>来查看，大概内容如下。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">typedef struct {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_tag_objects : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_generate_field_modification_events : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_generate_field_access_events : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_get_bytecodes : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_get_synthetic_attribute : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    unsigned int can_get_owned_monitor_info : 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">} jvmtiCapabilities;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后通过 AddCapabilities 方法来启动需要的功能，如果需要单独添加功能，则可以通过如下方法。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> jvmtiCapabilities caps;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    memset(&amp;caps, 0, sizeof(caps));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    caps.can_tag_objects = 1;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>到此 JVM TI 的初始化操作就已经完成了。</p>
+<p>所有的函数和数据结构类型说明可以在<a href="./jvmti.md">这里</a>找到。下面我来介绍一些常用的功能和函数。</p>
+<p><strong>1. JVM TI 事件监控</strong></p>
+<p>JVM TI 的一大功能就是可以收到虚拟机执行时候的各种事件通知。</p>
+<p>首先通过 SetEventCallbacks 方法来设置目标事件的回调函数，如果 callbacks 传入 nullptr 则清除掉所有的回调函数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  jvmtiEventCallbacks callbacks;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    memset(&amp;callbacks, 0, sizeof(callbacks));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     callbacks.GarbageCollectionStart = &amp;GCStartCallback;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    callbacks.GarbageCollectionFinish = &amp;GCFinishCallback;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int error = jvmti_env-&gt;SetEventCallbacks(&amp;callbacks, sizeof(callbacks));
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>设置了回调函数后，如果要收到目标事件的话需要通过 SetEventNotificationMode，这个函数有个需要注意的地方是 event_thread，如果参数 event_thread 参数为 nullptr，则会全局启用改目标事件回调，否则只在指定的线程内生效，比如很多时候对于一些事件我们只关心主线程。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">jvmtiError</span> <span class="n">SetEventNotificationMode</span><span class="p">(</span><span class="n">jvmtiEventMode</span> <span class="n">mode</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">jvmtiEvent</span> <span class="n">event_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">jthread</span> <span class="n">event_thread</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           <span class="o">...</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">typedef</span> <span class="k">enum</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">JVMTI_ENABLE</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span><span class="o">//</span> <span class="err">开启</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">JVMTI_DISABLE</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">.//</span> <span class="err">关闭</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">jvmtiEventMode</span><span class="p">;</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>以上面的 GC 事件为例，上面设置了 GC 事件的回调函数，如果想要在回调方法里接收到事件则需要使用 SetEventNotificationMode 开启事件，需要说明的是 SetEventNotificationMode 和 SetEventCallbacks 方法调用没有先后顺序。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmti-&gt;SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_GARBAGE_COLLECTION_START, nullptr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmti-&gt;SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_GARBAGE_COLLECTION_FINISH, nullptr);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过上面的步骤就可以在虚拟机产生 GC 事件后在回调函数里获取到对应的函数了，这个 Sample 需要注意的是在 gc callback 里禁止使用 JNI 和 JVM TI 函数，因为虚拟机处于停止状态。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void GCStartCallback(jvmtiEnv *jvmti) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    LOGI(&#34;========== 触发 GCStart=======&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> void GCFinishCallback(jvmtiEnv *jvmti) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    LOGI(&#34;========== 触发 GCFinish=======&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Sample 效果如下。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">com.dodola.jvmti I/jvmti: ========== 触发 GCStart=======
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">com.dodola.jvmti I/jvmti: ========== 触发 GCFinish=======
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>2. JVM TI 字节码增强</strong></p>
+<p>JVM TI 可以在虚拟机运行的状态下对字节码进行修改，可以通过下面三种方式修改字节码。</p>
+<ul>
+<li>Static：在虚拟机加载 Class 文件之前，对字节码修改。该方式一般不采用。</li>
+<li>Load-Time：在虚拟机加载某个 Class 时，可以通过 JVM TI 回调拿到该类的字节码，会触发 ClassFileLoadHook 回调函数，该方法由于 ClassLoader 机制只会触发一次，由于我们 Attach Agent 的时候经常是在虚拟机执行一段时间之后，所以并不能修改已经加载的 Class 比如 Object，所以需要根据 Class 的加载时机选择该方法。</li>
+<li>Dynamic：对于已经载入的 Class 文件也可以通过 JVM TI 机制修改，当系统调用函数 RetransformClasses 时会触发 ClassFileLoadHook，此时可以对字节码进行修改，该方法最为实用。</li>
+</ul>
+<p>传统的 JVM 操作的是 Java Bytecode，Android 里的字节码操作的是<a href="./dalvik-bytecode.md">Dalvik Bytecode</a>，Dalvik Bytecode 是寄存器实现的，操作起来相对 JavaBytecode 来说要相对容易一些，可以不用处理本地变量和操作数栈的交互。</p>
+<p>使用这个功能需要开启 JVM TI 字节码增强功能。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmtiCapabilities.can_generate_all_class_hook_events=1 // 开启 class hook 功能标记
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmtiCapabilities.can_retransform_any_class=1 // 开启对任意类进行 retransform 操作
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后注册 ClassFileLoadHook 事件回调。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">jvmtiEventCallbacks callbacks;s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">callbacks.ClassFileLoadHook = &amp;ClassTransform;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里说明一下 ClassFileLoadHook 的函数原型，后面会讲解如何重新修改现有字节码。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">void</span> <span class="n">ClassTransform</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jvmtiEnv</span> <span class="o">*</span><span class="n">jvmti_env</span><span class="p">,</span><span class="o">//</span><span class="n">jvmtiEnv</span> <span class="err">环境指针</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">JNIEnv</span> <span class="o">*</span><span class="n">env</span><span class="p">,</span><span class="o">//</span><span class="n">jniEnv</span> <span class="err">环境指针</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jclass</span> <span class="n">classBeingRedefined</span><span class="p">,</span><span class="o">//</span> <span class="err">被重新定义的</span> <span class="k">class</span> <span class="err">信息</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jobject</span> <span class="n">loader</span><span class="p">,</span><span class="o">//</span> <span class="err">加载该</span> <span class="k">class</span> <span class="err">的</span> <span class="n">classloader</span><span class="err">，如果该项为</span> <span class="n">nullptr</span> <span class="err">则说明是</span> <span class="n">BootClassLoader</span> <span class="err">加载的</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="k">const</span> <span class="n">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span><span class="o">//</span> <span class="err">目标类的限定名</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jobject</span> <span class="n">protectionDomain</span><span class="p">,</span><span class="o">//</span> <span class="err">载入类的保护域</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jint</span> <span class="n">classDataLen</span><span class="p">,</span><span class="o">//</span><span class="k">class</span> <span class="err">字节码的长度</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="k">const</span> <span class="n">unsigned</span> <span class="n">char</span> <span class="o">*</span><span class="n">classData</span><span class="p">,</span><span class="o">//</span><span class="k">class</span> <span class="err">字节码的数据</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">jint</span> <span class="o">*</span><span class="n">newClassDataLen</span><span class="p">,</span><span class="o">//</span> <span class="err">新的类数据的长度</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">               <span class="n">unsigned</span> <span class="n">char</span> <span class="o">**</span><span class="n">newClassData</span><span class="p">)</span> <span class="o">//</span> <span class="err">新类的字节码数据</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后开启事件，完整的初始化逻辑可参考 Sample 中的代码。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面以 Sample 代码作为示例来讲解如何在 Activity 类的 onCreate 方法中插入一行日志调用代码。</p>
+<p>通过上面的步骤后就可以在虚拟机第一次加载类的时候和在调用 RetransformClasses 或者 RedefineClasses 时，在 ClassFileLoadHook 回调方法里会接收到事件回调。我们目标类是 Activity，它在启动应用的时候就已经触发了类加载的过程，由于这个 Sample 开启事件的时机很靠后，所以此时并不会收到加载 Activity 类的事件回调，所以需要调用 RetransformClasses 来触发事件回调，这个方法用于对已经载入的类进行修改，传入一个要修改类的 Class 数组和数组长度。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">jvmtiError</span> <span class="n">RetransformClasses</span><span class="p">(</span><span class="n">jint</span> <span class="n">class_count</span><span class="p">,</span> <span class="k">const</span> <span class="n">jclass</span><span class="o">*</span> <span class="n">classes</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>调用该方法后会在 ClassFileLoadHook 设置的回调，也就是上面的 ClassTran sform 方法中接收到回调，在这个回调方法中我们通过字节码处理工具来修改原始类的字节码。</p>
+<p>类的修改会触发虚拟机使用新的方法，旧的方法将不再被调用，如果有一个方法正在栈帧上，则这个方法会继续运行旧的方法的字节码。RetransformClasses 的修改不会导致类的初始化，也就是不会重新调用方法，类的静态变量的值和实例变量的值不会产生变化，但目标类的断点会失效。</p>
+<p>处理类有一些限制，我们可以改变方法的实现和属性，但不能添加删除重命名方法，不能改变方法签名、参数、修饰符，不能改变类的继承关系，如果产生上面的行为会导致修改失败。修改之后会触发类的校验，而且如果虚拟机里有多个相同的 Class，我们需要注意一下取到的 Class 需要是当前生效的 Class，按照 ClassLoader 加载机制也就是说优先使用提前加载的类。</p>
+<p>Sample 中实现的效果是在 Activity.onCreate 方法中增加一行日志输出。</p>
+<p>修改前：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">protected void onCreate(@Nullable Bundle savedInstanceState) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">.......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>修改后：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">protected void onCreate(@Nullable Bundle savedInstanceState) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      com.dodola.jvmtilib.JVMTIHelper.printEnter(this,&#34;....&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">....
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我使用的 Dalvik 字节码修改库是 Android 系统源码里提供的一套修改框架<a href="./dexter.md">dexter</a>，虽然使用起来十分灵活但比较繁琐，也可以使用<a href="./dexmaker.md">dexmaker</a>框架来实现。本例还是使用 dexter，框架使用 C++ 开发，可以直接读取 classdata 然后进行操作，可以类比到 ASM 框架。下面的代码是核心的操作代码，完整的代码参考本期 Sample。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ir::Type* stringT = b.GetType(&#34;Ljava/lang/String;&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ir::Type* jvmtiHelperT=b.GetType(&#34;Lcom/dodola/jvmtilib/JVMTIHelper;&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lir::Instruction *fi = *(c.instructions.begin());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">VReg* v0 = c.Alloc&lt;VReg&gt;(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">addInstr(c, fi, OP_CONST_STRING,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         {v0, c.Alloc&lt;String&gt;(methodDesc, methodDesc-&gt;orig_index)});
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">addCall(b, c, fi, OP_INVOKE_STATIC, jvmtiHelperT, &#34;printEnter&#34;, voidT, {stringT}, {0});
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">c.Assemble();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>必须通过 JVM TI 函数 Allocate 为要修改的类数据分配内存，将 new_class_data 指向修改后的类 bytecode 数组，将 new_class_data_len 置为修改后的类 bytecode 数组的长度。若是不修改类文件，则不设置 new_class_data 即可。若是加载了多个 JVM TI Agent 都启用了该事件，则设置的 new_class_data 会成为下一个 JVM TI Agent 的 class_data。</p>
+<p>此时我们生成的 onCreate 方法里已经加上了我们添加的日志方法调用。开启新的 Activity 会使用新的类字节码执行，同时会使用 ClassLoader 加载我们注入的 com.dodola.jvmtilib.JVMTIHelper 类。我在前面说过，Activity 是使用 BootClassLoader 进行加载的，然而我们的类明显不在 BootClassLoader 里，此时就会产生 Crash。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">java</span><span class="o">.</span><span class="n">lang</span><span class="o">.</span><span class="n">NoClassDefFoundError</span><span class="p">:</span> <span class="n">Class</span> <span class="ow">not</span> <span class="n">found</span> <span class="n">using</span> <span class="n">the</span> <span class="n">boot</span> <span class="k">class</span> <span class="n">loader</span><span class="p">;</span> <span class="n">no</span> <span class="n">stack</span> <span class="n">trace</span> <span class="n">available</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>所以需要想办法将 JVMTIHelper 类添加到 BootClassLoader 里，这里可以使用 JVM TI 提供的 AddToBootstrapClassLoaderSearch 方法来添加 Dex 或者 APK 到 Class 搜索目录里。Sample 里是将 getPackageCodePath 添加进去就可以了。</p>
+<h2 id="总结">总结</h2>
+<p>今天我主要讲解了 JVM TI 的概念和原理，以及它可以实现的功能。通过 JVM TI 可以完成很多平时可能需要很多“黑科技”才可以获取到的数据，比如<a href="./822440.md">Thread Park Start/Finish</a>事件、获取一个锁的 waiters 等。</p>
+<p>可能在 Android 圈里了解 JVM TI 的人不多，对它的研究还没有非常深入。目前 JVM TI 的功能已经十分强大，后续的 Android 版本也会进一步增加更多的功能支持，这样它可以做的事情将会越来越多。我相信在未来，它将会是本地自动化测试，甚至是线上远程诊断的一大“杀器”。</p>
+<p>在本期的<a href="./JVMTI%5FSample.md">Sample</a>里，我们提供了一些简单的用法，你可以在这个基础之上完成扩展，实现自己想要的功能。</p>
+<h2 id="相关资料">相关资料</h2>
+<p>1.<a href="./index.md">深入 Java 调试体系：第 1 部分，JPDA 体系概览</a></p>
+<p>2.<a href="./index.md">深入 Java 调试体系：第 2 部分，JVMTI 和 Agent 实现</a></p>
+<p>3.<a href="./index.md">深入 Java 调试体系：第 3 部分，JDWP 协议及实现</a></p>
+<p>4.<a href="./index.md">深入 Java 调试体系：第 4 部分，Java 调试接口（JDI）</a></p>
+<p>5.JVM TI 官方文档：<a href="https://docs.oracle.com/javase/7/docs/platform/jvmti/jvmti.html">https://docs.oracle.com/javase/7/docs/platform/jvmti/jvmti.html</a></p>
+<p>6. 源码是最好的资料：<a href="http://androidxref.com/9.0.0%5Fr3/xref/art/openjdkjvmti/">http://androidxref.com/9.0.0%5Fr3/xref/art/openjdkjvmti/</a></p>
+<h2 id="福利彩蛋">福利彩蛋</h2>
+<p>根据专栏导读里我们约定的，我和绍文会选出一些认真提交作业完成练习的同学，送出一份“学习加油礼包”。专栏更新到现在，很多同学留下了自己的思考和总结，我们选出了@Owen、@志伟、@许圣明、@小洁、@SunnyBird，送出“<a href="./mall_url=http%3A%2F%2Fh5.youzan.com%2Fv2%2Fgoods%2F2fwl2bk2x20js.md">极客时间周历</a>”一份，希望更多同学可以加入到学习和讨论中来，与我们一起进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/a461fb155db2ad4553f8b30897b77127.png" alt=""><br>
+@Owen 学习总结：<a href="https://github.com/devzhan/Breakpad">https://github.com/devzhan/Breakpad</a></p>
+<p>@许圣明、@小洁、@SunnyBird 通过 Pull Requests 提交了练习作业<a href="https://github.com/AndroidAdvanceWithGeektime/Chapter04/pulls">https://github.com/AndroidAdvanceWithGeektime/Chapter04/pulls</a>。</p>
+<p>极客时间小助手会在 24 小时内与获奖用户取得联系，注意查看短信哦～</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/0e5461ae1393aa633b672fbee779c7e1.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/">Android开发高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/javascript%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/99-javascript%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">99-JavaScript核心原理解析</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/android%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/android%E5%B7%A5%E7%A8%8B%E5%B8%88%E7%9A%84%E9%9D%A2%E8%AF%95%E6%8C%87%E5%8D%97/">
+            <span class="next-text nav-default">Android工程师的“面试指南”</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

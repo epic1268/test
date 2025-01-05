@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>27_瞧一瞧Linux：Linux如何实现进程与进程调度_ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+在前面的课程中，我们已经写好了 Cosmos 的进程管理组件，实现了多进程调度运行，今天我们一起探索 Linux 如何表示进程以及如何进行多进程调度。
+好了，话不多说，我们开始吧。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/27_%E7%9E%A7%E4%B8%80%E7%9E%A7linuxlinux%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E4%B8%8E%E8%BF%9B%E7%A8%8B%E8%B0%83%E5%BA%A6_/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/27_%E7%9E%A7%E4%B8%80%E7%9E%A7linuxlinux%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%BF%9B%E7%A8%8B%E4%B8%8E%E8%BF%9B%E7%A8%8B%E8%B0%83%E5%BA%A6_/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="27_瞧一瞧Linux：Linux如何实现进程与进程调度_">
+  <meta property="og:description" content="你好，我是 LMOS。
+在前面的课程中，我们已经写好了 Cosmos 的进程管理组件，实现了多进程调度运行，今天我们一起探索 Linux 如何表示进程以及如何进行多进程调度。
+好了，话不多说，我们开始吧。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="27_瞧一瞧Linux：Linux如何实现进程与进程调度_">
+  <meta itemprop="description" content="你好，我是 LMOS。
+在前面的课程中，我们已经写好了 Cosmos 的进程管理组件，实现了多进程调度运行，今天我们一起探索 Linux 如何表示进程以及如何进行多进程调度。
+好了，话不多说，我们开始吧。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="11813">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="27_瞧一瞧Linux：Linux如何实现进程与进程调度_">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+在前面的课程中，我们已经写好了 Cosmos 的进程管理组件，实现了多进程调度运行，今天我们一起探索 Linux 如何表示进程以及如何进行多进程调度。
+好了，话不多说，我们开始吧。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">27_瞧一瞧Linux：Linux如何实现进程与进程调度_</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 11813 字 </span>
+          <span class="more-meta"> 预计阅读 24 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#linux-如何表示进程">Linux 如何表示进程</a>
+          <ul>
+            <li><a href="#linux-进程的数据结构">Linux 进程的数据结构</a></li>
+            <li><a href="#创建-task_struct-结构">创建 task_struct 结构</a></li>
+            <li><a href="#linux-进程地址空间">Linux 进程地址空间</a></li>
+            <li><a href="#linux-进程文件表">Linux 进程文件表</a></li>
+          </ul>
+        </li>
+        <li><a href="#linux-进程调度">Linux 进程调度</a>
+          <ul>
+            <li><a href="#进程调度实体">进程调度实体</a></li>
+            <li><a href="#进程运行队列">进程运行队列</a></li>
+            <li><a href="#调度实体和运行队列的关系">调度实体和运行队列的关系</a></li>
+            <li><a href="#调度器类">调度器类</a></li>
+          </ul>
+        </li>
+        <li><a href="#linux-的-cfs-调度器">Linux 的 CFS 调度器</a>
+          <ul>
+            <li><a href="#普通进程的权重">普通进程的权重</a></li>
+            <li><a href="#进程调度延迟">进程调度延迟</a></li>
+            <li><a href="#虚拟时间">虚拟时间</a></li>
+          </ul>
+        </li>
+        <li><a href="#cfs-调度进程">CFS 调度进程</a>
+          <ul>
+            <li><a href="#定时周期调度">定时周期调度</a></li>
+            <li><a href="#调度器入口">调度器入口</a></li>
+            <li><a href="#挑选下一个进程">挑选下一个进程</a></li>
+          </ul>
+        </li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>在前面的课程中，我们已经写好了 Cosmos 的进程管理组件，实现了多进程调度运行，今天我们一起探索 Linux 如何表示进程以及如何进行多进程调度。</p>
+<p>好了，话不多说，我们开始吧。</p>
+<h2 id="linux-如何表示进程">Linux 如何表示进程</h2>
+<p>在 Cosmos 中，我们设计了一个 thread_t 数据结构来代表一个进程，Linux 也同样是用一个数据结构表示一个进程。</p>
+<p>下面我们先来研究 Linux 的进程数据结构，然后看看 Linux 进程的地址空间数据结构，最后再来理解 Linux 的文件表结构。</p>
+<h3 id="linux-进程的数据结构">Linux 进程的数据结构</h3>
+<p>Linux 系统下，把运行中的应用程序抽象成一个数据结构 task_struct，一个应用程序所需要的各种资源，如内存、文件等都包含在 task_struct 结构中。</p>
+<p>因此，task_struct 结构是非常巨大的一个数据结构，代码如下。</p>
+<p>struct task_struct {<br>
+struct thread_info thread_info;//处理器特有数据<br>
+volatile long   state;       //进程状态<br>
+void            *stack;      //进程内核栈地址<br>
+refcount_t      usage;       //进程使用计数<br>
+int             on_rq;       //进程是否在运行队列上<br>
+int             prio;        //动态优先级<br>
+int             static_prio; //静态优先级<br>
+int             normal_prio; //取决于静态优先级和调度策略<br>
+unsigned int    rt_priority; //实时优先级<br>
+const struct sched_class    *sched_class;//指向其所在的调度类<br>
+struct sched_entity         se;//普通进程的调度实体<br>
+struct sched_rt_entity      rt;//实时进程的调度实体<br>
+struct sched_dl_entity      dl;//采用 EDF 算法调度实时进程的调度实体<br>
+struct sched_info       sched_info;//用于调度器统计进程的运行信息<br>
+struct list_head        tasks;//所有进程的链表<br>
+struct mm_struct        *mm;  //指向进程内存结构<br>
+struct mm_struct        *active_mm;<br>
+pid_t               pid;            //进程 id<br>
+struct task_struct __rcu    *parent;//指向其父进程<br>
+struct list_head        children; //链表中的所有元素都是它的子进程<br>
+struct list_head        sibling;  //用于把当前进程插入到兄弟链表中<br>
+struct task_struct      *group_leader;//指向其所在进程组的领头进程<br>
+u64             utime;   //用于记录进程在用户态下所经过的节拍数<br>
+u64             stime;   //用于记录进程在内核态下所经过的节拍数<br>
+u64             gtime;   //用于记录作为虚拟机进程所经过的节拍数<br>
+unsigned long           min_flt;//缺页统计<br>
+unsigned long           maj_flt;<br>
+struct fs_struct        *fs;    //进程相关的文件系统信息<br>
+struct files_struct     *files;//进程打开的所有文件<br>
+struct vm_struct        *stack_vm_area;//内核栈的内存区<br>
+};</p>
+<p>为了帮你掌握核心思路，关于 task_struct 结构体，我省略了进程的权能、性能跟踪、信号、numa、cgroup 等相关的近 500 行内容，你若有兴趣可以自行阅读，这里你只需要明白，在内存中，<strong>一个 task_struct 结构体的实例变量代表一个 Linux 进程</strong>就行了。</p>
+<h3 id="创建-task_struct-结构">创建 task_struct 结构</h3>
+<p>Linux 创建 task_struct 结构体的实例变量，这里我们只关注早期和最新的创建方式。</p>
+<p>Linux 早期是这样创建 task_struct 结构体的实例变量的：找伙伴内存管理系统，分配两个连续的页面（即 8KB），作为进程的内核栈，再把 task_struct 结构体的实例变量，放在这 8KB 内存空间的开始地址处。内核栈则是从上向下伸长的，task_struct 数据结构是从下向上伸长的。</p>
+<p>我给你画幅图，你就明白了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/1ec26239ac2c8fbfc43c557456177c69.png" alt=""></p>
+<p>进程内核栈</p>
+<p>从图中不难发现，Linux 把 task_struct 结构和内核栈放在了一起，所以我们只要把 RSP 寄存器的值读取出来，然后将其低 13 位清零，就得到了当前 task_struct 结构体的地址。由于内核栈比较大，而且会向下伸长，覆盖掉 task_struct 结构体内容的概率就很小。</p>
+<p>随着 Linux 版本的迭代，task_struct 结构体的体积越来越大，从前 task_struct 结构体和内核栈放在一起的方式就不合适了。最新的版本是分开放的，我们一起来看看后面的代码。</p>
+<p>static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)<br>
+{<br>
+struct page *page = alloc_pages_node(node, THREADINFO_GFP,<br>
+THREAD_SIZE_ORDER);//分配两个页面<br>
+if (likely(page)) {<br>
+tsk-&gt;stack = kasan_reset_tag(page_address(page));<br>
+return tsk-&gt;stack;//让 task_struct 结构的 stack 字段指向 page 的地址<br>
+}<br>
+return NULL;<br>
+}</p>
+<p>static inline struct task_struct *alloc_task_struct_node(int node)<br>
+{<br>
+return kmem_cache_alloc_node(task_struct_cachep, GFP_KERNEL, node);//在 task_struct_cachep 内存对象中分配一个 task_struct 结构休对象<br>
+}<br>
+static struct task_struct *dup_task_struct(struct task_struct *orig, int node)<br>
+{<br>
+struct task_struct *tsk; unsigned long *stack;<br>
+tsk = alloc_task_struct_node(node);//分配 task_struct 结构体<br>
+if (!tsk)<br>
+return NULL;<br>
+stack = alloc_thread_stack_node(tsk, node);//分配内核栈<br>
+tsk-&gt;stack = stack;<br>
+return tsk;<br>
+}<br>
+static __latent_entropy struct task_struct *copy_process(<br>
+struct pid *pid, int trace, int node,<br>
+struct kernel_clone_args *args)<br>
+{<br>
+int pidfd = -1, retval;<br>
+struct task_struct *p;<br>
+//……<br>
+retval = -ENOMEM;<br>
+p = dup_task_struct(current, node);//分配 task_struct 和内核栈<br>
+//……<br>
+return ERR_PTR(retval);<br>
+}</p>
+<p>pid_t kernel_clone(struct kernel_clone_args *args)<br>
+{<br>
+u64 clone_flags = args-&gt;flags;<br>
+struct task_struct *p;<br>
+pid_t nr;<br>
+//……<br>
+//复制进程<br>
+p = copy_process(NULL, trace, NUMA_NO_NODE, args);<br>
+//……<br>
+return nr;<br>
+}<br>
+//建立进程接口<br>
+SYSCALL_DEFINE0(fork)<br>
+{<br>
+struct kernel_clone_args args = {<br>
+.exit_signal = SIGCHLD,<br>
+};<br>
+return kernel_clone(&amp;args);<br>
+}</p>
+<p>为了直击重点，我们不会讨论 Linux 的 fork 函数，你只要知道，它负责建立一个与父进程相同的进程，也就是复制了父进程的一系列数据，这就够了。</p>
+<p>要复制父进程的数据必须要分配内存，<strong>上面代码的流程完整展示了从 SLAB 中分配 task_struct 结构，以及从伙伴内存系统分配内核栈的过程，整个过程是怎么回事儿，才是你要领会的重点。</strong></p>
+<h3 id="linux-进程地址空间">Linux 进程地址空间</h3>
+<p>Linux 也是支持虚拟内存的操作系统内核，现在我们来看看 Linux 用于描述一个进程的地址空间的数据结构，它就是 <strong>mm_struct 结构</strong>，代码如下所示。</p>
+<p>struct mm_struct {<br>
+struct vm_area_struct *mmap; //虚拟地址区间链表 VMAs<br>
+struct rb_root mm_rb;   //组织 vm_area_struct 结构的红黑树的根<br>
+unsigned long task_size;    //进程虚拟地址空间大小<br>
+pgd_t * pgd;        //指向 MMU 页表<br>
+atomic_t mm_users; //多个进程共享这个 mm_struct<br>
+atomic_t mm_count; //mm_struct 结构本身计数<br>
+atomic_long_t pgtables_bytes;//页表占用了多个页<br>
+int map_count;      //多少个 VMA<br>
+spinlock_t page_table_lock; //保护页表的自旋锁<br>
+struct list_head mmlist; //挂入 mm_struct 结构的链表<br>
+//进程应用程序代码开始、结束地址，应用程序数据的开始、结束地址<br>
+unsigned long start_code, end_code, start_data, end_data;<br>
+//进程应用程序堆区的开始、当前地址、栈开始地址<br>
+unsigned long start_brk, brk, start_stack;<br>
+//进程应用程序参数区开始、结束地址<br>
+unsigned long arg_start, arg_end, env_start, env_end;<br>
+};</p>
+<p>同样的，mm_struct 结构，我也精减了很多内容。其中的 vm_area_struct 结构，相当于我们之前 Cosmos 的 kmvarsdsc_t 结构（可以回看第 20 节课），是用来描述一段虚拟地址空间的。mm_struct 结构中也包含了 MMU 页表相关的信息。</p>
+<p>下面我们一起来看看，mm_struct 结构是如何建立对应的实例变量呢？代码如下所示。</p>
+<p>//在 mm_cachep 内存对象中分配一个 mm_struct 结构休对象<br>
+#define allocate_mm()   (kmem_cache_alloc(mm_cachep, GFP_KERNEL))<br>
+static struct mm_struct *dup_mm(struct task_struct *tsk,<br>
+struct mm_struct *oldmm)<br>
+{<br>
+struct mm_struct *mm;<br>
+//分配 mm_struct 结构<br>
+mm = allocate_mm();<br>
+if (!mm)<br>
+goto fail_nomem;<br>
+//复制 mm_struct 结构<br>
+memcpy(mm, oldmm, sizeof(*mm));<br>
+//……<br>
+return mm;<br>
+}<br>
+static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)<br>
+{<br>
+struct mm_struct *mm, *oldmm;<br>
+int retval;<br>
+tsk-&gt;min_flt = tsk-&gt;maj_flt = 0;<br>
+tsk-&gt;nvcsw = tsk-&gt;nivcsw = 0;<br>
+retval = -ENOMEM;<br>
+mm = dup_mm(tsk, current-&gt;mm);//分配 mm_struct 结构的实例变量<br>
+if (!mm)<br>
+goto fail_nomem;<br>
+good_mm:<br>
+tsk-&gt;mm = mm;<br>
+tsk-&gt;active_mm = mm;<br>
+return 0;<br>
+fail_nomem:<br>
+return retval;<br>
+}</p>
+<p>上述代码的 copy_mm 函数正是在 copy_process 函数中被调用的，copy_mm 函数调用 dup_mm 函数，把当前进程的 mm_struct 结构复制到 allocate_mm 宏分配的一个 mm_struct 结构中。这样，一个新进程的 mm_struct 结构就建立了。</p>
+<h3 id="linux-进程文件表">Linux 进程文件表</h3>
+<p>在 Linux 系统中，可以说万物皆为文件，比如文件、设备文件、管道文件等。一个进程对一个文件进行读写操作之前，必须先打开文件，这个打开的文件就记录在进程的文件表中，它由 task_struct 结构中的 files 字段指向。这里指向的其实是个 <strong>files_struct 结构</strong>，代码如下所示。</p>
+<p>struct files_struct {</p>
+<pre><code>atomic_t count;//自动计数  
+struct fdtable __rcu *fdt;  
+struct fdtable fdtab;  
+spinlock_t file_lock; //自旋锁  
+unsigned int next_fd;//下一个文件句柄  
+unsigned long close_on_exec_init[1];//执行 exec() 时要关闭的文件句柄  
+unsigned long open_fds_init[1];  
+unsigned long full_fds_bits_init[1];  
+struct file __rcu * fd_array[NR_OPEN_DEFAULT];//默认情况下打开文件的指针数组  
+</code></pre>
+<p>};</p>
+<p>从上述代码中，可以推想出我们在应用软件中调用：int fd = open(&quot;/tmp/test.txt&quot;); 实际 Linux 会建立一个 struct file 结构体实例变量与文件对应，然后把 struct file 结构体实例变量的指针放入 fd_array 数组中。</p>
+<p>那么 Linux 在建立一个新进程时，怎样给新进程建立一个 files_struct 结构呢？其实很简单，也是复制当前进程的 files_struct 结构，代码如下所示。</p>
+<p>static int copy_files(unsigned long clone_flags, struct task_struct *tsk)<br>
+{<br>
+struct files_struct *oldf, *newf;<br>
+int error = 0;<br>
+oldf = current-&gt;files;//获取当前进程的 files_struct 的指针<br>
+if (!oldf)<br>
+goto out;</p>
+<pre><code>if (clone_flags &amp; CLONE_FILES) {  
+    atomic_inc(&amp;oldf-&gt;count);  
+    goto out;  
+}  
+//分配新 files_struct 结构的实例变量，并复制当前的 files_struct 结构  
+newf = dup_fd(oldf, NR_OPEN_MAX, &amp;error);  
+if (!newf)  
+    goto out;  
+
+
+tsk-&gt;files = newf;//新进程的 files_struct 结构指针指向新的 files_struct 结构  
+error = 0;  
+</code></pre>
+<p>out:<br>
+return error;</p>
+<p>同样的，copy_files 函数由 copy_process 函数调用，copy_files 最终会复制当前进程的 files_struct 结构到一个新的 files_struct 结构实例变量中，并让新进程的 files 指针指向这个新的 files_struct 结构实例变量。</p>
+<p>好了，关于进程的一些数据结构，我们就了解这么多，因为现在你还无需知道 Linux 进程的所有细节，对于一个庞大的系统，<strong>最大的误区是陷入细节而不知全貌</strong>。这里，我们只需要知道 Linux 用什么代表一个进程就行了。</p>
+<h2 id="linux-进程调度">Linux 进程调度</h2>
+<p>Linux 支持多 CPU 上运行多进程，这就要说到多进程调度了。Linux 进程调度支持多种调度算法，有基于优先级的调度算法，有实时调度算法，有完全公平调度算法（CFQ）。</p>
+<p>下面我们以 CFQ 为例进行探讨，我们先了解一下 CFQ 相关的数据结构，随后探讨 CFQ 算法要怎样实现。</p>
+<h3 id="进程调度实体">进程调度实体</h3>
+<p>我们先来看看什么是进程调度实体，它是干什么的呢？</p>
+<p>它其实是 Linux 进程调度系统的一部分，被嵌入到了 Linux 进程数据结构中，与调度器进行关联，能间接地访问进程，<strong>这种高内聚低耦合的方式，保证了进程数据结构和调度数据结构相互独立</strong>，我们后面可以分别做改进、优化，这是一种高明的软件设计思想。我们来看看这个结构，代码如下所示。</p>
+<p>struct sched_entity {<br>
+struct load_weight load;//表示当前调度实体的权重<br>
+struct rb_node run_node;//红黑树的数据节点<br>
+struct list_head group_node;// 链表节点，被链接到 percpu 的 rq-&gt;cfs_tasks<br>
+unsigned int on_rq; //当前调度实体是否在就绪队列上<br>
+u64 exec_start;//当前实体上次被调度执行的时间<br>
+u64 sum_exec_runtime;//当前实体总执行时间<br>
+u64 prev_sum_exec_runtime;//截止到上次统计，进程执行的时间<br>
+u64 vruntime;//当前实体的虚拟时间<br>
+u64 nr_migrations;//实体执行迁移的次数<br>
+struct sched_statistics statistics;//统计信息包含进程的睡眠统计、等待延迟统计、CPU 迁移统计、唤醒统计等。<br>
+#ifdef CONFIG_FAIR_GROUP_SCHED<br>
+int depth;// 表示当前实体处于调度组中的深度<br>
+struct sched_entity *parent;//指向父级调度实体<br>
+struct cfs_rq *cfs_rq;//当前调度实体属于的 cfs_rq.<br>
+struct cfs_rq *my_q;<br>
+#endif<br>
+#ifdef CONFIG_SMP<br>
+struct sched_avg avg ;// 记录当前实体对于 CPU 的负载<br>
+#endif<br>
+};</p>
+<p>上述代码的信息量很多，但是我们现在不急于搞清楚所有的信息，我们现在需要知道的是<strong>在 task_struct 结构中，会包含至少一个 sched_entity 结构的变量</strong>，如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/ee9376e2b1dfe4d1683898e69cfc507c.png" alt=""></p>
+<p>调度实体在进程结构中的位置</p>
+<p>结合图示，我们只要通过 sched_entity 结构变量的地址，减去它在 task_struct 结构中的偏移（由编译器自动计算），就能获取到 task_struct 结构的地址。这样就能达到通过 sched_entity 结构，访问 task_struct 结构的目的了。</p>
+<h3 id="进程运行队列">进程运行队列</h3>
+<p>那么，在 Linux 中，又是怎样组织众多调度实体，进而组织众多进程，方便进程调度器找到调度实体呢？</p>
+<p>首先，Linux 定义了一个进程运行队列结构，每个 CPU 分配一个这样的进程运行队列结构实例变量，进程运行队列结构的代码如下。</p>
+<p>struct rq {<br>
+raw_spinlock_t      lock;//自旋锁<br>
+unsigned int        nr_running;//多个就绪运行进程<br>
+struct cfs_rq       cfs; //作用于完全公平调度算法的运行队列<br>
+struct rt_rq        rt;//作用于实时调度算法的运行队列<br>
+struct dl_rq        dl;//作用于 EDF 调度算法的运行队列<br>
+struct task_struct __rcu    *curr;//这个运行队列当前正在运行的进程<br>
+struct task_struct  *idle;//这个运行队列的空转进程<br>
+struct task_struct  *stop;//这个运行队列的停止进程<br>
+struct mm_struct    *prev_mm;//这个运行队列上一次运行进程的 mm_struct<br>
+unsigned int        clock_update_flags;//时钟更新标志<br>
+u64         clock; //运行队列的时间<br>
+//后面的代码省略<br>
+};</p>
+<p>以上这个 rq 结构结构中，很多我们不需要关注的字段我已经省略了。你要重点理解的是，其中 task_struct 结构指针是为了快速访问特殊进程，而 rq 结构并不直接关联调度实体，而是包含了 cfs_rq、rt_rq、dl_rq，通过它们来关联调度实体。</p>
+<p>有三个不同的运行队列，是因为作用于三种不同的调度算法。我们这里只需要关注 cfs_rq，代码我列在了后面。</p>
+<p>struct rb_root_cached {<br>
+struct rb_root rb_root;   //红黑树的根<br>
+struct rb_node *rb_leftmost;//红黑树最左子节点<br>
+};<br>
+struct cfs_rq {<br>
+struct load_weight  load;//cfs_rq 上所有调度实体的负载总和<br>
+unsigned int nr_running;//cfs_rq 上所有的调度实体不含调度组中的调度实体<br>
+unsigned int h_nr_running;//cfs_rq 上所有的调度实体包含调度组中所有调度实体<br>
+u64         exec_clock;//当前 cfs_rq 上执行的时间<br>
+u64         min_vruntime;//最小虚拟运行时间<br>
+struct rb_root_cached   tasks_timeline;//所有调度实体的根<br>
+struct sched_entity *curr;//当前调度实体<br>
+struct sched_entity *next;//下一个调度实体<br>
+struct sched_entity *last;//上次执行过的调度实体<br>
+//省略不关注的代码<br>
+};</p>
+<p>为了简化问题，上述代码中我省略了调度组和负载相关的内容。你也许已经看出来了，其中 <strong>load、exec_clock、min_vruntime、tasks_timeline 字段是 CFS 调度算法得以实现的关键</strong>，你甚至可以猜出所有的调度实体，都是通过红黑树组织起来的，即 cfs_rq 结构中的 tasks_timeline 字段。</p>
+<h3 id="调度实体和运行队列的关系">调度实体和运行队列的关系</h3>
+<p>相信我，作为初学者，<strong>了解数据结构之间的组织关系，这远比了解一个数据结构所有字段的作用和细节重要得多。</strong></p>
+<p>通过前面的学习，我们已经了解了 rq、cfs_rq、rb_root_cached、sched_entity、task_struct 等数据结构，下面我们来看看它的组织关系，我特意为你准备了后面这幅图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/9b6a667f1f798a527cdd2e919b9ddc25.png" alt=""></p>
+<p>运行队列框架示意图</p>
+<p>结合图片我们发现，task_struct 结构中包含了 sched_entity 结构。sched_entity 结构是通过红黑树组织起来的，红黑树的根在 cfs_rq 结构中，cfs_rq 结构又被包含在 rq 结构，每个 CPU 对应一个 rq 结构。这样，我们就把所有运行的进程组织起来了。</p>
+<h3 id="调度器类">调度器类</h3>
+<p>从前面的 rq 数据结构中，你已经发现了，Linux 是同时支持多个进程调度器的，不同的进程挂载到不同的运行队列中，如 rq 结构中的 cfs、rt、dl，然后针对它们这些结构，使用不同的调度器。</p>
+<p>为了支持不同的调度器，Linux 定义了调度器类数据结构，它定义了一个调度器要实现哪些函数，代码如下所示。</p>
+<p>struct sched_class {<br>
+//向运行队列中添加一个进程，入队<br>
+void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);<br>
+//向运行队列中删除一个进程，出队<br>
+void (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);<br>
+//检查当前进程是否可抢占<br>
+void (*check_preempt_curr)(struct rq *rq, struct task_struct *p, int flags);<br>
+//从运行队列中返回可以投入运行的一个进程<br>
+struct task_struct *(*pick_next_task)(struct rq *rq);<br>
+} ;</p>
+<p>这个 sched_class 结构定义了一组函数指针，为了让你抓住重点，这里我删除了调度组和负载均衡相关的函数指针。Linux 系统一共定义了五个 sched_class 结构的实例变量，这五个 sched_class 结构紧靠在一起，形成了 sched_class 结构数组。</p>
+<p>为了找到相应的 sched_class 结构实例，可以用以下代码遍历所有的 sched_class 结构实例变量。</p>
+<p>//定义在链接脚本文件中<br>
+extern struct sched_class __begin_sched_classes[];<br>
+extern struct sched_class __end_sched_classes[];</p>
+<p>#define sched_class_highest (__end_sched_classes - 1)<br>
+#define sched_class_lowest  (__begin_sched_classes - 1)</p>
+<p>#define for_class_range(class, _from, _to) \<br>
+for (class = (_from); class != (_to); class&ndash;)<br>
+//遍历每个调度类<br>
+#define for_each_class(class) \<br>
+for_class_range(class, sched_class_highest, sched_class_lowest)</p>
+<p>extern const struct sched_class stop_sched_class;//停止调度类<br>
+extern const struct sched_class dl_sched_class;//Deadline 调度类<br>
+extern const struct sched_class rt_sched_class;//实时调度类<br>
+extern const struct sched_class fair_sched_class;//CFS 调度类<br>
+extern const struct sched_class idle_sched_class;//空转调度类</p>
+<p>这些类是有优先级的，它们的优先级是：stop_sched_class &gt; dl_sched_class &gt; rt_sched_class &gt; fair_sched_class &gt; idle_sched_class。</p>
+<p>下面我们观察一下，CFS 调度器（这个调度器我们稍后讨论）所需要的 fair_sched_class，代码如下所示。</p>
+<p>const struct sched_class fair_sched_class<br>
+__section(&quot;__fair_sched_class&quot;) = {<br>
+.enqueue_task       = enqueue_task_fair,<br>
+.dequeue_task       = dequeue_task_fair,<br>
+.check_preempt_curr = check_preempt_wakeup,<br>
+.pick_next_task     = __pick_next_task_fair,<br>
+};</p>
+<p>我们看到这些函数指针字段都对应到了具体的函数。其实，实现一个新的调度器，就是实现这些对应的函数。好了，我们清楚了调度器类，它就是一组函数指针，不知道你发现没有，这难道不是 C 语言下的面向对象吗？下面，我们接着研究 CFS 调度器。</p>
+<h2 id="linux-的-cfs-调度器">Linux 的 CFS 调度器</h2>
+<p>Linux 支持多种不同的进程调度器，比如 RT 调度器、Deadline 调度器、CFS 调度器以及 Idle 调度器。不过，这里我们仅仅讨论一下 CFS 调度器，也就是完全公平调度器，CFS 的设计理念是在有限的真实硬件平台上模拟实现理想的、精确的多任务 CPU。现在你不懂也不要紧，我们后面会讨论的。</p>
+<p>在了解 CFS 核心算法之前，你需要先掌握几个核心概念。</p>
+<h3 id="普通进程的权重">普通进程的权重</h3>
+<p>Linux 会使用 CFS 调度器调度普通进程，CFS 调度器与其它进程调度器的不同之处在于没有时间片的概念，它是分配 CPU 使用时间的比例。比如，4 个相同优先级的进程在一个 CPU 上运行，那么每个进程都将会分配 25% 的 CPU 运行时间。这就是进程要的公平。</p>
+<p>然而事有轻重缓急，对进程来说也是一样，有些进程的优先级就需要很高。那么 CFS 调度器是如何在公平之下，实现“不公平”的呢？</p>
+<p>首先，CFS 调度器下不叫优先级，而是叫<strong>权重</strong>，权重表示进程的优先级，各个进程按权重的比例分配 CPU 时间。</p>
+<p>举个例子，现在有 A、B 两个进程。进程 A 的权重是 1024，进程 B 的权重是 2048。那么进程 A 获得 CPU 的时间比例是 1024/(1024+2048) = 33.3%。进程 B 获得的 CPU 时间比例是 2048/(1024+2048)=66.7%。</p>
+<p>因此，权重越大，分配的时间比例越大，就相当于进程的优先级越高。</p>
+<p>有了权重之后，分配给进程的时间计算公式如下：</p>
+<p><strong>进程的时间 = CPU 总时间 * 进程的权重 / 就绪队列所有进程权重之和</strong></p>
+<p>但是进程对外的编程接口中使用的是一个 <strong>nice 值</strong>，大小范围是（-20～19），数值越小优先级越大，意味着权重值越大，nice 值和权重之间可以转换的。Linux 提供了后面这个数组，用于转换 nice 值和权重。</p>
+<p>const int sched_prio_to_weight[40] = {<br>
+/* -20 <em>/     88761,     71755,     56483,     46273,     36291,<br>
+/</em> -15 <em>/     29154,     23254,     18705,     14949,     11916,<br>
+/</em> -10 <em>/      9548,      7620,      6100,      4904,      3906,<br>
+/</em>  -5 <em>/      3121,      2501,      1991,      1586,      1277,<br>
+/</em>   0 <em>/      1024,       820,       655,       526,       423,<br>
+/</em>   5 <em>/       335,       272,       215,       172,       137,<br>
+/</em>  10 <em>/       110,        87,        70,        56,        45,<br>
+/</em>  15 */        36,        29,        23,        18,        15,<br>
+};</p>
+<p>一个进程每降低一个 nice 值，就能多获得 10% 的 CPU 时间。1024 权重对应 nice 值为 0，被称为 NICE_0_LOAD。默认情况下，大多数进程的权重都是 NICE_0_LOAD。</p>
+<h3 id="进程调度延迟">进程调度延迟</h3>
+<p>了解了进程权重，现在我们看看进程调度延迟，什么是调度延迟？其实就是保证每一个可运行的进程，都至少运行一次的<strong>时间间隔</strong>。</p>
+<p>我们结合实例理解，系统中有 3 个可运行进程，每个进程都运行 10ms，那么调度延迟就是 30ms；如果有 10 个进程，那么调度延迟就是 100ms；如果现在保证调度延迟不变，固定是 30ms；如果系统中有 3 个进程，则每个进程可运行 10ms；如果有 10 个进程，则每个进程可运行 3ms。</p>
+<p>随着进程的增加，每个进程分配的时间在减少，进程调度次数会增加，调度器占用的时间就会增加。因此，CFS 调度器的调度延迟时间的设定<strong>并不是固定的</strong>。</p>
+<p>当运行进程少于 8 个的时候，调度延迟是固定的 6ms 不变。当运行进程个数超过 8 个时，就要保证每个进程至少运行一段时间，才被调度。这个“至少一段时间”叫作<strong>最小调度粒度时间</strong>。</p>
+<p>在 CFS 默认设置中，最小调度粒度时间是 0.75ms，用变量 sysctl_sched_min_granularity 记录。由 __sched_period 函数负责计算，如下所示。</p>
+<p>unsigned int sysctl_sched_min_granularity           = 750000ULL;<br>
+static unsigned int normalized_sysctl_sched_min_granularity = 750000ULL;<br>
+static unsigned int sched_nr_latency = 8;<br>
+static u64 __sched_period(unsigned long nr_running)<br>
+{<br>
+if (unlikely(nr_running &gt; sched_nr_latency))<br>
+return nr_running * sysctl_sched_min_granularity;<br>
+else<br>
+return sysctl_sched_latency;<br>
+}</p>
+<p>上述代码中，参数 nr_running 是 Linux 系统中可运行的进程数量，当超过 sched_nr_latency 时，我们无法保证调度延迟，因此转为保证最小调度粒度。</p>
+<h3 id="虚拟时间">虚拟时间</h3>
+<p>你是否还记得调度实体中的 vruntime 么？它就是用来表示虚拟时间的，我们先按下不表，来看一个例子。</p>
+<p>假设幼儿园只有一个秋千，所有孩子都想玩，身为老师的你该怎么处理呢？你一定会想每个孩子玩一段时间，然后就让给别的孩子，依次类推。CFS 调度器也是这样做的，它记录了每个进程的执行时间，为保证每个进程运行时间的公平，哪个进程运行的时间最少，就会让哪个进程运行。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/107e00fbccc60e352e97ab634cc5e7c8.png" alt=""></p>
+<p>CFS 调度器原理</p>
+<p>例如，调度延迟是 10ms，系统一共 2 个相同优先级的进程，那么各进程都将在 10ms 的时间内各运行 5ms。</p>
+<p>现在进程 A 和进程 B 他们的权重分别是 1024 和 820（nice 值分别是 0 和 1）。进程 A 获得的运行时间是 10x1024/(1024+820)=5.6ms，进程 B 获得的执行时间是 10x820/(1024+820)=4.4ms。进程 A 的 cpu 使用比例是 5.6/10x100%=56%，进程 B 的 cpu 使用比例是 4.4/10x100%=44%。</p>
+<p>很明显，这两个进程的实际执行时间是不等的，但 CFS 调度器想保证每个进程的运行时间相等。因此 CFS 调度器引入了虚拟时间，也就是说，上面的 5.6ms 和 4.4ms 经过一个公式，转换成相同的值，这个转换后的值就叫虚拟时间。这样的话，CFS 只需要保证每个进程运行的虚拟时间是相等的。</p>
+<p>虚拟时间 vruntime 和实际时间（wtime）转换公式如下：</p>
+<p>vruntime = wtime*( NICE_0_LOAD/weight)</p>
+<p>根据上面的公式，可以发现 nice 值为 0 的进程，这种进程的虚拟时间和实际时间是相等的，那么进程 A 的虚拟时间为：5.6*(1024/1024)=5.6，进程 B 的虚拟时间为：4.4*(1024/820)=5.6。虽然进程 A 和进程 B 的权重不一样，但是计算得到的虚拟时间是一样的。</p>
+<p>所以，CFS 调度主要保证每个进程运行的虚拟时间一致即可。在选择下一个即将运行的进程时，只需要找到虚拟时间最小的进程就行了。这个计算过程由 calc_delta_fair 函数完成，如下所示。</p>
+<p>static u64 __calc_delta(u64 delta_exec, unsigned long weight, struct load_weight *lw)<br>
+{<br>
+u64 fact = scale_load_down(weight);<br>
+int shift = WMULT_SHIFT;<br>
+__update_inv_weight(lw);<br>
+if (unlikely(fact &raquo; 32)) {<br>
+while (fact &raquo; 32) {<br>
+fact &raquo;= 1;<br>
+shift&ndash;;<br>
+}<br>
+}<br>
+//为了避免使用浮点计算<br>
+fact = mul_u32_u32(fact, lw-&gt;inv_weight);<br>
+while (fact &raquo; 32) {<br>
+fact &raquo;= 1;<br>
+shift&ndash;;<br>
+}<br>
+return mul_u64_u32_shr(delta_exec, fact, shift);<br>
+}<br>
+static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)<br>
+{<br>
+if (unlikely(se-&gt;load.weight != NICE_0_LOAD))<br>
+delta = __calc_delta(delta, NICE_0_LOAD, &amp;se-&gt;load);</p>
+<pre><code>return delta;  
+</code></pre>
+<p>}</p>
+<p>按照上面的理论，调用 __calc_delta 函数的时候，传递的 weight 参数是 NICE_0_LOAD，lw 参数正是调度实体中的 load_weight 结构体。</p>
+<p><strong>到这里，我要公开一个问题，在运行队列中用红黑树结构组织进程的调度实体，这里进程虚拟时间正是红黑树的 key，这样进程就以进程的虚拟时间被红黑树组织起来了。红黑树的最左子节点，就是虚拟时间最小的进程，随着时间的推移进程会从红黑树的左边跑到右，然后从右边跑到左边，就像舞蹈一样优美。</strong></p>
+<h2 id="cfs-调度进程">CFS 调度进程</h2>
+<p>根据前面的内容，我们得知 CFS 调度器就是要维持各个可运行进程的虚拟时间相等，不相等就需要被调度运行。如果一个进程比其它进程的虚拟时间小，它就应该运行达到和其它进程的虚拟时间持平，直到它的虚拟时间超过其它进程，这时就要停下来，这样其它进程才能被调度运行。</p>
+<h3 id="定时周期调度">定时周期调度</h3>
+<p>前面虚拟时间的方案还存在问题，你发现了么？</p>
+<p>没错，虚拟时间就是一个数据，如果没有任何机制对它进行更新，就会导致一个进程永远运行下去，因为那个进程的虚拟时间没有更新，虚拟时间永远最小，这当然不行。</p>
+<p>因此定时周期调度机制应运而生。Linux 启动会启动定时器，这个定时器每 1/1000、1/250、1/100 秒（根据配置不同选取其一），产生一个时钟中断，在中断处理函数中最终会调用一个 scheduler_tick 函数，代码如下所示。</p>
+<p>static void update_curr(struct cfs_rq *cfs_rq)<br>
+{<br>
+struct sched_entity *curr = cfs_rq-&gt;curr;<br>
+u64 now = rq_clock_task(rq_of(cfs_rq));//获取当前时间<br>
+u64 delta_exec;<br>
+delta_exec = now - curr-&gt;exec_start;//间隔时间<br>
+curr-&gt;exec_start = now;<br>
+curr-&gt;sum_exec_runtime += delta_exec;//累计运行时间<br>
+curr-&gt;vruntime += calc_delta_fair(delta_exec, curr);//计算进程的虚拟时间<br>
+update_min_vruntime(cfs_rq);//更新运行队列中的最小虚拟时间，这是新建进程的虚拟时间，避免一个新建进程因为虚拟时间太小而长时间占用 CPU<br>
+}<br>
+static void entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)<br>
+{<br>
+update_curr(cfs_rq);//更新当前运行进程和运行队列相关的时间<br>
+if (cfs_rq-&gt;nr_running &gt; 1)//当运行进程数量大于 1 就检查是否可抢占<br>
+check_preempt_tick(cfs_rq, curr);<br>
+}<br>
+#define for_each_sched_entity(se) \<br>
+for (; se; se = NULL)<br>
+static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)<br>
+{<br>
+struct cfs_rq *cfs_rq;<br>
+struct sched_entity *se = &amp;curr-&gt;se;//获取当前进程的调度实体<br>
+for_each_sched_entity(se) {//仅对当前进程的调度实体<br>
+cfs_rq = cfs_rq_of(se);//获取当前进程的调度实体对应运行队列<br>
+entity_tick(cfs_rq, se, queued);<br>
+}<br>
+}<br>
+void scheduler_tick(void)<br>
+{<br>
+int cpu = smp_processor_id();<br>
+struct rq *rq = cpu_rq(cpu);//获取运行 CPU 运行进程队列<br>
+struct task_struct *curr = rq-&gt;curr;//获取当进程<br>
+update_rq_clock(rq);//更新运行队列的时间等数据<br>
+curr-&gt;sched_class-&gt;task_tick(rq, curr, 0);//更新当前时间的虚拟时间<br>
+}</p>
+<p>上述代码中，scheduler_tick 函数会调用进程调度类的 task_tick 函数，对于 CFS 调度器就是 task_tick_fair 函数。但是真正做事的是 <strong>entity_tick 函数</strong>，entity_tick 函数中调用了 update_curr 函数更新当前进程虚拟时间，这个函数我们在之前讨论过了，还更新了运行队列的相关数据。</p>
+<p>entity_tick 函数的最后，调用了 check_preempt_tick 函数，用来检查是否可以抢占调度，代码如下。</p>
+<p>static void check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)<br>
+{<br>
+unsigned long ideal_runtime, delta_exec;<br>
+struct sched_entity *se;<br>
+s64 delta;<br>
+//计算当前进程在本次调度中分配的运行时间<br>
+ideal_runtime = sched_slice(cfs_rq, curr);<br>
+//当前进程已经运行的实际时间<br>
+delta_exec = curr-&gt;sum_exec_runtime - curr-&gt;prev_sum_exec_runtime;<br>
+//如果实际运行时间已经超过分配给进程的运行时间，就需要抢占当前进程。设置进程的 TIF_NEED_RESCHED 抢占标志。<br>
+if (delta_exec &gt; ideal_runtime) {<br>
+resched_curr(rq_of(cfs_rq));<br>
+return;<br>
+}<br>
+//因此如果进程运行时间小于最小调度粒度时间，不应该抢占<br>
+if (delta_exec &lt; sysctl_sched_min_granularity)<br>
+return;<br>
+//从红黑树中找到虚拟时间最小的调度实体<br>
+se = __pick_first_entity(cfs_rq);<br>
+delta = curr-&gt;vruntime - se-&gt;vruntime;<br>
+//如果当前进程的虚拟时间仍然比红黑树中最左边调度实体虚拟时间小，也不应该发生调度<br>
+if (delta &lt; 0)<br>
+return;<br>
+}</p>
+<p>刚才的代码你可以这样理解，如果需要抢占就会调用 resched_curr 函数设置进程的抢占标志，但是这个函数本身不会调用进程调度器函数，而是在进程从中断或者系统调用返回到用户态空间时，检查当前进程的调度标志，然后根据需要调用进程调度器函数。</p>
+<h3 id="调度器入口">调度器入口</h3>
+<p>如果设计需要进行进程抢占调度，Linux 就会在适当的时机进行进程调度，进程调度就是调用进程调度器入口函数，该函数会选择一个最合适投入运行的进程，然后切换到该进程上运行。</p>
+<p>我们先来看看，进程调度器入口函数的代码长什么样。</p>
+<p>static void __sched notrace __schedule(bool preempt)<br>
+{<br>
+struct task_struct *prev, *next;<br>
+unsigned long *switch_count;<br>
+unsigned long prev_state;<br>
+struct rq_flags rf;<br>
+struct rq *rq;<br>
+int cpu;<br>
+cpu = smp_processor_id();<br>
+rq = cpu_rq(cpu);//获取当前 CPU 的运行队列<br>
+prev = rq-&gt;curr; //获取当前进程<br>
+rq_lock(rq, &amp;rf);//运行队列加锁<br>
+update_rq_clock(rq);//更新运行队列时钟<br>
+switch_count = &amp;prev-&gt;nivcsw;<br>
+next = pick_next_task(rq, prev, &amp;rf);//获取下一个投入运行的进程<br>
+clear_tsk_need_resched(prev); //清除抢占标志<br>
+clear_preempt_need_resched();<br>
+if (likely(prev != next)) {//当前运行进程和下一个运行进程不同，就要进程切换<br>
+rq-&gt;nr_switches++; //切换计数统计<br>
+++*switch_count;<br>
+rq = context_switch(rq, prev, next, &amp;rf);//进程机器上下文切换<br>
+} else {<br>
+rq-&gt;clock_update_flags &amp;= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);<br>
+rq_unlock_irq(rq, &amp;rf);//解锁运行队列<br>
+}<br>
+}<br>
+void schedule(void)<br>
+{<br>
+struct task_struct *tsk = current;//获取当前进程<br>
+do {<br>
+preempt_disable();//关闭内核抢占<br>
+__schedule(false);//进程调用<br>
+sched_preempt_enable_no_resched();//开启内核抢占<br>
+} while (need_resched());//是否需要再次重新调用<br>
+}</p>
+<p>之所以在循环中调用 __schedule 函数执行真正的进程调度，是因为在执行调度的过程中，有些更高优先级的进程进入了可运行状态，因此它就要抢占当前进程。</p>
+<p>__schedule 函数中会更新一些统计数据，然后调用 pick_next_task 函数挑选出下一个进程投入运行。最后，如果当前进程和下一个要运行的进程不同，就要进行进程机器上下文切换，其中会切换地址空间和 CPU 寄存器。</p>
+<h3 id="挑选下一个进程">挑选下一个进程</h3>
+<p>在 __schedule 函数中，获取了正在运行的进程，更新了运行队列的时钟，下面就要挑选出下一个投入运行的进程。显然，不是随便挑选一个，我们这就来看看调度器是如何挑选的。</p>
+<p>挑选下一个运行进程这个过程，是在 pick_next_task 函数中完成的，如下所示。</p>
+<p>static inline struct task_struct *pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)<br>
+{<br>
+const struct sched_class *class;<br>
+struct task_struct *p;<br>
+//这是对 CFS 的一种优化处理，因为大部分进程属于 CFS 管理<br>
+if (likely(prev-&gt;sched_class &lt;= &amp;fair_sched_class &amp;&amp;<br>
+rq-&gt;nr_running == rq-&gt;cfs.h_nr_running)) {<br>
+p = pick_next_task_fair(rq, prev, rf);//调用 CFS 的对应的函数<br>
+if (unlikely(p == RETRY_TASK))<br>
+goto restart;<br>
+if (!p) {//如果没有获取到运行进程<br>
+put_prev_task(rq, prev);//将上一个进程放回运行队列中<br>
+p = pick_next_task_idle(rq);//获取空转进程<br>
+}<br>
+return p;<br>
+}<br>
+restart:<br>
+for_each_class(class) {//依次从最高优先级的调度类开始遍历<br>
+p = class-&gt;pick_next_task(rq);<br>
+if (p)//如果在一个调度类所管理的运行队列中挑选到一个进程，立即返回<br>
+return p;<br>
+}<br>
+BUG();//出错<br>
+}</p>
+<p>你看，pick_next_task 函数只是个框架函数，它的逻辑也很清楚，会依照优先级调用具体调度器类的函数完成工作，对于 CFS 则会调用 pick_next_task_fair 函数，代码如下所示。</p>
+<p>struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)<br>
+{<br>
+struct cfs_rq *cfs_rq = &amp;rq-&gt;cfs;<br>
+struct sched_entity *se;<br>
+struct task_struct *p;<br>
+if (prev)<br>
+put_prev_task(rq, prev);//把上一个进程放回运行队列<br>
+do {<br>
+se = pick_next_entity(cfs_rq, NULL);//选择最适合运行的调度实体<br>
+set_next_entity(cfs_rq, se);//对选择的调度实体进行一些处理<br>
+cfs_rq = group_cfs_rq(se);<br>
+} while (cfs_rq);//在没有调度组的情况下，循环一次就结束了<br>
+p = task_of(se);//通过 se 获取包含 se 的进程 task_struct<br>
+return p;<br>
+}</p>
+<p>上述代码中调用 pick_next_entity 函数选择虚拟时间最小的调度实体，然后调用 set_next_entity 函数，对选择的调度实体进行一些必要的处理，主要是将这调度实体从运行队列中拿出来。</p>
+<p>pick_next_entity 函数具体要怎么工作呢？</p>
+<p>首先，它调用了相关函数，从运行队列上的红黑树中查找虚拟时间最少的调度实体，然后处理要跳过调度的情况，最后决定挑选的调度实体是否可以抢占并返回它。</p>
+<p>struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)<br>
+{<br>
+struct rb_node *left = rb_first_cached(&amp;cfs_rq-&gt;tasks_timeline);//先读取在 tasks_timeline 中 rb_node 指针<br>
+if (!left)<br>
+return NULL;//如果为空直接返回 NULL<br>
+//通过红黑树结点指针取得包含它的调度实体结构地址<br>
+return rb_entry(left, struct sched_entity, run_node);<br>
+}<br>
+static struct sched_entity *__pick_next_entity(struct sched_entity *se)<br>
+{    //获取当前红黑树节点的下一个结点<br>
+struct rb_node *next = rb_next(&amp;se-&gt;run_node);<br>
+if (!next)<br>
+return NULL;//如果为空直接返回 NULL<br>
+return rb_entry(next, struct sched_entity, run_node);<br>
+}<br>
+static struct sched_entity *pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)<br>
+{<br>
+//获取 Cfs_rq 中的红黑树上最左节点上调度实体，虚拟时间最小<br>
+struct sched_entity *left = __pick_first_entity(cfs_rq);<br>
+struct sched_entity *se;<br>
+if (!left || (curr &amp;&amp; entity_before(curr, left)))<br>
+left = curr;//可能当前进程主动放弃 CPU，它的虚拟时间比红黑树上的还小，所以 left 指向当前进程调度实体<br>
+se = left;<br>
+if (cfs_rq-&gt;skip == se) { //如果选择的调度实体是要跳过的调度实体<br>
+struct sched_entity *second;<br>
+if (se == curr) {//如果是当前调度实体<br>
+second = __pick_first_entity(cfs_rq);//选择运行队列中虚拟时间最小的调度实体<br>
+} else {//否则选择红黑树上第二左的进程节点<br>
+second = __pick_next_entity(se);<br>
+//如果次优的调度实体的虚拟时间，还是比当前的调度实体的虚拟时间大<br>
+if (!second || (curr &amp;&amp; entity_before(curr, second)))<br>
+second = curr;//让次优的调度实体也指向当前调度实体<br>
+}<br>
+//判断 left 和 second 的虚拟时间的差距是否小于 sysctl_sched_wakeup_granularity<br>
+if (second &amp;&amp; wakeup_preempt_entity(second, left) &lt; 1)<br>
+se = second;<br>
+}<br>
+if (cfs_rq-&gt;next &amp;&amp; wakeup_preempt_entity(cfs_rq-&gt;next, left) &lt; 1) {<br>
+se = cfs_rq-&gt;next;<br>
+} else if (cfs_rq-&gt;last &amp;&amp; wakeup_preempt_entity(cfs_rq-&gt;last, left) &lt; 1) {<br>
+se = cfs_rq-&gt;last;<br>
+}<br>
+clear_buddies(cfs_rq, se);//需要清除掉 last、next、skip 指针<br>
+return se;<br>
+}</p>
+<p>代码的调用路径最终会返回到 __schedule 函数中，这个函数中就是上一个运行的进程和将要投入运行的下一个进程，最后调用 context_switch 函数，完成两个进程的地址空间和机器上下文的切换，一次进程调度工作结束。这个机制和我们的 Cosmos 的 <strong>save_to_new_context 函数</strong>类似，不再赘述。</p>
+<p>至此 CFS 调度器的基本概念与数据结构，还有算法实现，我们就搞清楚了，核心就是<strong>让虚拟时间最小的进程最先运行，一旦进程运行虚拟时间就会增加，最后尽量保证所有进程的虚拟时间相等，谁小了就要多运行，谁大了就要暂停运行。</strong></p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>Linux 如何表示一个进程以及如何进行多个进程调度，我们已经搞清楚了。我们来总结一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/ae421d2f771c58b990d27d550cd20f47.png" alt=""></p>
+<p>你可能在想。为什么要用红黑树来组织调度实体？这是因为要维护虚拟时间的顺序，又要从中频繁的删除和插入调度实体，这种情况下红黑树这种结构无疑是非常好，如果你有更好的选择，可以向 Linux 社区提交补丁。</p>
+<h2 id="思考题">思考题</h2>
+<p>想一想，Linux 进程的优先级和 Linux 调度类的优先级是一回事儿吗？</p>
+<p>欢迎你在留言区记录你的学习经验或者个我交流讨论，也欢迎你把这节课转发给需要的朋友。</p>
+<p>好，我是 LMOS，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%8C%81%E7%BB%AD%E4%BA%A4%E4%BB%9836%E8%AE%B2/27_%E5%88%A9%E7%94%A8mock%E4%B8%8E%E5%9B%9E%E6%94%BE%E6%8A%80%E6%9C%AF%E5%8A%A9%E5%8A%9B%E8%87%AA%E5%8A%A8%E5%8C%96%E5%9B%9E%E5%BD%92/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">27_利用Mock与回放技术助力自动化回归</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E6%89%93%E9%80%A0%E9%9F%B3%E8%A7%86%E9%A2%91%E7%9B%B4%E6%92%AD%E7%B3%BB%E7%BB%9F/27_%E8%AE%A9%E6%88%91%E4%BB%AC%E4%B8%80%E8%B5%B7%E6%8E%A2%E7%B4%A2medooze%E7%9A%84%E5%85%B7%E4%BD%93%E5%AE%9E%E7%8E%B0%E5%90%A7%E4%B8%8A/">
+            <span class="next-text nav-default">27_让我们一起探索Medooze的具体实现吧（上）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

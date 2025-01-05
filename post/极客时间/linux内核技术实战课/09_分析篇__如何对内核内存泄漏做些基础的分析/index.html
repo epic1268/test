@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>09_分析篇__如何对内核内存泄漏做些基础的分析？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是邵亚方。
+如果你是一名应用开发者，那你对应用程序引起的内存泄漏应该不会陌生。但是，你有没有想过，内存泄漏也可能是由操作系统（内核）自身的问题引起的呢？这是很多应用开发者以及运维人员容易忽视的地方，或者是相对陌生的领域。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/09_%E5%88%86%E6%9E%90%E7%AF%87__%E5%A6%82%E4%BD%95%E5%AF%B9%E5%86%85%E6%A0%B8%E5%86%85%E5%AD%98%E6%B3%84%E6%BC%8F%E5%81%9A%E4%BA%9B%E5%9F%BA%E7%A1%80%E7%9A%84%E5%88%86%E6%9E%90/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/09_%E5%88%86%E6%9E%90%E7%AF%87__%E5%A6%82%E4%BD%95%E5%AF%B9%E5%86%85%E6%A0%B8%E5%86%85%E5%AD%98%E6%B3%84%E6%BC%8F%E5%81%9A%E4%BA%9B%E5%9F%BA%E7%A1%80%E7%9A%84%E5%88%86%E6%9E%90/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="09_分析篇__如何对内核内存泄漏做些基础的分析？">
+  <meta property="og:description" content="你好，我是邵亚方。
+如果你是一名应用开发者，那你对应用程序引起的内存泄漏应该不会陌生。但是，你有没有想过，内存泄漏也可能是由操作系统（内核）自身的问题引起的呢？这是很多应用开发者以及运维人员容易忽视的地方，或者是相对陌生的领域。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Linux内核技术实战课">
+
+  <meta itemprop="name" content="09_分析篇__如何对内核内存泄漏做些基础的分析？">
+  <meta itemprop="description" content="你好，我是邵亚方。
+如果你是一名应用开发者，那你对应用程序引起的内存泄漏应该不会陌生。但是，你有没有想过，内存泄漏也可能是由操作系统（内核）自身的问题引起的呢？这是很多应用开发者以及运维人员容易忽视的地方，或者是相对陌生的领域。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4007">
+  <meta itemprop="keywords" content="Linux内核技术实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="09_分析篇__如何对内核内存泄漏做些基础的分析？">
+  <meta name="twitter:description" content="你好，我是邵亚方。
+如果你是一名应用开发者，那你对应用程序引起的内存泄漏应该不会陌生。但是，你有没有想过，内存泄漏也可能是由操作系统（内核）自身的问题引起的呢？这是很多应用开发者以及运维人员容易忽视的地方，或者是相对陌生的领域。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">09_分析篇__如何对内核内存泄漏做些基础的分析？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4007 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#内核内存泄漏是什么">内核内存泄漏是什么？</a></li>
+        <li><a href="#如何观察内核内存泄漏">如何观察内核内存泄漏？</a></li>
+        <li><a href="#复杂场景下内核内存泄漏问题分析思路">复杂场景下内核内存泄漏问题分析思路</a></li>
+      </ul>
+    </li>
+    <li><a href="#dalloc_dfreestp">dalloc_dfree.stp</a></li>
+    <li><a href="#usage--stap--x-pid-dalloc_dfreestp">usage : stap -x pid dalloc_dfree.stp</a>
+      <ul>
+        <li><a href="#课堂总结">课堂总结</a></li>
+        <li><a href="#课后作业">课后作业</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是邵亚方。</p>
+<p>如果你是一名应用开发者，那你对应用程序引起的内存泄漏应该不会陌生。但是，你有没有想过，内存泄漏也可能是由操作系统（内核）自身的问题引起的呢？这是很多应用开发者以及运维人员容易忽视的地方，或者是相对陌生的领域。</p>
+<p>然而陌生的领域不代表不会有问题，如果在陌生的领域发生了问题，而你总是习惯于分析应用程序自身，那你可能要浪费很多的分析时间，却依然一无所获。所以，对于应用开发者或者运维人员而言，掌握基本的内核内存泄漏分析方法也是必需的，这样在它发生问题时，你可以有一个初步的判断，而不至于一筹莫展。</p>
+<p>内核内存泄漏往往都会是很严重的问题，这通常意味着要重启服务器来解决了，我们肯定并不希望只能靠重启服务器来解决它，不然那就只能没完没了地重启了。我们希望的应该是，在发生了内存泄漏后，能够判断出来是不是内核引起的问题，以及能够找到引起问题的根因，或者是向更专业的内核开发者求助来找到问题根因，从而彻底解决掉它，以免再次重启服务器。</p>
+<p>那么，我们该如何判断内存泄漏是否是内核导致的呢？这节课我们就来讲一讲内核内存泄漏的基础分析方法。</p>
+<h2 id="内核内存泄漏是什么">内核内存泄漏是什么？</h2>
+<p>在进行具体的分析之前，我们需要先对内核内存泄漏有个初步的概念，究竟内核内存泄漏是指什么呢？这得从内核空间内存分配的基本方法说起。</p>
+<p>我们在06 基础篇里讲过，进程的虚拟地址空间（address space）既包括用户地址空间，也包括内核地址空间。这可以简单地理解为，进程运行在用户态申请的内存，对应的是用户地址空间，进程运行在内核态申请的内存，对应的是内核地址空间，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/f57eb71bdbddf13c0968d570962366c9.png" alt=""></p>
+<p>应用程序可以通过 malloc() 和 free() 在用户态申请和释放内存，与之对应，可以通过 kmalloc()/kfree() 以及 vmalloc()/vfree() 在内核态申请和释放内存。当然，还有其他申请和释放内存的方法，但大致可以分为这两类。</p>
+<p>从最右侧的物理内存中你可以看出这两类内存申请方式的主要区别，kmalloc() 内存的物理地址是连续的，而 vmalloc() 内存的物理地址则是不连续的。这两种不同类型的内存也是可以通过 /proc/meminfo 来观察的：</p>
+<p>$ cat /proc/meminfo<br>
+&hellip;<br>
+Slab:            2400284 kB<br>
+SReclaimable:      47248 kB<br>
+SUnreclaim:      2353036 kB<br>
+&hellip;<br>
+VmallocTotal:   34359738367 kB<br>
+VmallocUsed:     1065948 kB<br>
+&hellip;</p>
+<p>其中 vmalloc 申请的内存会体现在 VmallocUsed 这一项中，即已使用的 Vmalloc 区大小；而 kmalloc 申请的内存则是体现在 Slab 这一项中，它又分为两部分，其中 SReclaimable 是指在内存紧张的时候可以被回收的内存，而 SUnreclaim 则是不可以被回收只能主动释放的内存。</p>
+<p>内核之所以将 kmalloc 和 vmalloc 的信息通过 /proc/meminfo 给导出来，也是为了在它们引起问题的时候，让我们可以有方法来进行排查。在讲述具体的案例以及排查方法之前，我们先以一个简单的程序来看下内核空间是如何进行内存申请和释放的。</p>
+<p>/* kmem_test */<br>
+#include &lt;linux/init.h&gt;<br>
+#include &lt;linux/vmalloc.h&gt;</p>
+<p>#define SIZE (1024 * 1024 * 1024)</p>
+<p>char *kaddr;</p>
+<p>char *kmem_alloc(unsigned long size)<br>
+{<br>
+char *p;<br>
+p = vmalloc(size);<br>
+if (!p)<br>
+pr_info(&quot;[kmem_test]: vmalloc failed\n&quot;);<br>
+return p;<br>
+}</p>
+<p>void kmem_free(const void *addr)<br>
+{<br>
+if (addr)<br>
+vfree(addr);<br>
+}</p>
+<p>int __init kmem_init(void)<br>
+{<br>
+pr_info(&quot;[kmem_test]: kernel memory init\n&quot;);<br>
+kaddr = kmem_alloc(SIZE);<br>
+return 0;<br>
+}</p>
+<p>void __exit kmem_exit(void)<br>
+{<br>
+kmem_free(kaddr);<br>
+pr_info(&quot;[kmem_test]: kernel memory exit\n&quot;);<br>
+}</p>
+<p>module_init(kmem_init)<br>
+module_exit(kmem_exit)</p>
+<p>MODULE_LICENSE(&ldquo;GPLv2&rdquo;);</p>
+<p>这是一个典型的内核模块，在这个内核模块中，我们使用 vmalloc 来分配了 1G 的内存空间，然后在模块退出的时候使用 vfree 释放掉它。这在形式上跟应用申请 / 释放内存其实是一致的，只是申请和释放内存的接口函数不一样而已。</p>
+<p>我们需要使用 Makefile 来编译这个内核模块：</p>
+<p>obj-m = kmem_test.o</p>
+<p>all:<br>
+make -C /lib/modules/<code>uname -r</code>/build M=<code>pwd</code><br>
+clean:<br>
+rm -f *.o *.ko *.mod.c *.mod *.a modules.order Module.symvers</p>
+<p>执行 make 命令后就会生成一个 kmem_test 的内核模块，接着执行下面的命令就可以安装该模块了：</p>
+<p>$ insmod kmem_test</p>
+<p>用 rmmod 命令则可以把它卸载掉：</p>
+<p>$ rmmod kmem_test</p>
+<p>这个示例程序就是内核空间内存分配的基本方法。你可以在插入 / 卸载模块前后观察 VmallocUsed 的变化，以便于你更好地理解这一项的含义。</p>
+<p>那么，在什么情况下会发生内核空间的内存泄漏呢？</p>
+<p>跟用户空间的内存泄漏类似，内核空间的内存泄漏也是指只申请内存而不去释放该内存的情况，比如说，如果我们不在 kmem_exit() 这个函数中调用 kmem_free()，就会产生内存泄漏问题。</p>
+<p>那么，内核空间的内存泄漏与用户空间的内存泄漏有什么不同呢？我们知道，用户空间内存的生命周期与用户进程是一致的，进程退出后这部分内存就会自动释放掉。但是，内核空间内存的生命周期是与内核一致的，却不是跟内核模块一致的，也就是说，在内核模块退出时，不会自动释放掉该内核模块申请的内存，只有在内核重启（即服务器重启）时才会释放掉这部分内存。</p>
+<p>总之，一旦发生内核内存泄漏，你很难有很好的方法来优雅地解决掉它，很多时候唯一的解决方案就是重启服务器，这显然是件很严重的问题。同样地，我也建议你来观察下这个行为，但是你需要做好重启服务器的心理准备。</p>
+<p>kmalloc 的用法跟 vmalloc 略有不同，你可以参考kmalloc API和kfree API来修改一下上面的测试程序，然后观察下 kmalloc 内存和 /proc/meminfo 中那几项的关系，我在这里就不做演示了，留给你作为课后作业。</p>
+<p>内核内存泄漏的问题往往会发生在一些驱动程序中，比如说网卡驱动，SSD 卡驱动等，以及我们自己开发的一些驱动，因为这类驱动不像 Linux 内核那样经历过大规模的功能验证和测试，所以相对容易出现一些隐藏很深的问题。</p>
+<p>我们在生产环境上就遇到过很多起这类第三方驱动引发的内存泄漏问题，排查起来往往也比较费时。作为一个解决过很多这类问题的过来人，我对你的建议是，当你发现内核内存泄漏时，首先需要去质疑的就是你们系统中的第三方驱动程序，以及你们自己开发的驱动程序。</p>
+<p>那么，我们该如何来观察内核内存泄漏呢？</p>
+<h2 id="如何观察内核内存泄漏">如何观察内核内存泄漏？</h2>
+<p>在前面已经讲过，我们可以通过 /proc/meminfo 来观察内核内存的分配情况，这提供了一个观察内核内存的简便方法：</p>
+<ol>
+<li>如果 /proc/meminfo 中内核内存（比如 VmallocUsed 和 SUnreclaim）太大，那很有可能发生了内核内存泄漏；</li>
+<li>另外，你也可以周期性地观察 VmallocUsed 和 SUnreclaim 的变化，如果它们持续增长而不下降，也可能是发生了内核内存泄漏。</li>
+</ol>
+<p>/proc/meminfo 只是提供了系统内存的整体使用情况，如果我们想要看具体是什么模块在使用内存，那该怎么办呢？</p>
+<p>这也可以通过 /proc 来查看，所以再次强调一遍，当你不清楚该如何去分析时，你可以试着去查看 /proc 目录下的文件。以上面的程序为例，安装 kmem_test 这个内核模块后，我们可以通过 /proc/vmallocinfo 来看到该模块的内存使用情况：</p>
+<p>$ cat /proc/vmallocinfo | grep kmem_test<br>
+0xffffc9008a003000-0xffffc900ca004000 1073745920 kmem_alloc+0x13/0x30 [kmem_test] pages=262144 vmalloc vpages N0=262144</p>
+<p>可以看到，在 [kmem_test] 这个模块里，通过 kmem_alloc 这个函数申请了 262144 个 pages，即总共 1G 大小的内存。假设我们怀疑 kmem_test 这个模块存在问题，我们就可以去看看 kmem_alloc 这个函数里申请的内存有没有释放的地方。</p>
+<p>上面这个测试程序相对比较简单一些，所以根据 /proc/vmallocinfo 里面的信息就能够简单地看出来是否有问题。但是，生产环境中运行的一些驱动或者内核模块，在逻辑上会复杂得多，很难一眼就看出来是否存在内存泄漏，这往往需要大量的分析。</p>
+<p>那对于这种复杂场景下的内核内存泄漏问题，基本的分析思路是什么样的呢？</p>
+<h2 id="复杂场景下内核内存泄漏问题分析思路">复杂场景下内核内存泄漏问题分析思路</h2>
+<p>如果我们想要对内核内存泄漏做些基础的分析，最好借助一些内核内存泄漏分析工具，其中最常用的分析工具就是kmemleak。</p>
+<p>kmemleak 是内核内存泄漏检查的利器，但是，它的使用也存在一些不便性，因为打开该特性会给性能带来一些损耗，所以生产环境中的内核都会默认关闭该特性。该特性我们一般只用在测试环境中，然后在测试环境中运行需要分析的驱动程序以及其他内核模块。</p>
+<p>与其他内存泄漏检查工具类似，kmemleak 也是通过检查内核内存的申请和释放，来判断是否存在申请的内存不再使用也不释放的情况。如果存在，就认为是内核内存泄漏，然后把这些泄漏的信息通过 /sys/kernel/debug/kmemleak 这个文件导出给用户分析。同样以我们上面的程序为例，检查结果如下：</p>
+<p>unreferenced object 0xffffc9008a003000 (size 1073741824):<br>
+comm &ldquo;insmod&rdquo;, pid 11247, jiffies 4344145825 (age 3719.606s)<br>
+hex dump (first 32 bytes):<br>
+38 40 18 ba 80 88 ff ff 00 00 00 00 00 00 00 00  8@&hellip;&hellip;&hellip;&hellip;..<br>
+f0 13 c9 73 80 88 ff ff 18 40 18 ba 80 88 ff ff  &hellip;s&hellip;..@&hellip;&hellip;<br>
+backtrace:<br>
+[&lt;00000000fbd7cb65&gt;] __vmalloc_node_range+0x22f/0x2a0<br>
+[&lt;000000008c0afaef&gt;] vmalloc+0x45/0x50<br>
+[&lt;000000004f3750a2&gt;] 0xffffffffa0937013<br>
+[&lt;0000000078198a11&gt;] 0xffffffffa093c01a<br>
+[&lt;000000002041c0ec&gt;] do_one_initcall+0x4a/0x200<br>
+[&lt;000000008d10d1ed&gt;] do_init_module+0x60/0x220<br>
+[&lt;000000003c285703&gt;] load_module+0x156c/0x17f0<br>
+[&lt;00000000c428a5fe&gt;] __do_sys_finit_module+0xbd/0x120<br>
+[&lt;00000000bc613a5a&gt;] __x64_sys_finit_module+0x1a/0x20<br>
+[&lt;000000004b0870a2&gt;] do_syscall_64+0x52/0x90<br>
+[&lt;000000002f458917&gt;] entry_SYSCALL_64_after_hwframe+0x44/0xa9</p>
+<p>由于该程序通过 vmalloc 申请的内存以后再也没有使用，所以被 kmemleak 标记为了“unreferenced object”，我们需要在使用完该内存空间后就释放它以节省内存。</p>
+<p>如果我们想在生产环境上来观察内核内存泄漏，就无法使用 kmemleak 了，那还有没有其他的方法呢？</p>
+<p>我们可以使用内核提供的内核内存申请释放的 tracepoint，来动态观察内核内存使用情况：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/0b84e4ff90ae20c8cba90b540f26b0e4.png" alt=""></p>
+<p>当我们使能这些 tracepoints 后，就可以观察内存的动态申请和释放情况了，只是这个分析过程不如 kmemleak 那么高效。</p>
+<p>当我们想要观察某些内核结构体的申请和释放时，可能没有对应的 tracepiont。这个时候就需要使用 kprobe 或者 systemtap，来针对具体的内核结构体申请释放函数进行追踪了。下面就是我们在生产环境中的一个具体案例。</p>
+<p>业务方反馈说 docker 里面的可用内存越来越少，不清楚是什么状况，在我们通过 /proc 下面的文件（/proc/slabinfo）判断出来是 dentry 消耗内存过多后，写了一个 systemtap 脚本来观察 dentry 的申请和释放：</p>
+<h1 id="dalloc_dfreestp">dalloc_dfree.stp</h1>
+<h1 id="usage--stap--x-pid-dalloc_dfreestp">usage : stap -x pid dalloc_dfree.stp</h1>
+<p>global free = 0;<br>
+global alloc = 0;</p>
+<p>probe kernel.function(&ldquo;d_free&rdquo;) {<br>
+if (target() == pid()) {<br>
+free++;<br>
+}  <br>
+}</p>
+<p>probe kernel.function(&ldquo;d_alloc&rdquo;).return {<br>
+if (target() == pid()) {<br>
+alloc++;<br>
+}  <br>
+}</p>
+<p>probe end {<br>
+printf(&ldquo;alloc %d free %d\n&rdquo;, alloc, free);<br>
+}</p>
+<p>我们使用该工具进行了多次统计，都发现是 dentry 的申请远大于它的释放：</p>
+<p>alloc 2041 free 1882<br>
+alloc 18137 free 6852<br>
+alloc 22505 free 10834<br>
+alloc 33118 free 20531</p>
+<p>于是，我们判断在容器环境中 dentry 的回收存在问题，最终定位出这是 3.10 版本内核的一个 Bug：如果 docker 内部内存使用达到了 limit，但是全局可用内存还很多，那就无法去回收 docker 内部的 slab 了。当然，这个 Bug 在新版本内核上已经 fix 了。</p>
+<p>好了，我们这节课就讲到这里。</p>
+<h2 id="课堂总结">课堂总结</h2>
+<p>这节课我们讲了一种更难分析以及引起危害更大的内存泄漏：内核内存泄漏。我们还讲了针对这种内存泄漏的常用分析方法：</p>
+<ol>
+<li>你可以通过 /proc/meminfo 里面的信息来看内核内存的使用情况，然后根据这里面的信息来做一些基本的判断：如果内核太大那就值得怀疑；</li>
+<li>kmemleak 是内核内存分析的利器，但是一般只在测试环境上使用它，因为它对性能会有比较明显的影响；</li>
+<li>在生产环境中可以使用 tracepoint 或者 kprobe，来追踪特定类型内核内存的申请和释放，从而帮助我们判断是否存在内存泄漏。但这往往需要专业的知识，你在不明白的时候可以去请教一些内核专家；</li>
+<li>内核内存泄漏通常都是第三方驱动或者自己写的一些内核模块导致的，在出现内核内存泄漏时，你可以优先去排查它们。</li>
+</ol>
+<h2 id="课后作业">课后作业</h2>
+<p>我们这节课讲的内容对应用开发者会有些难度，对于运维人员而言也是需要掌握的。所以我们的课后作业主要是针对运维人员或者内核初学者的：请写一个 systemtap 脚本来追踪内核内存的申请和释放。欢迎你在留言区与我讨论。</p>
+<p>感谢你的阅读，如果你认为这节课的内容有收获，也欢迎把它分享给你的朋友，我们下一讲见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/">Linux内核技术实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/09_%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%E6%BC%8F%E6%B4%9E%E4%BD%BF%E7%94%A8%E4%BA%86%E7%BC%96%E8%AF%91%E5%9E%8B%E8%AF%AD%E8%A8%80%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E6%98%AF%E4%BC%9A%E8%A2%AB%E6%B3%A8%E5%85%A5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">09_反序列化漏洞：使用了编译型语言，为什么还是会被注入？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%9F%BA%E7%A1%80%E8%AF%BE/09_%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0__%E5%A4%A7%E9%81%93%E8%87%B3%E7%AE%80%E6%9C%B4%E7%B4%A0%E8%B4%9D%E5%8F%B6%E6%96%AF%E6%96%B9%E6%B3%95/">
+            <span class="next-text nav-default">09_机器学习__大道至简：朴素贝叶斯方法</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

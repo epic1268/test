@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__异常重试：在约定时间内安全可靠地重试 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是何小锋。上一讲我讲解了在 RPC 框架中如何设计自适应的负载均衡，其关键点就是调用端收集服务端每个节点的指标数据，再根据各方面的指标数据进行计算打分，最后根据每个节点的分数，将更多的流量打到分数较高的节点上。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/12__%E5%BC%82%E5%B8%B8%E9%87%8D%E8%AF%95%E5%9C%A8%E7%BA%A6%E5%AE%9A%E6%97%B6%E9%97%B4%E5%86%85%E5%AE%89%E5%85%A8%E5%8F%AF%E9%9D%A0%E5%9C%B0%E9%87%8D%E8%AF%95/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/12__%E5%BC%82%E5%B8%B8%E9%87%8D%E8%AF%95%E5%9C%A8%E7%BA%A6%E5%AE%9A%E6%97%B6%E9%97%B4%E5%86%85%E5%AE%89%E5%85%A8%E5%8F%AF%E9%9D%A0%E5%9C%B0%E9%87%8D%E8%AF%95/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__异常重试：在约定时间内安全可靠地重试">
+  <meta property="og:description" content="你好，我是何小锋。上一讲我讲解了在 RPC 框架中如何设计自适应的负载均衡，其关键点就是调用端收集服务端每个节点的指标数据，再根据各方面的指标数据进行计算打分，最后根据每个节点的分数，将更多的流量打到分数较高的节点上。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="RPC实战与核心原理">
+
+  <meta itemprop="name" content="12__异常重试：在约定时间内安全可靠地重试">
+  <meta itemprop="description" content="你好，我是何小锋。上一讲我讲解了在 RPC 框架中如何设计自适应的负载均衡，其关键点就是调用端收集服务端每个节点的指标数据，再根据各方面的指标数据进行计算打分，最后根据每个节点的分数，将更多的流量打到分数较高的节点上。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2876">
+  <meta itemprop="keywords" content="RPC实战与核心原理">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__异常重试：在约定时间内安全可靠地重试">
+  <meta name="twitter:description" content="你好，我是何小锋。上一讲我讲解了在 RPC 框架中如何设计自适应的负载均衡，其关键点就是调用端收集服务端每个节点的指标数据，再根据各方面的指标数据进行计算打分，最后根据每个节点的分数，将更多的流量打到分数较高的节点上。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__异常重试：在约定时间内安全可靠地重试</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2876 字 </span>
+          <span class="more-meta"> 预计阅读 6 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#为什么需要异常重试">为什么需要异常重试？</a></li>
+        <li><a href="#rpc-框架的重试机制">RPC 框架的重试机制</a></li>
+        <li><a href="#如何在约定时间内安全可靠地重试">如何在约定时间内安全可靠地重试？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考">课后思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是何小锋。上一讲我讲解了在 RPC 框架中如何设计自适应的负载均衡，其关键点就是调用端收集服务端每个节点的指标数据，再根据各方面的指标数据进行计算打分，最后根据每个节点的分数，将更多的流量打到分数较高的节点上。</p>
+<p>今天我们就继续下一个话题，讲讲 RPC 框架中的异常重试机制。</p>
+<h2 id="为什么需要异常重试">为什么需要异常重试？</h2>
+<p>我们可以考虑这样一个场景。我们发起一次 RPC 调用，去调用远程的一个服务，比如用户的登录操作，我们会先对用户的用户名以及密码进行验证，验证成功之后会获取用户的基本信息。当我们通过远程的用户服务来获取用户基本信息的时候，恰好网络出现了问题，比如网络突然抖了一下，导致我们的请求失败了，而这个请求我们希望它能够尽可能地执行成功，那这时我们要怎么做呢？</p>
+<p>我们需要重新发起一次 RPC 调用，那我们在代码中该如何处理呢？是在代码逻辑里 catch 一下，失败了就再发起一次调用吗？这样做显然不够优雅吧。这时我们就可以考虑使用 RPC 框架的重试机制。</p>
+<h2 id="rpc-框架的重试机制">RPC 框架的重试机制</h2>
+<p>那什么是 RPC 框架的重试机制呢？</p>
+<p>这其实很好理解，就是当调用端发起的请求失败时，RPC 框架自身可以进行重试，再重新发送请求，用户可以自行设置是否开启重试以及重试的次数。</p>
+<p>那这个机制是如何实现的呢？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/fc378753def3baa27fe66e86a5796ef4.png" alt=""></p>
+<p>RPC 异常重试</p>
+<p>还是挺简单的。我们可以回想下[第 11 讲]，通过这一讲我们了解到，调用端在发起 RPC 调用时，会经过负载均衡，选择一个节点，之后它会向这个节点发送请求信息。当消息发送失败或收到异常消息时，我们就可以捕获异常，根据异常触发重试，重新通过负载均衡选择一个节点发送请求消息，并且记录请求的重试次数，当重试次数达到用户配置的重试次数的时候，就返回给调用端动态代理一个失败异常，否则就一直重试下去。</p>
+<p>RPC 框架的重试机制就是调用端发现请求失败时捕获异常，之后触发重试，那是不是所有的异常都要触发重试呢？</p>
+<p>当然不是了，因为这个异常可能是服务提供方抛回来的业务异常，它是应该正常返回给动态代理的，所以我们要在触发重试之前对捕获的异常进行判定，只有符合重试条件的异常才能触发重试，比如网络超时异常、网络连接异常等等。</p>
+<p>了解了 RPC 框架的重试机制，那用户在使用异常重试时需要注意哪些问题呢？</p>
+<p>比如我刚才提的那个调用场景，当网络突然抖动了一下导致请求超时了，但这个时候调用方的请求信息可能已经发送到服务提供方的节点上，也可能已经发送到服务提供方的服务节点上，那如果请求信息成功地发送到了服务节点上，那这个节点是不是就要执行业务逻辑了呢？是的。</p>
+<p>那如果这个时候发起了重试，业务逻辑是否会被执行呢？会的。</p>
+<p>那如果这个服务业务逻辑不是幂等的，比如插入数据操作，那触发重试的话会不会引发问题呢？会的。</p>
+<p>综上，我们可以总结出：在使用 RPC 框架的时候，我们要确保被调用的服务的业务逻辑是幂等的，这样我们才能考虑根据事件情况开启 RPC 框架的异常重试功能。这一点你要格外注意，这算是一个高频误区了。</p>
+<p>通过上述讲解，我相信你已经非常清楚 RPC 框架的重试机制了，这也是现在大多数 RPC 框架所采用的重试机制。</p>
+<p>那看到这儿，你觉得这个机制完善了吗？有没有想到连续重试对请求超时时间的影响？继续考虑这样一个场景：我把调用端的请求超时时间设置为 5s，结果连续重试 3 次，每次都耗时 2s，那最终这个请求的耗时是 6s，那这样的话，调用端设置的超时时间是不是就不准确了呢？</p>
+<h2 id="如何在约定时间内安全可靠地重试">如何在约定时间内安全可靠地重试？</h2>
+<p>我刚才讲到，连续的异常重试可能会出现一种不可靠的情况，那就是连续的异常重试并且每次处理的请求时间比较长，最终会导致请求处理的时间过长，超出用户设置的超时时间。</p>
+<p>解决这个问题最直接的方式就是，在每次重试后都重置一下请求的超时时间。</p>
+<p>当调用端发起 RPC 请求时，如果发送请求发生异常并触发了异常重试，我们可以先判定下这个请求是否已经超时，如果已经超时了就直接返回超时异常，否则就先重置下这个请求的超时时间，之后再发起重试。</p>
+<p>那么解决了因多次异常重试引发的超时时间失效的问题，这个重试机制是不是就完全可靠了呢？</p>
+<p>我们接着考虑，当调用端设置了异常重试策略，发起了一次 RPC 调用，通过负载均衡选择了节点，将请求消息发送到这个节点，这时这个节点由于负载压力较大，导致这个请求处理失败了，调用端触发了重试，再次通过负载均衡选择了一个节点，结果恰好仍选择了这个节点，那么在这种情况下，重试的效果是否受影响了呢？</p>
+<p>当然有影响。因此，我们需要在所有发起重试、负载均衡选择节点的时候，去掉重试之前出现过问题的那个节点，以保证重试的成功率。</p>
+<p>那我们现在再完整地回顾一下，<strong>考虑了业务逻辑必须是幂等的、超时时间需要重置以及去掉有问题的服务节点后，这样的异常重试机制，还有没有可优化的地方呢？</strong></p>
+<p>我刚才讲过，RPC 框架的异常重试机制，是调用端发送请求之后，如果发送失败会捕获异常，触发重试，但并不是所有的异常都会触发重试的，只有 RPC 框架中特定的异常才会如此，比如连接异常、超时异常。</p>
+<p>而像服务端业务逻辑中抛回给调用端的异常是不能重试的。那么请你想一下这种情况：服务端的业务逻辑抛给调用端一个异常信息，而服务端抛出这个异常是允许调用端重新发起一次调用的。</p>
+<p>比如这个场景：服务端的业务逻辑是对数据库某个数据的更新操作，更新失败则抛出个更新失败的异常，调用端可以再次调用，来触发服务端重新执行更新操作。那这个时候对于调用端来说，它接收到了更新失败异常，虽然是服务端抛回来的业务异常，但也是可以进行重试的。</p>
+<p><strong>那么在这种情况下，RPC 框架的重试机制需要怎么优化呢？</strong></p>
+<p>RPC 框架是不会知道哪些业务异常能够去进行异常重试的，我们可以加个重试异常的白名单，用户可以将允许重试的异常加入到这个白名单中。当调用端发起调用，并且配置了异常重试策略，捕获到异常之后，我们就可以采用这样的异常处理策略。如果这个异常是 RPC 框架允许重试的异常，或者这个异常类型存在于可重试异常的白名单中，我们就允许对这个请求进行重试。</p>
+<p>所有可能出现的问题，我们排查了一圈下来之后，一个可靠的重试机制就诞生了，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/5b4cd4824367514ad3d4b975f2438007.png" alt=""></p>
+<p>可靠的异常重试机制</p>
+<h2 id="总结">总结</h2>
+<p>今天我们讲解了 RPC 框架的重试机制，还有如何在约定时间内进行安全可靠地重试。</p>
+<p>这个机制是当调用端发起的请求失败时，如果配置了异常重试策略，RPC 框架会捕捉异常，对异常进行判定，符合条件则进行重试，重新发送请求。</p>
+<p>在重试的过程中，为了能够在约定的时间内进行安全可靠地重试，在每次触发重试之前，我们需要先判定下这个请求是否已经超时，如果超时了会直接返回超时异常，否则我们需要重置下这个请求的超时时间，防止因多次重试导致这个请求的处理时间超过用户配置的超时时间，从而影响到业务处理的耗时。</p>
+<p>在发起重试、负载均衡选择节点的时候，我们应该去掉重试之前出现过问题的那个节点，这样可以提高重试的成功率，并且我们允许用户配置可重试异常的白名单，这样可以让 RPC 框架的异常重试功能变得更加友好。</p>
+<p>另外，在使用 RPC 框架的重试机制时，我们要确保被调用的服务的业务逻辑是幂等的，这样才能考虑是否使用重试，这一点至关重要。</p>
+<h2 id="课后思考">课后思考</h2>
+<p>请你思考一下，在整个 RPC 调用的流程中，异常重试发生在哪个环节？</p>
+<p>欢迎留言分享你的答案，也欢迎你把文章分享给你的朋友，邀请他加入学习。我们下节课再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/">RPC实战与核心原理</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E4%B8%9A%E5%8A%A1%E5%BC%80%E5%8F%91%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF100%E4%BE%8B/12__%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E5%88%AB%E8%AE%A9%E8%87%AA%E5%B7%B1%E5%9C%A8%E5%87%BA%E9%97%AE%E9%A2%98%E7%9A%84%E6%97%B6%E5%80%99%E5%8F%98%E4%B8%BA%E7%9E%8E%E5%AD%90/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__异常处理：别让自己在出问题的时候变为瞎子</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/12__%E6%9C%89%E5%93%AA%E4%BA%9B%E4%BC%98%E7%A7%80%E7%9A%84_webassembly_%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%8E%E8%BF%90%E8%A1%8C%E6%97%B6/">
+            <span class="next-text nav-default">12__有哪些优秀的_WebAssembly_编译器与运行时？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

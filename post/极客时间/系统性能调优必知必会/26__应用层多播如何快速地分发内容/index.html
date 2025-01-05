@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>26__应用层多播：如何快速地分发内容？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是陶辉。
+[第 7 讲] 我们曾介绍了网络层的 IP 协议是如何支持多播的，这节课我们再来从应用层看看如何实现多播功能。
+当你的分布式集群只有十多个节点时，每次发布版本时，尽可以从发布服务器，将新版本的安装包通过 ftp、scp、wget 等工具分发到各个节点中。可是，一旦集群规模达到成千上万个节点时，再这么做就会带来很大的问题，文件分发的时长高达几个小时，甚至会打挂文件源终止分发流程。在微服务环境中这点尤为明显，毕竟每个 Docker 镜象的体积动辄就在数百兆字节以上。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/26__%E5%BA%94%E7%94%A8%E5%B1%82%E5%A4%9A%E6%92%AD%E5%A6%82%E4%BD%95%E5%BF%AB%E9%80%9F%E5%9C%B0%E5%88%86%E5%8F%91%E5%86%85%E5%AE%B9/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/26__%E5%BA%94%E7%94%A8%E5%B1%82%E5%A4%9A%E6%92%AD%E5%A6%82%E4%BD%95%E5%BF%AB%E9%80%9F%E5%9C%B0%E5%88%86%E5%8F%91%E5%86%85%E5%AE%B9/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="26__应用层多播：如何快速地分发内容？">
+  <meta property="og:description" content="你好，我是陶辉。
+[第 7 讲] 我们曾介绍了网络层的 IP 协议是如何支持多播的，这节课我们再来从应用层看看如何实现多播功能。
+当你的分布式集群只有十多个节点时，每次发布版本时，尽可以从发布服务器，将新版本的安装包通过 ftp、scp、wget 等工具分发到各个节点中。可是，一旦集群规模达到成千上万个节点时，再这么做就会带来很大的问题，文件分发的时长高达几个小时，甚至会打挂文件源终止分发流程。在微服务环境中这点尤为明显，毕竟每个 Docker 镜象的体积动辄就在数百兆字节以上。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="系统性能调优必知必会">
+
+  <meta itemprop="name" content="26__应用层多播：如何快速地分发内容？">
+  <meta itemprop="description" content="你好，我是陶辉。
+[第 7 讲] 我们曾介绍了网络层的 IP 协议是如何支持多播的，这节课我们再来从应用层看看如何实现多播功能。
+当你的分布式集群只有十多个节点时，每次发布版本时，尽可以从发布服务器，将新版本的安装包通过 ftp、scp、wget 等工具分发到各个节点中。可是，一旦集群规模达到成千上万个节点时，再这么做就会带来很大的问题，文件分发的时长高达几个小时，甚至会打挂文件源终止分发流程。在微服务环境中这点尤为明显，毕竟每个 Docker 镜象的体积动辄就在数百兆字节以上。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3749">
+  <meta itemprop="keywords" content="系统性能调优必知必会">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="26__应用层多播：如何快速地分发内容？">
+  <meta name="twitter:description" content="你好，我是陶辉。
+[第 7 讲] 我们曾介绍了网络层的 IP 协议是如何支持多播的，这节课我们再来从应用层看看如何实现多播功能。
+当你的分布式集群只有十多个节点时，每次发布版本时，尽可以从发布服务器，将新版本的安装包通过 ftp、scp、wget 等工具分发到各个节点中。可是，一旦集群规模达到成千上万个节点时，再这么做就会带来很大的问题，文件分发的时长高达几个小时，甚至会打挂文件源终止分发流程。在微服务环境中这点尤为明显，毕竟每个 Docker 镜象的体积动辄就在数百兆字节以上。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">26__应用层多播：如何快速地分发内容？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3749 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#认识应用层的多播协议">认识应用层的多播协议</a></li>
+        <li><a href="#应用层多播协议是如何工作的">应用层多播协议是如何工作的？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是陶辉。</p>
+<p>[第 7 讲] 我们曾介绍了网络层的 IP 协议是如何支持多播的，这节课我们再来从应用层看看如何实现多播功能。</p>
+<p>当你的分布式集群只有十多个节点时，每次发布版本时，尽可以从发布服务器，将新版本的安装包通过 ftp、scp、wget 等工具分发到各个节点中。可是，一旦集群规模达到成千上万个节点时，再这么做就会带来很大的问题，文件分发的时长高达几个小时，甚至会打挂文件源终止分发流程。在微服务环境中这点尤为明显，毕竟每个 Docker 镜象的体积动辄就在数百兆字节以上。</p>
+<p>虽然网络层的 IP 协议允许通过路由器、交换机实现高效的多播，但 IP 层很难实现文件的可靠传输，而且跨越多个局域网时路由器等网络设备对 IP 多播的支持也不好。此时，通过应用层的接力传播，就能通过多播思想大幅提升系统的传输效率，解决上述问题。</p>
+<p>除了分发文件场景外，应用层多播协议也常用于完全去中心化的分布式系统，特别是在管理成千上万个节点的状态时非常有用。比如 Gossip 就是这样一个多播协议，[第 22 讲] 介绍过的 Cassandra 数据库使用它来同步节点间的状态，比特币通过它传输账本数据，Redis 集群也使用它同步 Redis 进程间的状态。</p>
+<p>那么这节课我们就重点介绍应用层中的多播协议，并以阿里的蜻蜓、Cassandra 中的 Gossip 协议为例，看看它们的工作原理。</p>
+<h2 id="认识应用层的多播协议">认识应用层的多播协议</h2>
+<p>之所以需要应用层的多播协议，是因为网络层的 IP 多播功能（参见[第 7 讲] 的 IP 广播与组播）有以下 4 个方面的问题：</p>
+<ol>
+<li>从功能上看，IP 多播缺失了质量控制、可靠性传输等特性，无法满足绝大部分场景中的要求；</li>
+<li>从管理上看，监控跨网络的多播报文并不容易，多播地址的管理也很复杂，而且多播很容易造成网络洪峰及安全问题；</li>
+<li>从市场上看，单播报文在终端上的计费很成熟，相反，运营商对多播报文的计费要困难许多，相对缺乏推进动力；</li>
+<li>从产业协作上看，IP 多播必须由各设备厂商的路由器、交换机配合，由于网络层是由内核实现的，所以还要同步升级操作系统。</li>
+</ol>
+<p>这些因素都使得网络层的多播功能难以推广，因此，各类基于 IP 单播功能的应用层多播协议应运而生。可能有些同学对于单播、多播这些网络知识还不熟悉，下图我将传统单播、网络层多播、应用层多播放在一起对比着看，你可以很容易看到它们的区别。</p>
+<p>这里仍然以版本发布场景为例，主机 1 是发布节点，它需要将文件分发到其余 3 台主机上，其中传统单播协议的玩法，是在主机 2、3、4 上分别向主机 1 发起下载文件命令，因此主机 1 上有 3 条 TCP 下载链路，图中我用 3 种不同的颜色表示。很明显，此时主机 1 的下行流量一定会成为瓶颈，而且随着集群规模的扩大，网络链路中的路由器也会很快达到流量瓶颈。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/97ac8c15102246d453178f53d9ba18c8.png" alt=""></p>
+<p>再来看效率最高的网络层多播，主机 1 可以仅通过 1 次报文传输，将文件分发到所有主机上。在整个流程中，仅由路由器将网络报文扩散到相邻的主机、路由器上，没有任何多余的动作。如同上述所说，网络层多播的使用有很多困难，这里列出它是为了方便与应用层多播作对比。</p>
+<p>在上图的应用层多播中，文件传输分为两个阶段。首先，主机 2、3 直接从主机 1 中下载文件（参见绿色与红色线）。其次，当主机 3 完成下载后，主机 4 再从主机 3 上下载文件（参见蓝色线）。可见，相对于 IP 多播，<strong>应用层多播有以下 3 个缺点：</strong></p>
+<p>首先网络效率下降了不少，这由 2 个原因所致：</p>
+<ol>
+<li>数据在网络中有冗余，比如主机 1 将数据重复发送了 2 次（参见红色、绿色线），主机 3 既接收了一次数据，也发送了一次数据；</li>
+<li>虽然图中主机 4 从同一局域网中的主机 3 下载数据，但在复杂的互联网环境中，应用层很难掌握完整的路由器组网信息，主机 4 一旦跨网络从主机 2 上下载数据，这就增加了路由器 A 及网络链路的负载，效率进一步下降。</li>
+</ol>
+<p>其次，由于传输路径变长了，文件传输的总完成时间也变长了。比如，主机 4 的总传输路径是：主机 1 -&gt; 路由器 A -&gt; 路由器 B -&gt; 主机 3 -&gt; 路由器 B -&gt; 主机 4，既多出了主机 3、路由器 B 这两个传输环节，而且进入主机 3 后，协议栈的处理深度也增加了。</p>
+<p>最后，单次传输路径中引入了功能复杂的主机，相比仅由网络设备参与的 IP 多播，可靠性、稳定性也降低了。</p>
+<p>说完缺点，我们再来看应用层多播的优点。</p>
+<ol>
+<li>首先，它回避了 IP 多播的问题，无须改变现有组网环境，也不需要管理组播 IP 地址，立刻就可以应用在当下的生产环境中；</li>
+<li>其次，在数以万计的大规模集群下，单一发布源很容易被流量打爆，进而导致分发流程停止，应用层多播可以避免这一问题；</li>
+<li>再次，通过应用层节点的接力分发，整个传输带宽被大幅度提高了，分发速度有了数量级上的飞跃；</li>
+<li>最后，如果分发集群跨越不同传输成本的网络（比如多个区域 IDC 构成的集群），在应用层也很容易控制分发策略，进而减少高成本网络的数据传输量，提升经济性。</li>
+</ol>
+<p>所以，综合来说，**集群规模越大，应用层多播的优势也越大。**实际上十多年前，我们在使用 BT、迅雷下载时，就已经接触到应用层多播协议了，接下来我们结合 2 个服务器端的案例，看看多播协议的实现与应用。</p>
+<h2 id="应用层多播协议是如何工作的">应用层多播协议是如何工作的？</h2>
+<p>其实，应用层多播主要是指一种P2P（Peer to Peer）网络传输思想，任何基于 IP 单播的通讯协议都可以拿来使用。比如针对于在分布式集群中分发软件安装包的场景，完全可以使用 HTTP 协议实现应用层的分发，阿里巴巴开源的Dragonfly 蜻蜓就是这么做的。</p>
+<p>蜻蜓拥有 1 个中心化的集群服务节点：SuperNode，其中既可以直接保存着源文件，也可以通过 HTTP 缓存加速第三方文件源（比如 Docker 仓库）。集群中的每个节点都要启动 dfget 进程（替代了传统的 wget），它就像我们平时使用的迅雷，在下载文件的同时，也会将自己下载完成的文件传输给其他节点。其中，通过 HTTP 的 Range 文件分段下载规范，dfget 就可以实现断点续传、多线程下载等功能，如下图所示：</p>
+<p><a href="https://github.com/DarLiner/Dragonfly/blob/master/docs/zh/architecture.md"><img src="./138eccd74942628ff8e650d9e3a0aa9a.png.md" alt=""></a></p>
+<p>图片及下图来源：https://github.com/DarLiner/Dragonfly/blob/master/docs/zh/architecture.md</p>
+<p>各个 dfget 程序间通过 SuperNode 协调传输关系，这样绝大部分 dfget 程序并不需要从 SuperNode 节点下载文件。比如上图中的节点 C，通过 HTTP Range 协议从节点 A 中下载了文件的第 1 块，同时并发地从节点 B 中下载了文件的第 2 块，最后再把这些 Block 块拼接为完整的文件。</p>
+<p>这里你可能会想，这不就是一个 P2P 下载工具么？是的，但你站在集群运维的角度，这就是基于应用层多播协议的文件分发工具。当每个节点部署 dfget 服务后，新版本安装包发布时，就可以由 SuperNode 节点推送，经由各个 dfget 进程以多播的形式分发下去，此时性能会获得大幅度的提升。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/7227792b60bfeee41d4d9d204de218ad.png" alt=""></p>
+<p>上图是传统的 wget 单播与蜻蜓多播分发文件的性能对比图。我们可以看到，传统方式下，**分发客户端越多（Y 轴）总分发时长（X 轴）就越大，特别是 1200 个以上的并发节点下载文件时，会直接将文件源打爆。**而采用应用层多播方式后，下载时长要低得多，而且伴随着节点数的增加，下载时长也不会增长。</p>
+<p>蜻蜓虽然传输效率很高，但 SuperNode 却是保存着全局信息的中心节点，一旦宕机就会造成系统不可用。我们再来看去中心化的Gossip 流言协议是如何实现应用层多播的。</p>
+<p>Gossip 协议也叫 epidemic 传染病协议，工作原理如下图所示。在这个分布式网络中，并没有任何中心化节点，但只要第 1 个种子节点被感染为红色后，每个节点只需要感染其相邻的、有限的几个节点，最终就能快速感染网络中的所有节点（即仅保证最终一致性）。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/de7b15095cc60549de7107300d651a88.png" alt=""></p>
+<p>当然，所谓的“感染”就是数据的传输，这一算法由 1987 年发布的《Epidemic algorithms for replicated database maintenance》论文提出，同时证明了算法的收敛概率。Cassandra 数据库、Fabric 区块链、Consul 系统等许多去中心化的分布式系统，都使用 Gossip 协议管理集群中的节点状态。以 Cassandra 为例，每秒钟每个节点都会随机选择 1 到 3 个相邻节点，通过默认的 7000 端口传输包含节点状态的心跳信息，这样集群就可以快速发现宕机或者新增的节点。</p>
+<p><a href="https://www.linkedin.com/pulse/gossip-protocol-inside-apache-cassandra-soham-saha"><img src="./142b6303922ebcb41e26a424f8f914b6.png.md" alt=""></a></p>
+<p>图片来源：https://www.linkedin.com/pulse/gossip-protocol-inside-apache-cassandra-soham-saha</p>
+<h2 id="小结">小结</h2>
+<p>这一讲我们介绍了应用层的多播协议。</p>
+<p>网络层的 IP 多播功能有限，对网络环境也有过多的要求，所以很难通过多播协议提升传输效率。基于 IP 单播协议（如 TCP 或者 UDP），在应用代码层面实现分布式节点间的接力转发，就可以实现应用层的多播功能。</p>
+<p>在分布式集群的文件分发场景中，阿里开源的Dragonfly 蜻蜓可以将发布节点上的源文件，通过 HTTP 协议推送到集群中的每个节点上，其中每个节点在应用层都参与了多播流量分发的实现。当节点数到达千、万级时，蜻蜓仍然能保持较低的分发时延，避免发布节点被下行流量打爆。</p>
+<p>在完全去中心化的分布式集群中，每个节点都没有准确的全局信息，此时可以使用 Gossip 流言协议，通过仅向有限的相邻节点发送消息，完成整个集群的数据同步，实现最终一致性。因此，Gossip 协议常用于大规模分布集群中的节点状态同步。</p>
+<h2 id="思考题">思考题</h2>
+<p>最后，留给你一道讨论题。在 5G 完成设备层的组网后，类似华为 NewIP 这样的基础协议层也在做相应的重构，其中Multicast VPN 协议就将现有 IPv4 无法在公网中推广的多播功能，在 VPN 逻辑链路层实现了。你对未来多播协议的发展又是如何看的？欢迎你在留言区与大家一起探讨。</p>
+<p>感谢阅读，如果你觉得这节课让你了解到应用层的多播协议，而通过它可以大幅度提升分布式集群的网络传输效率的话，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/">系统性能调优必知必会</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E9%AB%98%E6%89%8B%E8%AF%BE/26__%E4%B8%80%E4%B8%AA%E5%B5%8C%E5%85%A5%E5%BC%8F%E5%AE%9E%E6%97%B6%E7%B3%BB%E7%BB%9F%E9%83%BD%E8%A6%81%E4%BB%8E%E5%93%AA%E4%BA%9B%E6%96%B9%E9%9D%A2%E5%81%9A%E5%A5%BD%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">26__一个嵌入式实时系统都要从哪些方面做好性能优化？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BA%92%E8%81%94%E7%BD%91%E4%BA%BA%E7%9A%84%E8%8B%B1%E8%AF%AD%E7%A7%81%E6%95%99%E8%AF%BE/26__%E9%98%85%E8%AF%BB%E5%87%86%E5%A4%87%E5%BD%93%E6%88%91%E4%BB%AC%E8%B0%88%E8%AE%BA%E5%BF%AB%E9%80%9F%E9%98%85%E8%AF%BB%E6%97%B6%E6%88%91%E4%BB%AC%E7%A9%B6%E7%AB%9F%E5%9C%A8%E8%B0%88%E8%AE%BA%E4%BB%80%E4%B9%88/">
+            <span class="next-text nav-default">26__阅读准备：当我们谈论快速阅读时，我们究竟在谈论什么？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

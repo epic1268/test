@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>07__Cond：条件变量的实现机制及避坑指南 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是鸟窝。
+在写 Go 程序之前，我曾经写了 10 多年的 Java 程序，也面试过不少 Java 程序员。在 Java 面试中，经常被问到的一个知识点就是等待 / 通知（wait/notify）机制。面试官经常会这样考察候选人：请实现一个限定容量的队列（queue），当队列满或者空的时候，利用等待 / 通知机制实现阻塞或者唤醒。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/07__cond%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8F%E7%9A%84%E5%AE%9E%E7%8E%B0%E6%9C%BA%E5%88%B6%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/07__cond%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8F%E7%9A%84%E5%AE%9E%E7%8E%B0%E6%9C%BA%E5%88%B6%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="07__Cond：条件变量的实现机制及避坑指南">
+  <meta property="og:description" content="你好，我是鸟窝。
+在写 Go 程序之前，我曾经写了 10 多年的 Java 程序，也面试过不少 Java 程序员。在 Java 面试中，经常被问到的一个知识点就是等待 / 通知（wait/notify）机制。面试官经常会这样考察候选人：请实现一个限定容量的队列（queue），当队列满或者空的时候，利用等待 / 通知机制实现阻塞或者唤醒。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go并发编程实战课">
+
+  <meta itemprop="name" content="07__Cond：条件变量的实现机制及避坑指南">
+  <meta itemprop="description" content="你好，我是鸟窝。
+在写 Go 程序之前，我曾经写了 10 多年的 Java 程序，也面试过不少 Java 程序员。在 Java 面试中，经常被问到的一个知识点就是等待 / 通知（wait/notify）机制。面试官经常会这样考察候选人：请实现一个限定容量的队列（queue），当队列满或者空的时候，利用等待 / 通知机制实现阻塞或者唤醒。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5198">
+  <meta itemprop="keywords" content="Go并发编程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="07__Cond：条件变量的实现机制及避坑指南">
+  <meta name="twitter:description" content="你好，我是鸟窝。
+在写 Go 程序之前，我曾经写了 10 多年的 Java 程序，也面试过不少 Java 程序员。在 Java 面试中，经常被问到的一个知识点就是等待 / 通知（wait/notify）机制。面试官经常会这样考察候选人：请实现一个限定容量的队列（queue），当队列满或者空的时候，利用等待 / 通知机制实现阻塞或者唤醒。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">07__Cond：条件变量的实现机制及避坑指南</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5198 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#go-标准库的-cond">Go 标准库的 Cond</a></li>
+        <li><a href="#cond-的基本用法">Cond 的基本用法</a></li>
+        <li><a href="#cond-的实现原理">Cond 的实现原理</a></li>
+        <li><a href="#使用-cond-的-2-个常见错误">使用 Cond 的 2 个常见错误</a></li>
+        <li><a href="#知名项目中-cond-的使用">知名项目中 Cond 的使用</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是鸟窝。</p>
+<p>在写 Go 程序之前，我曾经写了 10 多年的 Java 程序，也面试过不少 Java 程序员。在 Java 面试中，经常被问到的一个知识点就是等待 / 通知（wait/notify）机制。面试官经常会这样考察候选人：请实现一个限定容量的队列（queue），当队列满或者空的时候，利用等待 / 通知机制实现阻塞或者唤醒。</p>
+<p>在 Go 中，也可以实现一个类似的限定容量的队列，而且实现起来也比较简单，只要用条件变量（Cond）并发原语就可以。Cond 并发原语相对来说不是那么常用，但是在特定的场景使用会事半功倍，比如你需要在唤醒一个或者所有的等待者做一些检查操作的时候。</p>
+<p>那么今天这一讲，我们就学习下 Cond 这个并发原语。</p>
+<h2 id="go-标准库的-cond">Go 标准库的 Cond</h2>
+<p>Go 标准库提供 Cond 原语的目的是，为等待 / 通知场景下的并发问题提供支持。Cond 通常应用于等待某个条件的一组 goroutine，等条件变为 true 的时候，其中一个 goroutine 或者所有的 goroutine 都会被唤醒执行。</p>
+<p>顾名思义，Cond 是和某个条件相关，这个条件需要一组 goroutine 协作共同完成，在条件还没有满足的时候，所有等待这个条件的 goroutine 都会被阻塞住，只有这一组 goroutine 通过协作达到了这个条件，等待的 goroutine 才可能继续进行下去。</p>
+<p>那这里等待的条件是什么呢？等待的条件，可以是某个变量达到了某个阈值或者某个时间点，也可以是一组变量分别都达到了某个阈值，还可以是某个对象的状态满足了特定的条件。总结来讲，等待的条件是一种可以用来计算结果是 true 还是 false 的条件。</p>
+<p>从开发实践上，我们真正使用 Cond 的场景比较少，因为一旦遇到需要使用 Cond 的场景，我们更多地会使用 Channel 的方式（我会在第 12 和第 13 讲展开 Channel 的用法）去实现，因为那才是更地道的 Go 语言的写法，甚至 Go 的开发者有个“把 Cond 从标准库移除”的提议（issue 21165）。而有的开发者认为，Cond 是唯一难以掌握的 Go 并发原语。至于其中原因，我先卖个关子，到这一讲的后半部分我再和你解释。</p>
+<p>今天，这一讲我们就带你仔细地学一学 Cond 这个并发原语吧。</p>
+<h2 id="cond-的基本用法">Cond 的基本用法</h2>
+<p>标准库中的 Cond 并发原语初始化的时候，需要关联一个 Locker 接口的实例，一般我们使用 Mutex 或者 RWMutex。</p>
+<p>我们看一下 Cond 的实现：</p>
+<p>type Cond<br>
+func NeWCond(l Locker) *Cond<br>
+func (c *Cond) Broadcast()<br>
+func (c *Cond) Signal()<br>
+func (c *Cond) Wait()</p>
+<p>首先，Cond 关联的 Locker 实例可以通过 c.L 访问，它内部维护着一个先入先出的等待队列。</p>
+<p>然后，我们分别看下它的三个方法 Broadcast、Signal 和 Wait 方法。</p>
+<p><strong>Signal 方法</strong>，允许调用者 Caller 唤醒一个等待此 Cond 的 goroutine。如果此时没有等待的 goroutine，显然无需通知 waiter；如果 Cond 等待队列中有一个或者多个等待的 goroutine，则需要从等待队列中移除第一个 goroutine 并把它唤醒。在其他编程语言中，比如 Java 语言中，Signal 方法也被叫做 notify 方法。</p>
+<p>调用 Signal 方法时，不强求你一定要持有 c.L 的锁。</p>
+<p><strong>Broadcast 方法</strong>，允许调用者 Caller 唤醒所有等待此 Cond 的 goroutine。如果此时没有等待的 goroutine，显然无需通知 waiter；如果 Cond 等待队列中有一个或者多个等待的 goroutine，则清空所有等待的 goroutine，并全部唤醒。在其他编程语言中，比如 Java 语言中，Broadcast 方法也被叫做 notifyAll 方法。</p>
+<p>同样地，调用 Broadcast 方法时，也不强求你一定持有 c.L 的锁。</p>
+<p><strong>Wait 方法</strong>，会把调用者 Caller 放入 Cond 的等待队列中并阻塞，直到被 Signal 或者 Broadcast 的方法从等待队列中移除并唤醒。</p>
+<p>调用 Wait 方法时必须要持有 c.L 的锁。</p>
+<p>Go 实现的 sync.Cond 的方法名是 Wait、Signal 和 Broadcast，这是计算机科学中条件变量的通用方法名。比如，C 语言中对应的方法名是 pthread_cond_wait、pthread_cond_signal 和 pthread_cond_broadcast。</p>
+<p>知道了 Cond 提供的三个方法后，我们再通过一个百米赛跑开始时的例子，来学习下 <strong>Cond 的使用方法</strong>。10 个运动员进入赛场之后需要先做拉伸活动活动筋骨，向观众和粉丝招手致敬，在自己的赛道上做好准备；等所有的运动员都准备好之后，裁判员才会打响发令枪。</p>
+<p>每个运动员做好准备之后，将 ready 加一，表明自己做好准备了，同时调用 Broadcast 方法通知裁判员。因为裁判员只有一个，所以这里可以直接替换成 Signal 方法调用。调用 Broadcast 方法的时候，我们并没有请求 c.L 锁，只是在更改等待变量的时候才使用到了锁。</p>
+<p>裁判员会等待运动员都准备好（第 22 行）。虽然每个运动员准备好之后都唤醒了裁判员，但是裁判员被唤醒之后需要检查等待条件是否满足（<strong>运动员都准备好了</strong>）。可以看到，裁判员被唤醒之后一定要检查等待条件，如果条件不满足还是要继续等待。</p>
+<p>func main() {<br>
+c := sync.NewCond(&amp;sync.Mutex{})<br>
+var ready int</p>
+<pre><code>for i := 0; i &lt; 10; i++ {  
+    go func(i int) {  
+        time.Sleep(time.Duration(rand.Int63n(10)) * time.Second)  
+
+        // 加锁更改等待条件  
+        c.L.Lock()  
+        ready++  
+        c.L.Unlock()  
+
+        log.Printf(&quot;运动员#%d 已准备就绪\n&quot;, i)  
+        // 广播唤醒所有的等待者  
+        c.Broadcast()  
+    }(i)  
+}  
+
+c.L.Lock()  
+for ready != 10 {  
+    c.Wait()  
+    log.Println(&quot;裁判员被唤醒一次&quot;)  
+}  
+c.L.Unlock()  
+
+//所有的运动员是否就绪  
+log.Println(&quot;所有运动员都准备就绪。比赛开始，3，2，1, ......&quot;)  
+</code></pre>
+<p>}</p>
+<p>你看，Cond 的使用其实没那么简单。它的复杂在于：一，这段代码有时候需要加锁，有时候可以不加；二，Wait 唤醒后需要检查条件；三，条件变量的更改，其实是需要原子操作或者互斥锁保护的。所以，有的开发者会认为，Cond 是唯一难以掌握的 Go 并发原语。</p>
+<p>我们继续看看 Cond 的实现原理。</p>
+<h2 id="cond-的实现原理">Cond 的实现原理</h2>
+<p>其实，Cond 的实现非常简单，或者说复杂的逻辑已经被 Locker 或者 runtime 的等待队列实现了。我们直接看看 Cond 的源码吧。</p>
+<p>type Cond struct {<br>
+noCopy noCopy</p>
+<pre><code>// 当观察或者修改等待条件的时候需要加锁  
+L Locker  
+
+// 等待队列  
+notify  notifyList  
+checker copyChecker  
+</code></pre>
+<p>}</p>
+<p>func NewCond(l Locker) *Cond {<br>
+return &amp;Cond{L: l}<br>
+}</p>
+<p>func (c *Cond) Wait() {<br>
+c.checker.check()<br>
+// 增加到等待队列中<br>
+t := runtime_notifyListAdd(&amp;c.notify)<br>
+c.L.Unlock()<br>
+// 阻塞休眠直到被唤醒<br>
+runtime_notifyListWait(&amp;c.notify, t)<br>
+c.L.Lock()<br>
+}</p>
+<p>func (c *Cond) Signal() {<br>
+c.checker.check()<br>
+runtime_notifyListNotifyOne(&amp;c.notify)<br>
+}</p>
+<p>func (c *Cond) Broadcast() {<br>
+c.checker.check()<br>
+runtime_notifyListNotifyAll(&amp;c.notify）<br>
+}</p>
+<p>这部分源码确实很简单，我来带你学习下其中比较关键的逻辑。</p>
+<p>runtime_notifyListXXX 是运行时实现的方法，实现了一个等待 / 通知的队列。如果你想深入学习这部分，可以再去看看 runtime/sema.go 代码中。</p>
+<p>copyChecker 是一个辅助结构，可以在运行时检查 Cond 是否被复制使用。</p>
+<p>Signal 和 Broadcast 只涉及到 notifyList 数据结构，不涉及到锁。</p>
+<p>Wait 把调用者加入到等待队列时会释放锁，在被唤醒之后还会请求锁。在阻塞休眠期间，调用者是不持有锁的，这样能让其他 goroutine 有机会检查或者更新等待变量。</p>
+<p>我们继续看看使用 Cond 常见的两个错误，一个是调用 Wait 的时候没有加锁，另一个是没有检查条件是否满足程序就继续执行了。</p>
+<h2 id="使用-cond-的-2-个常见错误">使用 Cond 的 2 个常见错误</h2>
+<p>我们先看 <strong>Cond 最常见的使用错误，也就是调用 Wait 的时候没有加锁</strong>。</p>
+<p>以前面百米赛跑的程序为例，在调用 cond.Wait 时，把前后的 Lock/Unlock 注释掉，如下面的代码中的第 20 行和第 25 行：</p>
+<p>func main() {<br>
+c := sync.NewCond(&amp;sync.Mutex{})<br>
+var ready int</p>
+<pre><code>for i := 0; i &lt; 10; i++ {  
+    go func(i int) {  
+        time.Sleep(time.Duration(rand.Int63n(10)) * time.Second)  
+
+        // 加锁更改等待条件  
+        c.L.Lock()  
+        ready++  
+        c.L.Unlock()  
+
+        log.Printf(&quot;运动员#%d 已准备就绪\n&quot;, i)  
+        // 广播唤醒所有的等待者  
+        c.Broadcast()  
+    }(i)  
+}  
+
+// c.L.Lock()  
+for ready != 10 {  
+    c.Wait()  
+    log.Println(&quot;裁判员被唤醒一次&quot;)  
+}  
+// c.L.Unlock()  
+
+//所有的运动员是否就绪  
+log.Println(&quot;所有运动员都准备就绪。比赛开始，3，2，1, ......&quot;)  
+</code></pre>
+<p>}</p>
+<p>再运行程序，就会报释放未加锁的 panic：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/cc46f66d94db422b3cb08e4f83a661c8.png" alt=""></p>
+<p>出现这个问题的原因在于，cond.Wait 方法的实现是，把当前调用者加入到 notify 队列之中后会释放锁（如果不释放锁，其他 Wait 的调用者就没有机会加入到 notify 队列中了），然后一直等待；等调用者被唤醒之后，又会去争抢这把锁。如果调用 Wait 之前不加锁的话，就有可能 Unlock 一个未加锁的 Locker。所以切记，<strong>调用 cond.Wait 方法之前一定要加锁</strong>。</p>
+<p>使用 Cond 的另一个常见错误是，只调用了一次 Wait，没有检查等待条件是否满足，结果条件没满足，程序就继续执行了。出现这个问题的原因在于，误以为 Cond 的使用，就像 WaitGroup 那样调用一下 Wait 方法等待那么简单。比如下面的代码中，把第 21 行和第 24 行注释掉：</p>
+<p>func main() {<br>
+c := sync.NewCond(&amp;sync.Mutex{})<br>
+var ready int</p>
+<pre><code>for i := 0; i &lt; 10; i++ {  
+    go func(i int) {  
+        time.Sleep(time.Duration(rand.Int63n(10)) * time.Second)  
+
+        // 加锁更改等待条件  
+        c.L.Lock()  
+        ready++  
+        c.L.Unlock()  
+
+        log.Printf(&quot;运动员#%d 已准备就绪\n&quot;, i)  
+        // 广播唤醒所有的等待者  
+        c.Broadcast()  
+    }(i)  
+}  
+
+c.L.Lock()  
+// for ready != 10 {  
+c.Wait()  
+log.Println(&quot;裁判员被唤醒一次&quot;)  
+// }  
+c.L.Unlock()  
+
+//所有的运动员是否就绪  
+log.Println(&quot;所有运动员都准备就绪。比赛开始，3，2，1, ......&quot;)  
+</code></pre>
+<p>}</p>
+<p>运行这个程序，你会发现，可能只有几个运动员准备好之后程序就运行完了，而不是我们期望的所有运动员都准备好才进行下一步。原因在于，每一个运动员准备好之后都会唤醒所有的等待者，也就是这里的裁判员，比如第一个运动员准备好后就唤醒了裁判员，结果这个裁判员傻傻地没做任何检查，以为所有的运动员都准备好了，就继续执行了。</p>
+<p>所以，我们一定要<strong>记住</strong>，waiter goroutine 被唤醒<strong>不等于</strong>等待条件被满足，只是有 goroutine 把它唤醒了而已，等待条件有可能已经满足了，也有可能不满足，我们需要进一步检查。你也可以理解为，等待者被唤醒，只是得到了一次检查的机会而已。</p>
+<p>到这里，我们小结下。如果你想在使用 Cond 的时候避免犯错，只要时刻记住调用 cond.Wait 方法之前一定要加锁，以及 waiter goroutine 被唤醒不等于等待条件被满足这两个知识点。</p>
+<h2 id="知名项目中-cond-的使用">知名项目中 Cond 的使用</h2>
+<p>Cond 在实际项目中被使用的机会比较少，原因总结起来有两个。</p>
+<p>第一，同样的场景我们会使用其他的并发原语来替代。Go 特有的 Channel 类型，有一个应用很广泛的模式就是通知机制，这个模式使用起来也特别简单。所以很多情况下，我们会使用 Channel 而不是 Cond 实现 wait/notify 机制。</p>
+<p>第二，对于简单的 wait/notify 场景，比如等待一组 goroutine 完成之后继续执行余下的代码，我们会使用 WaitGroup 来实现。因为 WaitGroup 的使用方法更简单，而且不容易出错。比如，上面百米赛跑的问题，就可以很方便地使用 WaitGroup 来实现。</p>
+<p>所以，我在这一讲开头提到，Cond 的使用场景很少。先前的标准库内部有几个地方使用了 Cond，比如 io/pipe.go 等，后来都被其他的并发原语（比如 Channel）替换了，sync.Cond 的路越走越窄。但是，还是有一批忠实的“粉丝”坚持在使用 Cond，原因在于 Cond 有三点特性是 Channel 无法替代的：</p>
+<ol>
+<li>Cond 和一个 Locker 关联，可以利用这个 Locker 对相关的依赖条件更改提供保护。</li>
+<li>Cond 可以同时支持 Signal 和 Broadcast 方法，而 Channel 只能同时支持其中一种。</li>
+<li>Cond 的 Broadcast 方法可以被重复调用。等待条件再次变成不满足的状态后，我们又可以调用 Broadcast 再次唤醒等待的 goroutine。这也是 Channel 不能支持的，Channel 被 close 掉了之后不支持再 open。</li>
+</ol>
+<p>开源项目中使用 sync.Cond 的代码少之又少，包括标准库原先一些使用 Cond 的代码也改成使用 Channel 实现了，所以别说找 Cond 相关的使用 Bug 了，想找到的一个使用的例子都不容易，我找了 Kubernetes 中的一个例子，我们一起看看它是如何使用 Cond 的。</p>
+<p>Kubernetes 项目中定义了优先级队列 PriorityQueue 这样一个数据结构，用来实现 Pod 的调用。它内部有三个 Pod 的队列，即 activeQ、podBackoffQ 和 unschedulableQ，其中 activeQ 就是用来调度的活跃队列（heap）。</p>
+<p>Pop 方法调用的时候，如果这个队列为空，并且这个队列没有 Close 的话，会调用 Cond 的 Wait 方法等待。</p>
+<p>你可以看到，调用 Wait 方法的时候，调用者是持有锁的，并且被唤醒的时候检查等待条件（队列是否为空）。</p>
+<p>// 从队列中取出一个元素<br>
+func (p *PriorityQueue) Pop() (*framework.QueuedPodInfo, error) {<br>
+p.lock.Lock()<br>
+defer p.lock.Unlock()<br>
+for p.activeQ.Len() == 0 { // 如果队列为空<br>
+if p.closed {<br>
+return nil, fmt.Errorf(queueClosed)<br>
+}<br>
+p.cond.Wait() // 等待，直到被唤醒<br>
+}<br>
+&hellip;&hellip;<br>
+return pInfo, err<br>
+}</p>
+<p>当 activeQ 增加新的元素时，会调用条件变量的 Boradcast 方法，通知被 Pop 阻塞的调用者。</p>
+<p>// 增加元素到队列中<br>
+func (p *PriorityQueue) Add(pod *v1.Pod) error {<br>
+p.lock.Lock()<br>
+defer p.lock.Unlock()<br>
+pInfo := p.newQueuedPodInfo(pod)<br>
+if err := p.activeQ.Add(pInfo); err != nil {//增加元素到队列中<br>
+klog.Errorf(&ldquo;Error adding pod %v to the scheduling queue: %v&rdquo;, nsNameForPod(pod), err)<br>
+return err<br>
+}<br>
+&hellip;&hellip;<br>
+p.cond.Broadcast() //通知其它等待的 goroutine，队列中有元素了</p>
+<pre><code>return nil  
+</code></pre>
+<p>}</p>
+<p>这个优先级队列被关闭的时候，也会调用 Broadcast 方法，避免被 Pop 阻塞的调用者永远 hang 住。</p>
+<p>func (p *PriorityQueue) Close() {<br>
+p.lock.Lock()<br>
+defer p.lock.Unlock()<br>
+close(p.stop)<br>
+p.closed = true<br>
+p.cond.Broadcast() //关闭时通知等待的 goroutine，避免它们永远等待<br>
+}</p>
+<p>你可以思考一下，这里为什么使用 Cond 这个并发原语，能不能换成 Channel 实现呢？</p>
+<h2 id="总结">总结</h2>
+<p>好了，我们来做个总结。</p>
+<p>Cond 是为等待 / 通知场景下的并发问题提供支持的。它提供了条件变量的三个基本方法 Signal、Broadcast 和 Wait，为并发的 goroutine 提供等待 / 通知机制。</p>
+<p>在实践中，处理等待 / 通知的场景时，我们常常会使用 Channel 替换 Cond，因为 Channel 类型使用起来更简洁，而且不容易出错。但是对于需要重复调用 Broadcast 的场景，比如上面 Kubernetes 的例子，每次往队列中成功增加了元素后就需要调用 Broadcast 通知所有的等待者，使用 Cond 就再合适不过了。</p>
+<p>使用 Cond 之所以容易出错，就是 Wait 调用需要加锁，以及被唤醒后一定要检查条件是否真的已经满足。你需要牢记这两点。</p>
+<p>虽然我们讲到的百米赛跑的例子，也可以通过 WaitGroup 来实现，但是本质上 WaitGroup 和 Cond 是有区别的：WaitGroup 是主 goroutine 等待确定数量的子 goroutine 完成任务；而 Cond 是等待某个条件满足，这个条件的修改可以被任意多的 goroutine 更新，而且 Cond 的 Wait 不关心也不知道其他 goroutine 的数量，只关心等待条件。而且 Cond 还有单个通知的机制，也就是 Signal 方法。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/e6de6ceb094cba391f7228be9436cee9.png" alt=""></p>
+<h2 id="思考题">思考题</h2>
+<ol>
+<li>一个 Cond 的 waiter 被唤醒的时候，为什么需要再检查等待条件，而不是唤醒后进行下一步？</li>
+<li>你能否利用 Cond 实现一个容量有限的 queue？</li>
+</ol>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得有所收获，也欢迎你把今天的内容分享给你的朋友或同事。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">Go并发编程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/ios%E5%BC%80%E5%8F%91%E9%AB%98%E6%89%8B%E8%AF%BE/07__clanginfer_%E5%92%8C_oclint_%E6%88%91%E4%BB%AC%E5%BA%94%E8%AF%A5%E4%BD%BF%E7%94%A8%E8%B0%81%E6%9D%A5%E5%81%9A%E9%9D%99%E6%80%81%E5%88%86%E6%9E%90/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">07__Clang、Infer_和_OCLint_，我们应该使用谁来做静态分析？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%97%E5%89%91%E9%94%8B%E7%9A%84c&#43;&#43;%E5%AE%9E%E6%88%98%E7%AC%94%E8%AE%B0/07__const_volatile_mutable%E5%B8%B8%E9%87%8F_%E5%8F%98%E9%87%8F%E7%A9%B6%E7%AB%9F%E6%98%AF%E6%80%8E%E4%B9%88%E5%9B%9E%E4%BA%8B/">
+            <span class="next-text nav-default">07__const_volatile_mutable：常量_变量究竟是怎么回事？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

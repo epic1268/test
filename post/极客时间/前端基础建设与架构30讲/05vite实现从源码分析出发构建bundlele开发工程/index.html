@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>05Vite实现：从源码分析出发，构建bundlele开发工程 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="通过上一讲的内容，相信你已经了解了现代化构建流程和处理内容。这一讲，我将结合 Webpack 为主的成熟方案现阶段的“不足”，从源码实现角度带你分析 Vite 的设计哲学，同时为“解析 Webpack 源码，实现自己的构建工具”一讲内容打下基础，循序渐进，最终你将能够开发一个自己的构建工具。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/05vite%E5%AE%9E%E7%8E%B0%E4%BB%8E%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%E5%87%BA%E5%8F%91%E6%9E%84%E5%BB%BAbundlele%E5%BC%80%E5%8F%91%E5%B7%A5%E7%A8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/05vite%E5%AE%9E%E7%8E%B0%E4%BB%8E%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%E5%87%BA%E5%8F%91%E6%9E%84%E5%BB%BAbundlele%E5%BC%80%E5%8F%91%E5%B7%A5%E7%A8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="05Vite实现：从源码分析出发，构建bundlele开发工程">
+  <meta property="og:description" content="通过上一讲的内容，相信你已经了解了现代化构建流程和处理内容。这一讲，我将结合 Webpack 为主的成熟方案现阶段的“不足”，从源码实现角度带你分析 Vite 的设计哲学，同时为“解析 Webpack 源码，实现自己的构建工具”一讲内容打下基础，循序渐进，最终你将能够开发一个自己的构建工具。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="前端基础建设与架构30讲">
+
+  <meta itemprop="name" content="05Vite实现：从源码分析出发，构建bundlele开发工程">
+  <meta itemprop="description" content="通过上一讲的内容，相信你已经了解了现代化构建流程和处理内容。这一讲，我将结合 Webpack 为主的成熟方案现阶段的“不足”，从源码实现角度带你分析 Vite 的设计哲学，同时为“解析 Webpack 源码，实现自己的构建工具”一讲内容打下基础，循序渐进，最终你将能够开发一个自己的构建工具。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5125">
+  <meta itemprop="keywords" content="前端基础建设与架构30讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="05Vite实现：从源码分析出发，构建bundlele开发工程">
+  <meta name="twitter:description" content="通过上一讲的内容，相信你已经了解了现代化构建流程和处理内容。这一讲，我将结合 Webpack 为主的成熟方案现阶段的“不足”，从源码实现角度带你分析 Vite 的设计哲学，同时为“解析 Webpack 源码，实现自己的构建工具”一讲内容打下基础，循序渐进，最终你将能够开发一个自己的构建工具。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">05Vite实现：从源码分析出发，构建bundlele开发工程</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5125 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>通过上一讲的内容，相信你已经了解了现代化构建流程和处理内容。这一讲，我将结合 Webpack 为主的成熟方案现阶段的“不足”，从源码实现角度带你分析 Vite 的设计哲学，同时为“解析 Webpack 源码，实现自己的构建工具”一讲内容打下基础，循序渐进，最终你将能够开发一个自己的构建工具。</p>
+<p>Vite 的“横空出世”</p>
+<p>Vite 是由 Vue 作者尤雨溪开发的 Web 开发工具，尤雨溪在微博上推广时对 Vite 做了简短介绍：</p>
+<p>Vite，一个基于浏览器原生 ES imports 的开发服务器。利用浏览器去解析 imports，在服务器端按需编译返回，完全跳过了打包这个概念，服务器随起随用。同时不仅有 Vue 文件支持，还搞定了热更新，而且热更新的速度不会随着模块增多而变慢。针对生产环境则可以把同一份代码用 Rollup 打包。虽然现在还比较粗糙，但这个方向我觉得是有潜力的，做得好可以彻底解决改一行代码等半天热更新的问题。</p>
+<p>从这段话中我们能够提炼一些关键点：</p>
+<p>Vite 基于 ESM，因此实现了快速启动和即时模块热更新能力；</p>
+<p>Vite 在服务端实现了按需编译。</p>
+<p>经验丰富的开发者通过上述介绍，似乎就能给出 Vite 的基本流程，甚至可以说得更直白一些：Vite 在开发环境下并没有打包和构建过程。</p>
+<p>开发者在代码中写到的 ESM 导入语法会直接发送给服务器，而服务器也直接将 ESM 模块内容运行处理后，下发给浏览器。接着，现代浏览器通过解析 script module，对每一个 import 到的模块进行 HTTP 请求，服务器继续对这些 HTTP 请求进行处理并响应。</p>
+<p>Vite 实现原理解读</p>
+<p>Vite 思想比较容易理解，实现起来也并不复杂。接下来，我们就对 Vite 源码进行分析，帮助你更好地体会它的设计哲学和实现技巧。</p>
+<p>首先，我们打造一个学习环境，创建一个基于 Vite 的应用，并启动：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">npm init vite-app vite-app
+</span></span><span class="line"><span class="cl">cd vite-app
+</span></span><span class="line"><span class="cl">npm install
+</span></span><span class="line"><span class="cl">npm run dev
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>得到以下目录结构和页面内容：</p>
+<p>其中浏览器请求：
+http://localhost:3000/
+，得到的内容即是我们应用项目中的 index.html 内容。</p>
+<p>在项目 packaga.json 中，我们看到：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&#34;scripts&#34;: {
+</span></span><span class="line"><span class="cl">    &#34;dev&#34;: &#34;vite&#34;,
+</span></span><span class="line"><span class="cl">    // ...
+</span></span><span class="line"><span class="cl"> },
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>找到 Vite 源码中，命令行实现部分：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">if (!options.command || options.command === &#39;serve&#39;) {
+</span></span><span class="line"><span class="cl">	runServe(options)
+</span></span><span class="line"><span class="cl">} else if (options.command === &#39;build&#39;) {
+</span></span><span class="line"><span class="cl">	runBuild(options)
+</span></span><span class="line"><span class="cl">} else if (options.command === &#39;optimize&#39;) {
+</span></span><span class="line"><span class="cl">	runOptimize(options)
+</span></span><span class="line"><span class="cl">} else {
+</span></span><span class="line"><span class="cl">	console.error(chalk.red(`unknown command: ${options.command}`))
+</span></span><span class="line"><span class="cl">	process.exit(1)
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面代码，根据不同的命令行命令，执行不同的入口函数。</p>
+<p>在开发模式下，Vite 通过 runServe 方法，启动了一个 koaServer，来实现对浏览器请求的响应，runServer 实现如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="n">server</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;./server&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">createServer</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>createServer 方法实现，我们可以精简为以下内容：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">export</span> <span class="n">function</span> <span class="n">createServer</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">ServerConfig</span><span class="p">):</span> <span class="n">Server</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">root</span> <span class="o">=</span> <span class="n">process</span><span class="o">.</span><span class="n">cwd</span><span class="p">(),</span>
+</span></span><span class="line"><span class="cl">    <span class="n">configureServer</span> <span class="o">=</span> <span class="p">[],</span>
+</span></span><span class="line"><span class="cl">    <span class="n">resolvers</span> <span class="o">=</span> <span class="p">[],</span>
+</span></span><span class="line"><span class="cl">    <span class="n">alias</span> <span class="o">=</span> <span class="p">{},</span>
+</span></span><span class="line"><span class="cl">    <span class="n">transforms</span> <span class="o">=</span> <span class="p">[],</span>
+</span></span><span class="line"><span class="cl">    <span class="n">vueCustomBlockTransforms</span> <span class="o">=</span> <span class="p">{},</span>
+</span></span><span class="line"><span class="cl">    <span class="n">optimizeDeps</span> <span class="o">=</span> <span class="p">{},</span>
+</span></span><span class="line"><span class="cl">    <span class="n">enableEsbuild</span> <span class="o">=</span> <span class="bp">true</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="o">=</span> <span class="n">config</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">创建</span> <span class="n">Koa</span> <span class="err">实例</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">app</span> <span class="o">=</span> <span class="n">new</span> <span class="n">Koa</span><span class="o">&lt;</span><span class="n">State</span><span class="p">,</span> <span class="n">Context</span><span class="o">&gt;</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">server</span> <span class="o">=</span> <span class="n">resolveServer</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">callback</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">resolver</span> <span class="o">=</span> <span class="n">createResolver</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">resolvers</span><span class="p">,</span> <span class="n">alias</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">相关上下文信息</span> 
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">context</span><span class="p">:</span> <span class="n">ServerPluginContext</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">root</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">app</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">server</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">resolver</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">config</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">port</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">port</span> <span class="o">||</span> <span class="mi">3000</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">一个简单中间件，扩充</span> <span class="n">context</span> <span class="err">上下文内容</span>
+</span></span><span class="line"><span class="cl">  <span class="n">app</span><span class="o">.</span><span class="n">use</span><span class="p">((</span><span class="n">ctx</span><span class="p">,</span> <span class="n">next</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="ne">Object</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">ctx</span><span class="o">.</span><span class="n">read</span> <span class="o">=</span> <span class="n">cachedRead</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">null</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">next</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">resolvedPlugins</span> <span class="o">=</span> <span class="p">[</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="o">...</span>
+</span></span><span class="line"><span class="cl">  <span class="p">]</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">resolvedPlugins</span><span class="o">.</span><span class="n">forEach</span><span class="p">((</span><span class="n">m</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="n">m</span> <span class="o">&amp;&amp;</span> <span class="n">m</span><span class="p">(</span><span class="n">context</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">listen</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">listen</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="n">server</span><span class="o">.</span><span class="n">listen</span> <span class="o">=</span> <span class="p">(</span><span class="n">async</span> <span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">number</span><span class="p">,</span> <span class="o">...</span><span class="n">args</span><span class="p">:</span> <span class="n">any</span><span class="p">[])</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">optimizeDeps</span><span class="o">.</span><span class="n">auto</span> <span class="o">!==</span> <span class="bp">false</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">await</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;../optimizer&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">optimizeDeps</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">listener</span> <span class="o">=</span> <span class="n">listen</span><span class="p">(</span><span class="n">port</span><span class="p">,</span> <span class="o">...</span><span class="n">args</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">context</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">address</span><span class="p">()</span><span class="o">.</span><span class="n">port</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">listener</span>
+</span></span><span class="line"><span class="cl">  <span class="p">})</span> <span class="n">as</span> <span class="n">any</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">server</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>浏览器在访问
+http://localhost:3000/
+后，得到了主体为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;body&gt;
+</span></span><span class="line"><span class="cl">  &lt;di v id=&#34;app&#34;&gt;&lt;/div&gt;
+</span></span><span class="line"><span class="cl">  &lt;script type=&#34;module&#34; src=&#34;/src/main.js&#34;&gt;&lt;/script&gt;
+</span></span><span class="line"><span class="cl">&lt;/body&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>的内容。</p>
+<p>依据 ESM 规范在浏览器 script 标签中的实现，对于</p>
+<script type="module" src="./bar.js"></script>
+<p>内容：当出现 script 标签 type 属性为 module 时，浏览器将会请求模块相应内容。</p>
+<p>另一种 ESM 规范在浏览器 script 标签中的实现为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">&lt;script type=&#34;module&#34;&gt;
+</span></span><span class="line"><span class="cl">  import { bar } from &#39;./bar.js‘
+</span></span><span class="line"><span class="cl">&lt;/script&gt;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>浏览器会发起 HTTP 请求，请求 HTTP Server 托管的 bar.js。</p>
+<p>我们可以看到，经过 Vite Server 处理 http://localhost:3000/src/main.js 请求后，最终返回了：</p>
+<p>返回内容和我们项目中的 ./src/main.js 略有差别：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">import { createApp } from &#39;vue&#39;
+</span></span><span class="line"><span class="cl">import App from &#39;./App.vue&#39;
+</span></span><span class="line"><span class="cl">import &#39;./index.css&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>现在变为：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">import { createApp } from &#39;/@modules/vue.js&#39;
+</span></span><span class="line"><span class="cl">import App from &#39;/src/App.vue&#39;
+</span></span><span class="line"><span class="cl">import &#39;/src/index.css?import&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里我们拆成两部分来看。</p>
+<p>其中
+import { createApp } from &lsquo;vue&rsquo;
+改为
+import { createApp } from &lsquo;/@modules/vue.js&rsquo;
+，原因很明显：import 对应的路径只支持 &ldquo;/&rdquo;&quot;./&ldquo;或者 &ldquo;../&rdquo; 开头的内容，直接使用模块名 import，会立即报错。</p>
+<p>所以在 Vite Server 处理请求时，通过 serverPluginModuleRewrite 这个中间件来给 import from &lsquo;A&rsquo; 的 A 添加 /@module/ 前缀为 from &lsquo;/@modules/A&rsquo;，源码部分对应：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="n">resolvedPlugins</span> <span class="o">=</span> <span class="p">[</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="o">...</span>
+</span></span><span class="line"><span class="cl">  <span class="n">moduleRewritePlugin</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="o">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">]</span>
+</span></span><span class="line"><span class="cl"><span class="n">resolvedPlugins</span><span class="o">.</span><span class="n">forEach</span><span class="p">((</span><span class="n">m</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="n">m</span> <span class="o">&amp;&amp;</span> <span class="n">m</span><span class="p">(</span><span class="n">context</span><span class="p">))</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>而 moduleRewritePlugin 插件的实现也并不困难，主要通过 rewriteImports 方法，来执行 resolveImport 方法，并进行改写。这里已经添加了相关源码链接，我们不再一一展开，你可以在课后进一步学习。</p>
+<p>整个过程和调用链路较长，我对 Vite 处理 import 方法做一个简单总结：</p>
+<p>在 koa 中间件里获取请求 path 对应的 body 内容；</p>
+<p>通过 es-module-lexer 解析资源 AST，并拿到 import 的内容；</p>
+<p>如果判断 import 的资源是绝对路径，即可认为该资源为 npm 模块，并返回处理后的资源路径。比如上述代码中，vue → /@modules/vue。</p>
+<p>对于形如：
+import App from &lsquo;./App.vue&rsquo;
+和
+import &lsquo;./index.css&rsquo;
+的处理，与上述情况类似：</p>
+<p>在 koa 中间件里获取请求 path 对应的 body 内容；</p>
+<p>通过 es-module-lexer 解析资源 AST，并拿到 import 的内容；</p>
+<p>如果判断 import 的资源是相对路径，即可认为该资源为项目应用中资源，并返回处理后的资源路径。比如上述代码中，./App.vue → /src/App.vue。</p>
+<p>接下来浏览器根据 main.js 的内容，分别请求：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">/@modules/vue.js
+</span></span><span class="line"><span class="cl">/src/App.vue
+</span></span><span class="line"><span class="cl">/src/index.css?import
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于 /@module/ 类请求较为容易，我们只需要完成下面三步：</p>
+<p>在 koa 中间件里获取请求 path 对应的 body 内容；</p>
+<p>判断路径是否以 /@module/ 开头，如果是，取出包名（这里为 vue.js）；</p>
+<p>去 node_modules 文件中找到对应的 npm 库，并返回内容。</p>
+<p>上述步骤在 Vite 中使用 serverPluginModuleResolve 中间件实现，点击这里可以访问对应源码。</p>
+<p>接着，就是对 /src/App.vue 类请求进行处理，这就涉及 Vite 服务器的编译能力了。</p>
+<p>我们先看结果，对比项目中的 App.vue，浏览器请求得到的结果显然出现了大变样：</p>
+<p>实际上，App.vue 这样的单文件组件对应 script、style 和 template，在经过 Vite Server 处理时，服务端对 script、style 和 template 三部分分别处理，对应中间件为 serverPluginVue。这个中间件的实现很简单，即对 .vue 文件请求进行处理，通过 parseSFC 方法解析单文件组件，并通过 compileSFCMain 方法将单文件组件拆分为形如上图内容，对应中间件关键内容可在源码 vuePlugin 中找到。源码中，涉及 parseSFC 具体所做的事情，是调用 @vue/compiler-sfc 进行单文件组件解析。精简为我自己的逻辑，帮助你理解：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">query</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ctx</span><span class="o">.</span><span class="n">body</span> <span class="o">=</span> <span class="err">`</span>
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">__script</span> <span class="o">=</span> <span class="o">$</span><span class="p">{</span><span class="n">descriptor</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;export default &#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)}</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">单文件组件中，对于</span> <span class="n">style</span> <span class="err">部分的编译，编译为对应</span> <span class="n">style</span> <span class="err">样式的</span> <span class="n">import</span> <span class="err">请求</span>
+</span></span><span class="line"><span class="cl">    <span class="o">$</span><span class="p">{</span><span class="n">descriptor</span><span class="o">.</span><span class="n">styles</span><span class="o">.</span><span class="n">length</span> <span class="err">?</span> <span class="err">`</span><span class="n">import</span> <span class="s2">&#34;${url}?type=style&#34;</span><span class="err">`</span> <span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">单文件组件中，对于</span> <span class="n">template</span> <span class="err">部分的编译，编译为对应</span> <span class="n">template</span> <span class="err">样式的</span> <span class="n">import</span> <span class="err">请求</span>
+</span></span><span class="line"><span class="cl">    <span class="n">import</span> <span class="p">{</span> <span class="n">render</span> <span class="n">as</span> <span class="n">__render</span> <span class="p">}</span> <span class="n">from</span> <span class="s2">&#34;${url}?type=template&#34;</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">渲染</span> <span class="n">template</span> <span class="err">的内容</span>
+</span></span><span class="line"><span class="cl">    <span class="n">__script</span><span class="o">.</span><span class="n">render</span> <span class="o">=</span> <span class="n">__render</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">export</span> <span class="n">default</span> <span class="n">__script</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="err">`</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>总而言之，每一个 .vue 单文件组件都被拆分成多个请求。比如对应上面场景，浏览器接收到 App.vue 对应的实际内容后，发出 HelloWorld.vue 以及 App.vue?type=template 的请求（通过 type 这个 query 来表示是 template 还是 style）。koa server 进行分别处理并返回，这些请求依然分别被上面提到的 serverPluginVue 中间件处理：对于 template 的请求，服务使用 @vue/compiler-dom 进行编译 template 并返回内容。</p>
+<p>精简为我自己的逻辑，帮助你理解：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">type</span> <span class="o">===</span> <span class="s1">&#39;template&#39;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">template</span> <span class="o">=</span> <span class="n">descriptor</span><span class="o">.</span><span class="n">template</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">render</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s1">&#39;@vue/compiler-dom&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	  <span class="n">mode</span><span class="p">:</span> <span class="s1">&#39;module&#39;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">})</span><span class="o">.</span><span class="n">code</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">ctx</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="s1">&#39;application/javascript&#39;</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">ctx</span><span class="o">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">render</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于上面提到的 http://localhost:3000/src/index.css?import 请求稍微特殊，需通过 serverPluginVue 来实现解析：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">//</span> <span class="n">style</span> <span class="err">类型请求</span>
+</span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">type</span> <span class="o">===</span> <span class="s1">&#39;style&#39;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">index</span> <span class="o">=</span> <span class="n">Number</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">styleBlock</span> <span class="o">=</span> <span class="n">descriptor</span><span class="o">.</span><span class="n">styles</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">styleBlock</span><span class="o">.</span><span class="n">src</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">filePath</span> <span class="o">=</span> <span class="n">await</span> <span class="n">resolveSrcImport</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">styleBlock</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">resolver</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">id</span> <span class="o">=</span> <span class="n">hash_sum</span><span class="p">(</span><span class="n">publicPath</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">调用</span> <span class="n">compileSFCStyle</span> <span class="err">方法编译当文件组件样式部分</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">result</span> <span class="o">=</span> <span class="n">await</span> <span class="n">compileSFCStyle</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">    <span class="n">root</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">styleBlock</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">index</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">filePath</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">publicPath</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">    <span class="n">config</span>
+</span></span><span class="line"><span class="cl">  <span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ctx</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="s1">&#39;js&#39;</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">返回样式内容</span>
+</span></span><span class="line"><span class="cl">  <span class="n">ctx</span><span class="o">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">codegenCss</span><span class="p">(</span><span class="err">`</span><span class="o">$</span><span class="p">{</span><span class="n">id</span><span class="p">}</span><span class="o">-$</span><span class="p">{</span><span class="n">index</span><span class="p">}</span><span class="err">`</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">code</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">etagCacheCheck</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>调用 serverPluginCss 中间件的 codegenCss 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">export</span> <span class="n">function</span> <span class="n">codegenCss</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">  <span class="n">id</span><span class="p">:</span> <span class="n">string</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="n">css</span><span class="p">:</span> <span class="n">string</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">  <span class="n">modules</span><span class="err">?</span><span class="p">:</span> <span class="n">Record</span><span class="o">&lt;</span><span class="n">string</span><span class="p">,</span> <span class="n">string</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl"><span class="p">):</span> <span class="n">string</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="o">//</span> <span class="err">样式代码模板</span>
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">code</span> <span class="o">=</span>
+</span></span><span class="line"><span class="cl">    <span class="err">`</span><span class="n">import</span> <span class="p">{</span> <span class="n">updateStyle</span> <span class="p">}</span> <span class="n">from</span> <span class="s2">&#34;${clientPublicPath}&#34;</span>\<span class="n">n</span><span class="err">`</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">    <span class="err">`</span><span class="k">const</span> <span class="n">css</span> <span class="o">=</span> <span class="o">$</span><span class="p">{</span><span class="n">JSON</span><span class="o">.</span><span class="n">stringify</span><span class="p">(</span><span class="n">css</span><span class="p">)}</span>\<span class="n">n</span><span class="err">`</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">    <span class="err">`</span><span class="n">updateStyle</span><span class="p">(</span><span class="o">$</span><span class="p">{</span><span class="n">JSON</span><span class="o">.</span><span class="n">stringify</span><span class="p">(</span><span class="n">id</span><span class="p">)},</span> <span class="n">css</span><span class="p">)</span>\<span class="n">n</span><span class="err">`</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">modules</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">code</span> <span class="o">+=</span> <span class="n">dataToEsm</span><span class="p">(</span><span class="n">modules</span><span class="p">,</span> <span class="p">{</span> <span class="n">namedExports</span><span class="p">:</span> <span class="bp">true</span> <span class="p">})</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">code</span> <span class="o">+=</span> <span class="err">`</span><span class="k">export</span> <span class="n">default</span> <span class="n">css</span><span class="err">`</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">code</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该方法会在浏览器中执行 updateStyle 方法，源码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="n">supportsConstructedSheet</span> <span class="o">=</span> <span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">try</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">生成</span> <span class="n">CSSStyleSheet</span> <span class="err">实例，试探是否支持</span> <span class="n">ConstructedSheet</span>
+</span></span><span class="line"><span class="cl">    <span class="n">new</span> <span class="n">CSSStyleSheet</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="bp">true</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="n">catch</span> <span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="p">{}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="bp">false</span>
+</span></span><span class="line"><span class="cl"><span class="p">})()</span>
+</span></span><span class="line"><span class="cl"><span class="k">export</span> <span class="n">function</span> <span class="n">updateStyle</span><span class="p">(</span><span class="n">id</span><span class="p">:</span> <span class="n">string</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="n">string</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">let</span> <span class="n">style</span> <span class="o">=</span> <span class="n">sheetsMap</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">supportsConstructedSheet</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">content</span><span class="o">.</span><span class="n">includes</span><span class="p">(</span><span class="s1">&#39;@import&#39;</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">style</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="n">style</span> <span class="n">instanceof</span> <span class="n">CSSStyleSheet</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">removeStyle</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span> <span class="o">=</span> <span class="n">undefined</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">style</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="o">//</span> <span class="err">生成</span> <span class="n">CSSStyleSheet</span> <span class="err">实例</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span> <span class="o">=</span> <span class="n">new</span> <span class="n">CSSStyleSheet</span><span class="p">()</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span><span class="o">.</span><span class="n">replaceSync</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="n">document</span><span class="o">.</span><span class="n">adoptedStyleSheets</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="n">document</span><span class="o">.</span><span class="n">adoptedStyleSheets</span><span class="p">,</span> <span class="n">style</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span><span class="o">.</span><span class="n">replaceSync</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">style</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="n">style</span> <span class="n">instanceof</span> <span class="n">HTMLStyleElement</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">removeStyle</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span> <span class="o">=</span> <span class="n">undefined</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">style</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="o">//</span> <span class="err">生成新的</span> <span class="n">style</span> <span class="err">标签并插入到</span> <span class="n">document</span> <span class="err">挡住</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">createElement</span><span class="p">(</span><span class="s1">&#39;style&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span><span class="o">.</span><span class="n">setAttribute</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">,</span> <span class="s1">&#39;text/css&#39;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span><span class="o">.</span><span class="n">innerHTML</span> <span class="o">=</span> <span class="n">content</span>
+</span></span><span class="line"><span class="cl">      <span class="n">document</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">appendChild</span><span class="p">(</span><span class="n">style</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">style</span><span class="o">.</span><span class="n">innerHTML</span> <span class="o">=</span> <span class="n">content</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="n">sheetsMap</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">id</span><span class="p">,</span> <span class="n">style</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>最终完成在浏览器中插入样式。</p>
+<p>至此，我们解析并列举了较多源码内容。以上内容需要你跟着思路，一步步梳理，我也强烈建议你打开 Vite 源码自己动手剖析。如果看到这里你仍然也有些“云里雾里”，不要心急，结合我下面这个图示，再次进行阅读，相信会更有收获。</p>
+<p>Vite 这种 bundleless 方案的运行原理图：</p>
+<p>接下来我们再做一些更细节的总结。</p>
+<p>Vite 利用浏览器原生支持 ESM 这一特性，省略了对模块的打包，也就不需要生成 bundle，因此初次启动更快，HMR 特性友好。</p>
+<p>Vite 开发模式下，通过启动 koa 服务器，在服务端完成模块的改写（比如单文件的解析编译等）和请求处理，实现真正的按需编译。</p>
+<p>Vite Server 所有逻辑基本都依赖中间件实现。这些中间件，拦截请求之后，完成了如下内容：</p>
+<p>处理 ESM 语法，比如将业务代码中的 import 第三方依赖路径转为浏览器可识别的依赖路径；</p>
+<p>对 .ts、.vue 等文件进行即时编译；</p>
+<p>对 Sass/Less 的需要预编译的模块进行编译；</p>
+<p>和浏览器端建立 socket 连接，实现 HMR。</p>
+<p>Vite HMR 实现原理</p>
+<p>Vite 的打包命令使用了 Rollup 进行，这里并没有什么特别之处，我们不再展开讲解。而 Vite 的 HMR 特性，主要是围绕着：</p>
+<p>通过 watcher 监听文件改动</p>
+<p>通过 server 端编译资源，并推送新模块内容给浏览器</p>
+<p>浏览器收到新的模块内容，执行框架层面的 rerender/reload</p>
+<p>三步进行。</p>
+<p>当浏览器请求 HTML 页面时，服务端通过 serverPluginHtml 插件向 HTML 内容注入一段脚本。如下图所示，我们可以看到， index.html 中就有一段引入 /vite/client 代码，进行 WebSocket 的注册和监听。</p>
+<p>对于 /vite/client 请求的处理，服务端由 serverPluginClient 插件进行处理：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-mysql" data-lang="mysql"><span class="line"><span class="cl"><span class="n">export</span><span class="w"> </span><span class="n">const</span><span class="w"> </span><span class="n">clientPlugin</span><span class="p">:</span><span class="w"> </span><span class="n">ServerPlugin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="err">{</span><span class="w"> </span><span class="n">app</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="err">}</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="n">const</span><span class="w"> </span><span class="n">clientCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fs</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">.</span><span class="nf">readFileSync</span><span class="p">(</span><span class="n">clientFilePath</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">.</span><span class="k">replace</span><span class="p">(</span><span class="o">`</span><span class="n">__MODE__</span><span class="o">`</span><span class="p">,</span><span class="w"> </span><span class="n">JSON</span><span class="p">.</span><span class="nf">stringify</span><span class="p">(</span><span class="n">config</span><span class="p">.</span><span class="n">mode</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;development&#39;</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">.</span><span class="k">replace</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">`</span><span class="n">__DEFINES__</span><span class="o">`</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="n">JSON</span><span class="p">.</span><span class="nf">stringify</span><span class="p">(</span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">...</span><span class="n">defaultDefines</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">...</span><span class="n">config</span><span class="p">.</span><span class="n">define</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="err">}</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">//</span><span class="w"> </span><span class="err">相应中间件处理</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="n">app</span><span class="p">.</span><span class="k">use</span><span class="p">(</span><span class="nf">async</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">next</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">path</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="n">clientPublicPath</span><span class="p">)</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="n">ctx</span><span class="p">.</span><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;js&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="n">ctx</span><span class="p">.</span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">//</span><span class="w"> </span><span class="err">返回具体内容</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="n">ctx</span><span class="p">.</span><span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">clientCode</span><span class="p">.</span><span class="k">replace</span><span class="p">(</span><span class="o">`</span><span class="n">__PORT__</span><span class="o">`</span><span class="p">,</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">port</span><span class="p">.</span><span class="nf">toString</span><span class="p">())</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="err">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="o">//</span><span class="w"> </span><span class="err">兼容历史逻辑，并进行错误提示</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">path</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="n">legacyPublicPath</span><span class="p">)</span><span class="w"> </span><span class="err">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="n">console</span><span class="p">.</span><span class="nf">error</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="n">chalk</span><span class="p">.</span><span class="nf">red</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">`</span><span class="p">[</span><span class="n">vite</span><span class="p">]</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="n">import</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="n">has</span><span class="w"> </span><span class="n">changed</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="s2">&#34;/vite/hmr&#34;</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="s2">&#34;/vite/client&#34;</span><span class="p">.</span><span class="w"> </span><span class="o">`</span><span class="w"> </span><span class="o">+</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">              </span><span class="o">`</span><span class="n">please</span><span class="w"> </span><span class="k">update</span><span class="w"> </span><span class="n">your</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="n">accordingly</span><span class="p">.</span><span class="o">`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">          </span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="k">return</span><span class="w"> </span><span class="nf">next</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="err">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="err">}</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="err">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>返回的 /vite/src/client/client.js 代码在浏览器端主要通过 WebSocket 监听了一些更新的类型（vue 组件更新/vue template 更新/vue style 更新/css 更新/css 移除/js 更新/页面 roload），分别进行处理。</p>
+<p>在服务端，通过 chokidar 创建了一个监听文件改动的 watcher 来监听文件改动：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">const</span> <span class="n">watcher</span> <span class="o">=</span> <span class="n">chokidar</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">ignored</span><span class="p">:</span> <span class="p">[</span><span class="o">/</span><span class="n">node_modules</span><span class="o">/</span><span class="p">,</span> <span class="o">/</span>\<span class="o">.</span><span class="n">git</span><span class="o">/</span><span class="p">],</span>
+</span></span><span class="line"><span class="cl">	<span class="o">//</span> <span class="c1">#610</span>
+</span></span><span class="line"><span class="cl">	<span class="n">awaitWriteFinish</span><span class="p">:</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	  <span class="n">stabilityThreshold</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	  <span class="n">pollInterval</span><span class="p">:</span> <span class="mi">10</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">})</span> <span class="n">as</span> <span class="n">HMRWatcher</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>并通过 serverPluginHmr 发布变动，通知浏览器。</p>
+<p>更多源码不再一一贴出。这里我总结了一张流程图供你参考：</p>
+<p>Vite 实现 HMR 流程图</p>
+<p>总结</p>
+<p>这一讲我们聚焦 Vite 实现，分析了如何利用 ESM，构建一个 bundleless 风格的现代化开发工程方案。源码内容较多，也涉及一定工程化架构设计内容，但 Vite 实现流程清晰，易读性高，是源码阅读类很好的资源。</p>
+<p>事实上，Vite 依赖优化的灵感来自 Snowpack，这类 bundleless 工具也代表着一种新趋势、新方向。我认为，技术功底是很重要的一方面，而技术敏感度的培养也非常关键。希望与你共勉！</p>
+<p>到此，新编译工具理念——Vite 我们就介绍到这里。接下来我们将进入代码降级编译环节的学习，我们下一讲再见。</p>
+<p>-&ndash; ### 精选评论 ##### **龙： &gt; 老师我想问下Vite 是怎么保证dev环境和生产环境，最后得到的结果是一样的啊，会不会出现dev看到的是一种现象，生产环境看到的是另一种现象还有如果我同时import 两个js文件，这两个文件的加载执行顺序会有先后吗？是必须前一个加载完成后，才会去import另外一个吗？ ######     讲师回复： &gt;     不是的，请求不一定是串行关系，这个可以自己动手试验一下 ##### **龙： &gt; 老师我有几个疑惑点1 Vite 是怎么保证本地环境运行出的结果和最后生产环境是一致的啊2 我在一个js文件中，同时有两个import，这个js就会导致发送两个请求，是不是只有等一个请求发送接收到返回以后，才回去发送下一个请求，是一种同步的行为 ######     讲师回复： &gt;     不是的，请求不一定是串行关系，这个可以自己动手试验一下 ##### **勇： &gt; <a href="mailto:vite@2.x">vite@2.x</a>不使用koa来创建服务和管理中间件了，而是使用connect。是处于什么考虑呢？TJ不维护Koa了哇 ######     讲师回复： &gt;     这是目前看到最好的问题之一，不过提问者应该更进一步，提升自己解决问题，找到答案的能力。具体原因在 <a href="https://github.com/vitejs/vite/blob/91dbb017091c175a54bcd1c93a69f8458d1bde8d/docs/guide/migration.md#for-plugin-authors">https://github.com/vitejs/vite/blob/91dbb017091c175a54bcd1c93a69f8458d1bde8d/docs/guide/migration.md#for-plugin-authors</a> 中有所体现了其实，简单总结一下是 <a href="mailto:vite@2.x">vite@2.x</a> 主要是用基于 hooks 的插件，对于 koa 中间件的需求大幅度减少，从依赖成本上看，old school 的 connect 即可方便轻巧满足需求了 ##### *锋： &gt; 什么时候更新呀 ######     编辑回复： &gt;     每周一、三更新哈~ ##### **8621： &gt; 第一个提出bundleless理念的人，绝对是十分善于思考的人。 ##### **勇： &gt; SnowPack和Vite的区别主要是对打包的处理吗？Vite是使用Rollup来build，Vite还是使用Webpack来完成build。后续会对这两者的区别展开讲解吗？ ######     讲师回复： &gt;     对于 SnowPack和Vite的发展路线其实是比较有趣的话题，也会随着时间演进有所变化。可以与我保持联系，随时沟通 ##### **0231： &gt; 大佬太强了，大佬是参考了相关文章进行的学习，还是直接梳理源码进行的分析 ######     讲师回复： &gt;     知识获取方式：看源码，看官网，去 github 提 issue/pr，多参与国际社区讨论，国内毕竟面比较有限 ##### **贤： &gt; 学到了, 都没听说过 Vite, 我是不是太菜了😂 ######     编辑回复： &gt;     不是哦，学习是个持久的过程，每个知识都是从无到有。现在掌握也不晚呐~ ##### cxl： &gt; 请问下老师，react有bundless吗 ######     讲师回复： &gt;     有的，vite 可以改造支持，另外建议找一下 snowpack 的 react 方案</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/">前端基础建设与架构30讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/05k8pod%E6%9C%80%E5%B0%8F%E8%B0%83%E5%BA%A6%E5%8D%95%E5%85%83%E7%9A%84%E4%BD%BF%E7%94%A8%E8%BF%9B%E9%98%B6%E5%8F%8A%E5%AE%9E%E8%B7%B5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">05K8Pod：最小调度单元的使用进阶及实践</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/python%E8%87%AA%E5%8A%A8%E5%8C%96%E5%8A%9E%E5%85%AC%E5%AE%9E%E6%88%98%E8%AF%BE/0503%E5%9B%BE%E7%89%87%E8%BD%AC%E6%96%87%E5%AD%97%E5%A6%82%E4%BD%95%E6%8F%90%E9%AB%98%E8%AF%86%E5%88%AB%E5%87%86%E7%A1%AE%E7%8E%87/">
+            <span class="next-text nav-default">0503｜图片转文字如何提高识别准确率</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

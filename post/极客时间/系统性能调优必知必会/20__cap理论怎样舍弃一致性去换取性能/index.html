@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20__CAP理论：怎样舍弃一致性去换取性能？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是陶辉。
+上一讲我们介绍了如何通过监控找到性能瓶颈，从这一讲开始，我们将具体讨论如何通过分布式系统来提升性能。
+在第一部分课程中，我介绍了多种提升单机处理性能的途径，然而，进程的性能必然受制于一台服务器上各硬件的处理能力上限。如果需要进一步地提升服务性能，那只有整合多台主机组成分布式系统才能办到。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/20__cap%E7%90%86%E8%AE%BA%E6%80%8E%E6%A0%B7%E8%88%8D%E5%BC%83%E4%B8%80%E8%87%B4%E6%80%A7%E5%8E%BB%E6%8D%A2%E5%8F%96%E6%80%A7%E8%83%BD/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/20__cap%E7%90%86%E8%AE%BA%E6%80%8E%E6%A0%B7%E8%88%8D%E5%BC%83%E4%B8%80%E8%87%B4%E6%80%A7%E5%8E%BB%E6%8D%A2%E5%8F%96%E6%80%A7%E8%83%BD/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20__CAP理论：怎样舍弃一致性去换取性能？">
+  <meta property="og:description" content="你好，我是陶辉。
+上一讲我们介绍了如何通过监控找到性能瓶颈，从这一讲开始，我们将具体讨论如何通过分布式系统来提升性能。
+在第一部分课程中，我介绍了多种提升单机处理性能的途径，然而，进程的性能必然受制于一台服务器上各硬件的处理能力上限。如果需要进一步地提升服务性能，那只有整合多台主机组成分布式系统才能办到。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="系统性能调优必知必会">
+
+  <meta itemprop="name" content="20__CAP理论：怎样舍弃一致性去换取性能？">
+  <meta itemprop="description" content="你好，我是陶辉。
+上一讲我们介绍了如何通过监控找到性能瓶颈，从这一讲开始，我们将具体讨论如何通过分布式系统来提升性能。
+在第一部分课程中，我介绍了多种提升单机处理性能的途径，然而，进程的性能必然受制于一台服务器上各硬件的处理能力上限。如果需要进一步地提升服务性能，那只有整合多台主机组成分布式系统才能办到。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3567">
+  <meta itemprop="keywords" content="系统性能调优必知必会">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20__CAP理论：怎样舍弃一致性去换取性能？">
+  <meta name="twitter:description" content="你好，我是陶辉。
+上一讲我们介绍了如何通过监控找到性能瓶颈，从这一讲开始，我们将具体讨论如何通过分布式系统来提升性能。
+在第一部分课程中，我介绍了多种提升单机处理性能的途径，然而，进程的性能必然受制于一台服务器上各硬件的处理能力上限。如果需要进一步地提升服务性能，那只有整合多台主机组成分布式系统才能办到。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20__CAP理论：怎样舍弃一致性去换取性能？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3567 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何权衡性能与一致性">如何权衡性能与一致性？</a></li>
+        <li><a href="#怎样舍弃一致性提升性能">怎样舍弃一致性提升性能？</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是陶辉。</p>
+<p>上一讲我们介绍了如何通过监控找到性能瓶颈，从这一讲开始，我们将具体讨论如何通过分布式系统来提升性能。</p>
+<p>在第一部分课程中，我介绍了多种提升单机处理性能的途径，然而，进程的性能必然受制于一台服务器上各硬件的处理能力上限。如果需要进一步地提升服务性能，那只有整合多台主机组成分布式系统才能办到。</p>
+<p>然而，当多台主机通过网络协同处理用户请求时，如果主机上的进程含有数据状态，那么必然需要在多台主机之间跨网络同步数据，由于网络存在时延，也并不稳定，因此不可靠的数据同步操作将会增加请求的处理时延。</p>
+<p>CAP 理论指出，当数据同时存放在多个主机上时，可用性与一致性是不可兼得的。根据 CAP 的指导性思想，我们可以通过牺牲一致性，来提升可用性中的核心因素：性能。当然，在实践中对一致性与性能并不是非黑即白的选择，而是从概率上进行不同程度的取舍。</p>
+<p>这一讲，我们将基于分布式系统中的经典理论，从总体上看看如何设计一致性模型，通过牺牲部分数据的一致性来提升性能。</p>
+<h2 id="如何权衡性能与一致性">如何权衡性能与一致性？</h2>
+<p>首先，这节课针对的是<strong>有状态服务</strong>的性能优化。所谓有状态服务，是指进程会在处理完请求后，仍然保存着影响下次请求结果的用户数据，而无状态服务则只从每个请求的输入参数中获取数据，在请求处理完成后并不保存任何会话信息。因此，无状态服务拥有最好的可伸缩性，但涉及数据持久化时，则必须由有状态服务处理，这是 CAP 理论所要解决的问题。</p>
+<p>什么是 CAP 理论呢？这是 2000 年University of California, Berkeley 的计算机教授Eric Brewer（也是谷歌基础设施 VP）提出的理论。所谓 CAP，是以下 3 个单词的首字母缩写，它们都是分布式系统最核心的特性：</p>
+<ol>
+<li><strong>C</strong>onsistency 一致性</li>
+<li><strong>A</strong>vailability 可用性</li>
+<li><strong>P</strong>artition tolerance 分区容错性</li>
+</ol>
+<p>我们通过以下 3 张示意图，快速理解下这 3 个词的意义。下图中 N1、N2 两台主机上运行着 A 进程和 B 进程，它们操作着同一个用户的数据（数据的初始值是 V0），这里 N1 和 N2 主机就处于不同的 Partition 分区中，如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/6025a3a75f77db35600260354076273a.png" alt=""></p>
+<p>正常情况下，当用户请求到达 N1 主机上的 A 进程，并将数据 V0 修改为 V1 后，A 进程将会把这一修改行为同步到 N2 主机上的 B 进程，最终 N1、N2 上的数据都是 V1，这就保持了系统的 Consistency 一致性。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/e9f3079352714410e1234082c50b9bad.png" alt=""></p>
+<p>然而，一旦 N1 和 N2 之间网络异常，数据同步行为就会失败。这时，N1 和 N2 之间数据不一致，如果我们希望在分区间网络不通的情况下，N2 能够继续为用户提供服务，就必须容忍数据的不一致，此时系统的 Availability 可用性更高，系统的并发处理能力更强，比如 Cassandra 数据库。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/14218835a16731c1fa018ad5bcccbb21.png" alt=""></p>
+<p>反之，如果 A、B 进程一旦发现数据同步失败，那么 B 进程自动拒绝新请求，仅由 A 进程独立提供服务，那么虽然降低了系统的可用性，但保证了更强的一致性，比如 MySQL 的主备同步模式。</p>
+<p>这就是 CAP 中三者只能取其二的简要示意，对于这一理论，2002 年 MIT 的Seth Gilbert 、 Nancy Lynch 在这篇论文中，证明了这一理论。当然，可用性是一个很大的概念，它描述了分布式系统的持续服务能力，如下表所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/99cc308d7aad63cb086bdfa22793316e.png" alt=""></p>
+<p>当用户、流量不断增长时，系统的性能将变成衡量可用性的关键因素。当我们希望拥有更强的性能时，就不得不牺牲数据的一致性。当然，一致性并不是只有是和否这两种属性，我们既可以从时间维度上设计短暂不一致的同步模型，也可以从空间维度上为不含有因果、时序关系的用户数据设计并发模型。</p>
+<p>在学术上，通常会按照 2 个维度对一致性模型分类。首先是从数据出发设计出的一致性模型，比如顺序一致性必须遵照读写操作的次序来保持一致性，而弱一些的因果一致性则允许不具备因果关系的读写操作并发执行。其次是从用户出发设计出的一致性模型，比如单调读一致性保证客户端不会读取到旧值，而单调写一致性则保证写操作是串行的。</p>
+<p>实际工程中一致性与可用性的边界会模糊很多，因此又有了最终一致性这样一个概念，这个“最终”究竟是多久，将由业务特性、网络故障率等因素综合决定。伴随最终一致性的是 BASE 理论：</p>
+<ol>
+<li><strong>B</strong>asically <strong>A</strong>vailable 基本可用性</li>
+<li><strong>S</strong>oft state 软状态</li>
+<li><strong>E</strong>ventually consistent 最终一致性</li>
+</ol>
+<p>BASE 与 CAP 一样并没有很精确的定义，它们最主要的用途是从大方向上给你指导性的思想。接下来，我们看看如何通过最终一致性来提升性能。</p>
+<h2 id="怎样舍弃一致性提升性能">怎样舍弃一致性提升性能？</h2>
+<p>服务的性能，主要体现在请求的时延和系统的并发性这两个方面，而它们都与上面提到的最终一致性有关。我通常会把分布式系统分为纵向、横向两个维度，其中**纵向是请求的处理路径，横向则是同类服务之间的数据同步路径。**这样，在纵向上在离客户端更近的位置增加数据的副本，并把它存放在处理速度更快的物理介质上，就可以作为缓存降低请求的时延；而在横向上对数据增加副本，并在这些主机间同步数据，这样工作在数据副本上的进程也可以同时对客户端提供服务，这就增加了系统的并发性，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/11b8983a203e302eb36972427386c7b1.png" alt=""></p>
+<p>我们先来看纵向上的缓存，是如何在降低请求处理时延时，保持最终一致性的。</p>
+<p>缓存可以由读、写两个操作触发更新，[第 15 课] 介绍过的 HTTP 私有缓存，就是工作在浏览器上基于读操作触发的缓存。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/2bb475551410d037f0a7746b4ce44190.png" alt=""></p>
+<p>工作在代理服务器上的 HTTP 共享缓存，也是由读操作触发的。这些缓存与源服务器上的数据最终是一致的，但在 CacheControl 等 HTTP 头部指定的时间内，缓存完全有可能与源数据不同，这就是牺牲一致性来提升性能的典型例子。</p>
+<p>事实上，也有很多以写操作触发缓存更新的设计，它们通常又分为 write back 和 write through 两种模式。其中，<strong>write back 牺牲了更多的一致性，但带来了更低的请求时延。</strong> <strong>比如</strong> <strong>[第 4 课]</strong> <strong>介绍过的 Linux 磁盘高速缓存就采用了 write back 这种设计，它虽然是单机内的一种缓存设计，但在分布式系统中缓存的设计方式也是一样的。而</strong> <strong>write through 会在更新数据成功后再更新缓存，虽然带来了很好的一致性，但写操作的时延会更久</strong>，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/b5e1925b45dee5b2698e56341bcffc70.png" alt=""></p>
+<p>write through 的一致性非常好，它常常是我们的首选设计。然而，一旦缓存到源数据的路径很长、延时很高的时候，就值得考虑 write back 模式，此时一致性模型虽然复杂了许多，但可以带来显著的性能提升。比如机械磁盘相对内存延时高了很多，因此磁盘高速缓存会采用 write back 模式。</p>
+<p>虽然缓存也可以在一定程度上增加系统的并发处理连接，但这更多是缘于缓存采用了更快的算法以及存储介质带来的收益。从水平方向上，在更多的主机上添加数据副本，并在其上用新的进程提供服务，这才是提升系统并发处理能力最有效的手段。此时，进程间同步数据主要包含两种方式：同步方式以及异步方式，前者会在每个更新请求完成前，将数据成功同步到每个副本后，请求才会处理完成，而后者则会在处理完请求后，才开始异步地同步数据到副本中，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/8378112424cecbcb52d98882a1b202a6.png" alt=""></p>
+<p>同步方式下系统的一致性最好，但由于请求的处理时延包含了副本间的通讯时长，所以性能并不好。而异步方式下系统的一致性要差，特别是在主进程宕机后，副本上的进程很容易出现数据丢失，但异步方式的性能要好得多，这不只由于更新请求的返回更快，而且异步化后主进程可以基于合并、批量操作等技巧，进行效率更高的数据同步。比如 MySQL 的主备模式下，默认就使用异步方式同步数据，当然你也可以改为同步方式，包括 Full-synchronous Replication（同步所有数据副本后请求才能返回）以及 Semi-synchronous Replication（仅成功同步 1 个副本后请求就可以返回）两种方式。</p>
+<p>当然，在扩容、宕机恢复等场景下，副本之间的数据严重不一致，如果仍然基于单个操作同步数据，时间会很久，性能很差。此时应结合定期更新的 Snapshot 快照，以及实时的 Oplog 操作日志，协作同步数据，这样效率会高很多。其中，快照是截止时间 T0 时所有数据的状态，而操作日志则是 T0 时间到当下 T1 之间的所有更新操作，这样，副本载入快照恢复至 T0 时刻的数据后，再通过有限的操作日志与主进程保持一致。</p>
+<h2 id="小结">小结</h2>
+<p>这一讲我们介绍了分布式系统中的 CAP 理论，以及根据 CAP 如何通过一致性来换取性能。</p>
+<p>CAP 理论指出，可用性、分区容错性、一致性三者只能取其二，因此当分布式系统需要服务更多的用户时，只能舍弃一致性，换取可用性中的性能因子。当然，性能与一致性并不是简单的二选一，而是需要你根据网络时延、故障概率设计出一致性模型，在提供高性能的同时，保持时间、空间上可接受的最终一致性。</p>
+<p>具体的设计方法，可以分为纵向上添加缓存，横向上添加副本进程两种做法。对于缓存的更新，write through 模式保持一致性更容易，但写请求的时延偏高，而一致性模型更复杂的 write back 模式时延则更低，适用于性能要求很高的场景。</p>
+<p>提升系统并发性可以通过添加数据副本，并让工作在副本上的进程同时对用户提供服务。副本间的数据同步是由写请求触发的，其中包括同步、异步两种同步方式。异步方式的最终一致性要差一些，但写请求的处理时延更快。在宕机恢复、系统扩容时，采用快照加操作日志的方式，系统的性能会好很多。</p>
+<h2 id="思考题">思考题</h2>
+<p>最后留给你一道讨论题，当数据副本都在同一个 IDC 内部时，网络时延很低，带宽大而且近乎免费使用。然而，一旦数据副本跨 IDC 后，特别是 IDC 之间物理距离很遥远，那么网络同步就变得很昂贵。这两种不同场景下，你是如何考虑一致性模型的？它与性能之间有多大的影响？期待你的分享。</p>
+<p>感谢阅读，如果你觉得这节课对你有一些启发，也欢迎把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/">系统性能调优必知必会</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B5%8F%E8%A7%88%E5%99%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/20__async_await%E4%BD%BF%E7%94%A8%E5%90%8C%E6%AD%A5%E7%9A%84%E6%96%B9%E5%BC%8F%E5%8E%BB%E5%86%99%E5%BC%82%E6%AD%A5%E4%BB%A3%E7%A0%81/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20__async_await：使用同步的方式去写异步代码</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%87%8D%E5%AD%A6%E5%89%8D%E7%AB%AF/20__css_%E9%80%89%E6%8B%A9%E5%99%A8%E5%A6%82%E4%BD%95%E9%80%89%E4%B8%ADsvg%E9%87%8C%E7%9A%84a%E5%85%83%E7%B4%A0/">
+            <span class="next-text nav-default">20__CSS_选择器：如何选中svg里的a元素？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

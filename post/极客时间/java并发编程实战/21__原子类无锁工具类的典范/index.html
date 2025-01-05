@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>21__原子类：无锁工具类的典范 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="前面我们多次提到一个累加器的例子，示例代码如下。在这个例子中，add10K() 这个方法不是线程安全的，问题就出在变量 count 的可见性和 count&#43;=1 的原子性上。可见性问题可以用 volatile 来解决，而原子性问题我们前面一直都是采用的互斥锁方案。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/21__%E5%8E%9F%E5%AD%90%E7%B1%BB%E6%97%A0%E9%94%81%E5%B7%A5%E5%85%B7%E7%B1%BB%E7%9A%84%E5%85%B8%E8%8C%83/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/21__%E5%8E%9F%E5%AD%90%E7%B1%BB%E6%97%A0%E9%94%81%E5%B7%A5%E5%85%B7%E7%B1%BB%E7%9A%84%E5%85%B8%E8%8C%83/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="21__原子类：无锁工具类的典范">
+  <meta property="og:description" content="前面我们多次提到一个累加器的例子，示例代码如下。在这个例子中，add10K() 这个方法不是线程安全的，问题就出在变量 count 的可见性和 count&#43;=1 的原子性上。可见性问题可以用 volatile 来解决，而原子性问题我们前面一直都是采用的互斥锁方案。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java并发编程实战">
+
+  <meta itemprop="name" content="21__原子类：无锁工具类的典范">
+  <meta itemprop="description" content="前面我们多次提到一个累加器的例子，示例代码如下。在这个例子中，add10K() 这个方法不是线程安全的，问题就出在变量 count 的可见性和 count&#43;=1 的原子性上。可见性问题可以用 volatile 来解决，而原子性问题我们前面一直都是采用的互斥锁方案。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4771">
+  <meta itemprop="keywords" content="Java并发编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="21__原子类：无锁工具类的典范">
+  <meta name="twitter:description" content="前面我们多次提到一个累加器的例子，示例代码如下。在这个例子中，add10K() 这个方法不是线程安全的，问题就出在变量 count 的可见性和 count&#43;=1 的原子性上。可见性问题可以用 volatile 来解决，而原子性问题我们前面一直都是采用的互斥锁方案。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">21__原子类：无锁工具类的典范</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4771 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#无锁方案的实现原理">无锁方案的实现原理</a></li>
+        <li><a href="#看-java-如何实现原子化的-count--1">看 Java 如何实现原子化的 count += 1</a></li>
+        <li><a href="#原子类概览">原子类概览</a>
+          <ul>
+            <li><a href="#1-原子化的基本数据类型">1. 原子化的基本数据类型</a></li>
+            <li><a href="#2-原子化的对象引用类型">2. 原子化的对象引用类型</a></li>
+            <li><a href="#3-原子化数组">3. 原子化数组</a></li>
+            <li><a href="#4-原子化对象属性更新器">4. 原子化对象属性更新器</a></li>
+            <li><a href="#5-原子化的累加器">5. 原子化的累加器</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考">课后思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>前面我们多次提到一个累加器的例子，示例代码如下。在这个例子中，add10K() 这个方法不是线程安全的，问题就出在变量 count 的可见性和 count+=1 的原子性上。可见性问题可以用 volatile 来解决，而原子性问题我们前面一直都是采用的互斥锁方案。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class Test {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  long count = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void add10K() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int idx = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while(idx++ &lt; 10000) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      count += 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其实对于简单的原子性问题，还有一种<strong>无锁方案</strong>。Java SDK 并发包将这种无锁方案封装提炼之后，实现了一系列的原子类。不过，在深入介绍原子类的实现之前，我们先看看如何利用原子类解决累加器问题，这样你会对原子类有个初步的认识。</p>
+<p>在下面的代码中，我们将原来的 long 型变量 count 替换为了原子类 AtomicLong，原来的 <code>count +=1</code> 替换成了 count.getAndIncrement()，仅需要这两处简单的改动就能使 add10K() 方法变成线程安全的，原子类的使用还是挺简单的。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class Test {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  AtomicLong count = 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    new AtomicLong(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void add10K() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int idx = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while(idx++ &lt; 10000) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      count.getAndIncrement();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>无锁方案相对互斥锁方案，最大的好处就是<strong>性能</strong>。互斥锁方案为了保证互斥性，需要执行加锁、解锁操作，而加锁、解锁操作本身就消耗性能；同时拿不到锁的线程还会进入阻塞状态，进而触发线程切换，线程切换对性能的消耗也很大。相比之下，无锁方案则完全没有加锁、解锁的性能消耗，同时还能保证互斥性，既解决了问题，又没有带来新的问题，可谓绝佳方案。那它是如何做到的呢？</p>
+<h2 id="无锁方案的实现原理">无锁方案的实现原理</h2>
+<p>其实原子类性能高的秘密很简单，硬件支持而已。CPU 为了解决并发问题，提供了 CAS 指令（CAS，全称是 Compare And Swap，即“比较并交换”）。CAS 指令包含 3 个参数：共享变量的内存地址 A、用于比较的值 B 和共享变量的新值 C；并且只有当内存中地址 A 处的值等于 B 时，才能将内存中地址 A 处的值更新为新值 C。<strong>作为一条 CPU 指令，CAS 指令本身是能够保证原子性的</strong>。</p>
+<p>你可以通过下面 CAS 指令的模拟代码来理解 CAS 的工作原理。在下面的模拟程序中有两个参数，一个是期望值 expect，另一个是需要写入的新值 newValue，<strong>只有当目前 count 的值和期望值 expect 相等时，才会将 count 更新为 newValue</strong>。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class SimulatedCAS{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int count；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  synchronized int cas(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int expect, int newValue){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 读目前 count 的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int curValue = count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 比较目前 count 值是否 == 期望值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if(curValue == expect){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 如果是，则更新 count 的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      count = newValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 返回写入前的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return curValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你仔细地再次思考一下这句话，“<strong>只有当目前 count 的值和期望值 expect 相等时，才会将 count 更新为 newValue。</strong>”要怎么理解这句话呢？</p>
+<p>对于前面提到的累加器的例子，<code>count += 1</code> 的一个核心问题是：基于内存中 count 的当前值 A 计算出来的 count+=1 为 A+1，在将 A+1 写入内存的时候，很可能此时内存中 count 已经被其他线程更新过了，这样就会导致错误地覆盖其他线程写入的值（如果你觉得理解起来还有困难，建议你再重新看看<a href="./83682.md">《01 | 可见性、原子性和有序性问题：并发编程 Bug 的源头》</a>）。也就是说，只有当内存中 count 的值等于期望值 A 时，才能将内存中 count 的值更新为计算结果 A+1，这不就是 CAS 的语义吗！</p>
+<p>使用 CAS 来解决并发问题，一般都会伴随着自旋，而所谓自旋，其实就是循环尝试。例如，实现一个线程安全的<code>count += 1</code>操作，“CAS+ 自旋”的实现方案如下所示，首先计算 newValue = count+1，如果 cas(count,newValue) 返回的值不等于 count，则意味着线程在执行完代码①处之后，执行代码②处之前，count 的值被其他线程更新过。那此时该怎么处理呢？可以采用自旋方案，就像下面代码中展示的，可以重新读 count 最新的值来计算 newValue 并尝试再次更新，直到成功。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">class SimulatedCAS{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  volatile int count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 实现 count+=1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  addOne(){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    do {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      newValue = count+1; //①
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }while(count !=
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      cas(count,newValue) //②
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 模拟实现 CAS，仅用来帮助理解
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  synchronized int cas(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int expect, int newValue){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 读目前 count 的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int curValue = count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 比较目前 count 值是否 == 期望值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if(curValue == expect){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 如果是，则更新 count 的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      count= newValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 返回写入前的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return curValue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过上面的示例代码，想必你已经发现了，CAS 这种无锁方案，完全没有加锁、解锁操作，即便两个线程完全同时执行 addOne() 方法，也不会有线程被阻塞，所以相对于互斥锁方案来说，性能好了很多。</p>
+<p>但是在 CAS 方案中，有一个问题可能会常被你忽略，那就是<strong>ABA</strong>的问题。什么是 ABA 问题呢？</p>
+<p>前面我们提到“如果 cas(count,newValue) 返回的值<strong>不等于</strong>count，意味着线程在执行完代码①处之后，执行代码②处之前，count 的值被其他线程<strong>更新过</strong>”，那如果 cas(count,newValue) 返回的值<strong>等于</strong>count，是否就能够认为 count 的值没有被其他线程<strong>更新过</strong>呢？显然不是的，假设 count 原本是 A，线程 T1 在执行完代码①处之后，执行代码②处之前，有可能 count 被线程 T2 更新成了 B，之后又被 T3 更新回了 A，这样线程 T1 虽然看到的一直是 A，但是其实已经被其他线程更新过了，这就是 ABA 问题。</p>
+<p>可能大多数情况下我们并不关心 ABA 问题，例如数值的原子递增，但也不能所有情况下都不关心，例如原子化的更新对象很可能就需要关心 ABA 问题，因为两个 A 虽然相等，但是第二个 A 的属性可能已经发生变化了。所以在使用 CAS 方案的时候，一定要先 check 一下。</p>
+<h2 id="看-java-如何实现原子化的-count--1">看 Java 如何实现原子化的 count += 1</h2>
+<p>在本文开始部分，我们使用原子类 AtomicLong 的 getAndIncrement() 方法替代了<code>count += 1</code>，从而实现了线程安全。原子类 AtomicLong 的 getAndIncrement() 方法内部就是基于 CAS 实现的，下面我们来看看 Java 是如何使用 CAS 来实现原子化的<code>count += 1</code>的。</p>
+<p>在 Java 1.8 版本中，getAndIncrement() 方法会转调 unsafe.getAndAddLong() 方法。这里 this 和 valueOffset 两个参数可以唯一确定共享变量的内存地址。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">final long getAndIncrement() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  return unsafe.getAndAddLong(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    this, valueOffset, 1L);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>unsafe.getAndAddLong() 方法的源码如下，该方法首先会在内存中读取共享变量的值，之后循环调用 compareAndSwapLong() 方法来尝试设置共享变量的值，直到成功为止。compareAndSwapLong() 是一个 native 方法，只有当内存中共享变量的值等于 expected 时，才会将共享变量的值更新为 x，并且返回 true；否则返回 fasle。compareAndSwapLong 的语义和 CAS 指令的语义的差别仅仅是返回值不同而已。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final long getAndAddLong(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Object o, long offset, long delta){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  long v;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  do {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 读取内存中的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    v = getLongVolatile(o, offset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  } while (!compareAndSwapLong(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      o, offset, v, v + delta));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  return v;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 原子性地将变量更新为 x
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 条件是内存中的值等于 expected
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 更新成功则返回 true
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">native boolean compareAndSwapLong(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Object o, long offset, 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  long expected,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  long x);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>另外，需要你注意的是，getAndAddLong() 方法的实现，基本上就是 CAS 使用的经典范例。所以请你再次体会下面这段抽象后的代码片段，它在很多无锁程序中经常出现。Java 提供的原子类里面 CAS 一般被实现为 compareAndSet()，compareAndSet() 的语义和 CAS 指令的语义的差别仅仅是返回值不同而已，compareAndSet() 里面如果更新成功，则会返回 true，否则返回 false。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">do {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 获取当前值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  oldV = xxxx；
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 根据当前值计算新值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  newV = ...oldV...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}while(!compareAndSet(oldV,newV);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="原子类概览">原子类概览</h2>
+<p>Java SDK 并发包里提供的原子类内容很丰富，我们可以将它们分为五个类别：<strong>原子化的基本数据类型、原子化的对象引用类型、原子化数组、原子化对象属性更新器</strong>和<strong>原子化的累加器</strong>。这五个类别提供的方法基本上是相似的，并且每个类别都有若干原子类，你可以通过下面的原子类组成概览图来获得一个全局的印象。下面我们详细解读这五个类别。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/7e1c4116189c825d8d93912b45bdf367.png" alt=""></p>
+<p>原子类组成概览图</p>
+<h3 id="1-原子化的基本数据类型">1. 原子化的基本数据类型</h3>
+<p>相关实现有 AtomicBoolean、AtomicInteger 和 AtomicLong，提供的方法主要有以下这些，详情你可以参考 SDK 的源代码，都很简单，这里就不详细介绍了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">getAndIncrement() // 原子化 i++
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">getAndDecrement() // 原子化的 i--
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">incrementAndGet() // 原子化的 ++i
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">decrementAndGet() // 原子化的 --i
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 当前值 +=delta，返回 += 前的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">getAndAdd(delta) 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 当前值 +=delta，返回 += 后的值
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">addAndGet(delta)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">//CAS 操作，返回是否成功
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">compareAndSet(expect, update)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 以下四个方法
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">// 新值可以通过传入 func 函数来计算
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">getAndUpdate(func)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">updateAndGet(func)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">getAndAccumulate(x,func)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">accumulateAndGet(x,func)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="2-原子化的对象引用类型">2. 原子化的对象引用类型</h3>
+<p>相关实现有 AtomicReference、AtomicStampedReference 和 AtomicMarkableReference，利用它们可以实现对象引用的原子化更新。AtomicReference 提供的方法和原子化的基本数据类型差不多，这里不再赘述。不过需要注意的是，对象引用的更新需要重点关注 ABA 问题，AtomicStampedReference 和 AtomicMarkableReference 这两个原子类可以解决 ABA 问题。</p>
+<p>解决 ABA 问题的思路其实很简单，增加一个版本号维度就可以了，这个和我们在<a href="./89456.md">《18 | StampedLock：有没有比读写锁更快的锁？》</a>介绍的乐观锁机制很类似，每次执行 CAS 操作，附加再更新一个版本号，只要保证版本号是递增的，那么即便 A 变成 B 之后再变回 A，版本号也不会变回来（版本号递增的）。AtomicStampedReference 实现的 CAS 方法就增加了版本号参数，方法签名如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">boolean compareAndSet(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  V expectedReference,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  V newReference,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int expectedStamp,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int newStamp) 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>AtomicMarkableReference 的实现机制则更简单，将版本号简化成了一个 Boolean 值，方法签名如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">boolean compareAndSet(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  V expectedReference,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  V newReference,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  boolean expectedMark,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  boolean newMark)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="3-原子化数组">3. 原子化数组</h3>
+<p>相关实现有 AtomicIntegerArray、AtomicLongArray 和 AtomicReferenceArray，利用这些原子类，我们可以原子化地更新数组里面的每一个元素。这些类提供的方法和原子化的基本数据类型的区别仅仅是：每个方法多了一个数组的索引参数，所以这里也不再赘述了。</p>
+<h3 id="4-原子化对象属性更新器">4. 原子化对象属性更新器</h3>
+<p>相关实现有 AtomicIntegerFieldUpdater、AtomicLongFieldUpdater 和 AtomicReferenceFieldUpdater，利用它们可以原子化地更新对象的属性，这三个方法都是利用反射机制实现的，创建更新器的方法如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public static &lt;U&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">AtomicXXXFieldUpdater&lt;U&gt; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">newUpdater(Class&lt;U&gt; tclass, 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  String fieldName)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>需要注意的是，<strong>对象属性必须是 volatile 类型的，只有这样才能保证可见性</strong>；如果对象属性不是 volatile 类型的，newUpdater() 方法会抛出 IllegalArgumentException 这个运行时异常。</p>
+<p>你会发现 newUpdater() 的方法参数只有类的信息，没有对象的引用，而更新<strong>对象</strong>的属性，一定需要对象的引用，那这个参数是在哪里传入的呢？是在原子操作的方法参数中传入的。例如 compareAndSet() 这个原子操作，相比原子化的基本数据类型多了一个对象引用 obj。原子化对象属性更新器相关的方法，相比原子化的基本数据类型仅仅是多了对象引用参数，所以这里也不再赘述了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">boolean compareAndSet(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  T obj, 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int expect, 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  int update)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="5-原子化的累加器">5. 原子化的累加器</h3>
+<p>DoubleAccumulator、DoubleAdder、LongAccumulator 和 LongAdder，这四个类仅仅用来执行累加操作，相比原子化的基本数据类型，速度更快，但是不支持 compareAndSet() 方法。如果你仅仅需要累加操作，使用原子化的累加器性能会更好。</p>
+<h2 id="总结">总结</h2>
+<p>无锁方案相对于互斥锁方案，优点非常多，首先性能好，其次是基本不会出现死锁问题（但可能出现饥饿和活锁问题，因为自旋会反复重试）。Java 提供的原子类大部分都实现了 compareAndSet() 方法，基于 compareAndSet() 方法，你可以构建自己的无锁数据结构，但是<strong>建议你不要这样做，这个工作最好还是让大师们去完成</strong>，原因是无锁算法没你想象的那么简单。</p>
+<p>Java 提供的原子类能够解决一些简单的原子性问题，但你可能会发现，上面我们所有原子类的方法都是针对一个共享变量的，如果你需要解决多个变量的原子性问题，建议还是使用互斥锁方案。原子类虽好，但使用要慎之又慎。</p>
+<h2 id="课后思考">课后思考</h2>
+<p>下面的示例代码是合理库存的原子化实现，仅实现了设置库存上限 setUpper() 方法，你觉得 setUpper() 方法的实现是否正确呢？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class SafeWM {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  class WMRange{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final int upper;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    final int lower;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    WMRange(int upper,int lower){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    // 省略构造函数实现
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  final AtomicReference&lt;WMRange&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    rf = new AtomicReference&lt;&gt;(
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      new WMRange(0,0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    );
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  // 设置库存上限
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  void setUpper(int v){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    WMRange nr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    WMRange or = rf.get();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    do{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 检查参数合法性
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      if(v &lt; or.lower){
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        throw new IllegalArgumentException();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      nr = new
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        WMRange(v, or.lower);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }while(!rf.compareAndSet(or, nr));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>欢迎在留言区与我分享你的想法，也欢迎你在留言区记录你的思考过程。感谢阅读，如果你觉得这篇文章对你有帮助的话，也欢迎把它分享给更多的朋友。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/f2ae29f2a91a0266d9d86db774df526d.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">Java并发编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E6%B5%8B%E8%AF%9552%E8%AE%B2/21__%E7%A7%BB%E5%8A%A8%E6%B5%8B%E8%AF%95%E7%A5%9E%E5%99%A8%E5%B8%A6%E4%BD%A0%E7%8E%A9%E8%BD%ACappium/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">21__移动测试神器：带你玩转Appium</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%82%B1%E5%B2%B3%E7%9A%84%E4%BA%A7%E5%93%81%E5%AE%9E%E6%88%98/21__%E5%A2%9E%E9%95%BF%E9%BB%91%E5%AE%A2%E7%9A%84%E9%98%B4%E6%9A%97%E9%9D%A2/">
+            <span class="next-text nav-default">21__增长黑客的阴暗面</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

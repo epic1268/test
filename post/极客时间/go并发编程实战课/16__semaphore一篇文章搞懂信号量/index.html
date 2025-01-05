@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16__Semaphore：一篇文章搞懂信号量 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是鸟窝。
+在前面的课程里，我们学习了标准库的并发原语、原子操作和 Channel，掌握了这些，你就可以解决 80% 的并发编程问题了。但是，如果你要想进一步提升你的并发编程能力，就需要学习一些第三方库。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/16__semaphore%E4%B8%80%E7%AF%87%E6%96%87%E7%AB%A0%E6%90%9E%E6%87%82%E4%BF%A1%E5%8F%B7%E9%87%8F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/16__semaphore%E4%B8%80%E7%AF%87%E6%96%87%E7%AB%A0%E6%90%9E%E6%87%82%E4%BF%A1%E5%8F%B7%E9%87%8F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16__Semaphore：一篇文章搞懂信号量">
+  <meta property="og:description" content="你好，我是鸟窝。
+在前面的课程里，我们学习了标准库的并发原语、原子操作和 Channel，掌握了这些，你就可以解决 80% 的并发编程问题了。但是，如果你要想进一步提升你的并发编程能力，就需要学习一些第三方库。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go并发编程实战课">
+
+  <meta itemprop="name" content="16__Semaphore：一篇文章搞懂信号量">
+  <meta itemprop="description" content="你好，我是鸟窝。
+在前面的课程里，我们学习了标准库的并发原语、原子操作和 Channel，掌握了这些，你就可以解决 80% 的并发编程问题了。但是，如果你要想进一步提升你的并发编程能力，就需要学习一些第三方库。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5284">
+  <meta itemprop="keywords" content="Go并发编程实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16__Semaphore：一篇文章搞懂信号量">
+  <meta name="twitter:description" content="你好，我是鸟窝。
+在前面的课程里，我们学习了标准库的并发原语、原子操作和 Channel，掌握了这些，你就可以解决 80% 的并发编程问题了。但是，如果你要想进一步提升你的并发编程能力，就需要学习一些第三方库。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16__Semaphore：一篇文章搞懂信号量</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5284 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#信号量是什么都有什么操作">信号量是什么？都有什么操作？</a>
+      <ul>
+        <li><a href="#pv-操作">P/V 操作</a></li>
+      </ul>
+    </li>
+    <li><a href="#go-官方扩展库的实现">Go 官方扩展库的实现</a></li>
+    <li><a href="#使用信号量的常见错误">使用信号量的常见错误</a></li>
+    <li><a href="#其它信号量的实现">其它信号量的实现</a></li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#思考题">思考题</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是鸟窝。</p>
+<p>在前面的课程里，我们学习了标准库的并发原语、原子操作和 Channel，掌握了这些，你就可以解决 80% 的并发编程问题了。但是，如果你要想进一步提升你的并发编程能力，就需要学习一些第三方库。</p>
+<p>所以，在接下来的几节课里，我会给你分享 Go 官方或者其他人提供的第三方库，这节课我们先来学习信号量，信号量（Semaphore）是用来控制多个 goroutine 同时访问多个资源的并发原语。</p>
+<h1 id="信号量是什么都有什么操作">信号量是什么？都有什么操作？</h1>
+<p>信号量的概念是荷兰计算机科学家 Edsger Dijkstra 在 1963 年左右提出来的，广泛应用在不同的操作系统中。在系统中，会给每一个进程一个信号量，代表每个进程目前的状态。未得到控制权的进程，会在特定的地方被迫停下来，等待可以继续进行的信号到来。</p>
+<p>最简单的信号量就是一个变量加一些并发控制的能力，这个变量是 0 到 n 之间的一个数值。当 goroutine 完成对此信号量的等待（wait）时，该计数值就减 1，当 goroutine 完成对此信号量的释放（release）时，该计数值就加 1。当计数值为 0 的时候，goroutine 调用 wait 等待该信号量是不会成功的，除非计数器又大于 0，等待的 goroutine 才有可能成功返回。</p>
+<p>更复杂的信号量类型，就是使用抽象数据类型代替变量，用来代表复杂的资源类型。实际上，大部分的信号量都使用一个整型变量来表示一组资源，并没有实现太复杂的抽象数据类型，所以你只要知道有更复杂的信号量就行了，我们这节课主要是学习最简单的信号量。</p>
+<p>说到这儿呢，我想借助一个生活中的例子，来帮你进一步理解信号量。</p>
+<p>举个例子，图书馆新购买了 10 本《Go 并发编程的独家秘籍》，有 1 万个学生都想读这本书，“僧多粥少”。所以，图书馆管理员先会让这 1 万个同学进行登记，按照登记的顺序，借阅此书。如果书全部被借走，那么，其他想看此书的同学就需要等待，如果有人还书了，图书馆管理员就会通知下一位同学来借阅这本书。这里的资源是《Go 并发编程的独家秘籍》这十本书，想读此书的同学就是 goroutine，图书管理员就是信号量。</p>
+<p>怎么样，现在是不是很好理解了？那么，接下来，我们来学习下信号量的 P/V 操作。</p>
+<h2 id="pv-操作">P/V 操作</h2>
+<p>Dijkstra 在他的论文中为信号量定义了两个操作 P 和 V。P 操作（descrease、wait、acquire）是减少信号量的计数值，而 V 操作（increase、signal、release）是增加信号量的计数值。</p>
+<p>使用伪代码表示如下（中括号代表原子操作）：</p>
+<p>function V(semaphore S, integer I):<br>
+[S ← S + I]</p>
+<p>function P(semaphore S, integer I):<br>
+repeat:<br>
+[if S ≥ I:<br>
+S ← S − I<br>
+break]</p>
+<p>可以看到，初始化信号量 S 有一个指定数量（<strong>n</strong>）的资源，它就像是一个有 n 个资源的池子。P 操作相当于请求资源，如果资源可用，就立即返回；如果没有资源或者不够，那么，它可以不断尝试或者阻塞等待。V 操作会释放自己持有的资源，把资源返还给信号量。信号量的值除了初始化的操作以外，只能由 P/V 操作改变。</p>
+<p>现在，我们来总结下信号量的实现。</p>
+<ol>
+<li>初始化信号量：设定初始的资源的数量。</li>
+<li>P 操作：将信号量的计数值减去 1，如果新值已经为负，那么调用者会被阻塞并加入到等待队列中。否则，调用者会继续执行，并且获得一个资源。</li>
+<li>V 操作：将信号量的计数值加 1，如果先前的计数值为负，就说明有等待的 P 操作的调用者。它会从等待队列中取出一个等待的调用者，唤醒它，让它继续执行。</li>
+</ol>
+<p>讲到这里，我想再稍微说一个题外话，我们在第 2 讲提到过饥饿，就是说在高并发的极端场景下，会有些 goroutine 始终抢不到锁。为了处理饥饿的问题，你可以在等待队列中做一些“文章”。比如实现一个优先级的队列，或者先入先出的队列，等等，保持公平性，并且照顾到优先级。</p>
+<p>在正式进入实现信号量的具体实现原理之前，我想先讲一个知识点，就是信号量和互斥锁的区别与联系，这有助于我们掌握接下来的内容。</p>
+<p>其实，信号量可以分为计数信号量（counting semaphre）和二进位信号量（binary semaphore）。刚刚所说的图书馆借书的例子就是一个计数信号量，它的计数可以是任意一个整数。在特殊的情况下，如果计数值只能是 0 或者 1，那么，这个信号量就是二进位信号量，提供了互斥的功能（要么是 0，要么是 1），所以，有时候互斥锁也会使用二进位信号量来实现。</p>
+<p>我们一般用信号量保护一组资源，比如数据库连接池、一组客户端的连接、几个打印机资源，等等。如果信号量蜕变成二进位信号量，那么，它的 P/V 就和互斥锁的 Lock/Unlock 一样了。</p>
+<p>有人会很细致地区分二进位信号量和互斥锁。比如说，有人提出，在 Windows 系统中，互斥锁只能由持有锁的线程释放锁，而二进位信号量则没有这个限制（Stack Overflow上也有相关的讨论）。实际上，虽然在 Windows 系统中，它们的确有些区别，但是对 Go 语言来说，互斥锁也可以由非持有的 goroutine 来释放，所以，从行为上来说，它们并没有严格的区别。</p>
+<p>我个人认为，没必要进行细致的区分，因为互斥锁并不是一个很严格的定义。实际在遇到互斥并发的问题时，我们一般选用互斥锁。</p>
+<p>好了，言归正传，刚刚我们掌握了信号量的含义和具体操作方式，下面，我们就来具体了解下官方扩展库的实现。</p>
+<h1 id="go-官方扩展库的实现">Go 官方扩展库的实现</h1>
+<p>在运行时，Go 内部使用信号量来控制 goroutine 的阻塞和唤醒。我们在学习基本并发原语的实现时也看到了，比如互斥锁的第二个字段：</p>
+<p>type Mutex struct {<br>
+state int32<br>
+sema  uint32<br>
+}</p>
+<p>信号量的 P/V 操作是通过函数实现的：</p>
+<p>func runtime_Semacquire(s *uint32)<br>
+func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int)<br>
+func runtime_Semrelease(s *uint32, handoff bool, skipframes int)</p>
+<p>遗憾的是，它是 Go 运行时内部使用的，并没有封装暴露成一个对外的信号量并发原语，原则上我们没有办法使用。不过没关系，Go 在它的扩展包中提供了信号量semaphore，不过这个信号量的类型名并不叫 Semaphore，而是叫 Weighted。</p>
+<p>之所以叫做 Weighted，我想，应该是因为可以在初始化创建这个信号量的时候设置权重（初始化的资源数），其实我觉得叫 Semaphore 或许会更好。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/3eda6ab0f3945795e10b5ce8123b24dc.png" alt=""></p>
+<p>我们来分析下这个信号量的几个实现方法。</p>
+<ol>
+<li><strong>Acquire 方法</strong>：相当于 P 操作，你可以一次获取多个资源，如果没有足够多的资源，调用者就会被阻塞。它的第一个参数是 Context，这就意味着，你可以通过 Context 增加超时或者 cancel 的机制。如果是正常获取了资源，就返回 nil；否则，就返回 ctx.Err()，信号量不改变。</li>
+<li><strong>Release 方法</strong>：相当于 V 操作，可以将 n 个资源释放，返还给信号量。</li>
+<li><strong>TryAcquire 方法</strong>：尝试获取 n 个资源，但是它不会阻塞，要么成功获取 n 个资源，返回 true，要么一个也不获取，返回 false。</li>
+</ol>
+<p>知道了信号量的实现方法，在实际的场景中，我们应该怎么用呢？我来举个 Worker Pool 的例子，来帮助你理解。</p>
+<p>我们创建和 CPU 核数一样多的 Worker，让它们去处理一个 4 倍数量的整数 slice。每个 Worker 一次只能处理一个整数，处理完之后，才能处理下一个。</p>
+<p>当然，这个问题的解决方案有很多种，这一次我们使用信号量，代码如下：</p>
+<p>var (<br>
+maxWorkers = runtime.GOMAXPROCS(0)                    // worker 数量<br>
+sema       = semaphore.NewWeighted(int64(maxWorkers)) //信号量<br>
+task       = make([]int, maxWorkers*4)                // 任务数，是 worker 的四倍<br>
+)</p>
+<p>func main() {<br>
+ctx := context.Background()</p>
+<pre><code>for i := range task {  
+    // 如果没有 worker 可用，会阻塞在这里，直到某个 worker 被释放  
+    if err := sema.Acquire(ctx, 1); err != nil {  
+        break  
+    }  
+
+    // 启动 worker goroutine  
+    go func(i int) {  
+        defer sema.Release(1)  
+        time.Sleep(100 * time.Millisecond) // 模拟一个耗时操作  
+        task[i] = i + 1  
+    }(i)  
+}  
+
+// 请求所有的 worker，这样能确保前面的 worker 都执行完  
+if err := sema.Acquire(ctx, int64(maxWorkers)); err != nil {  
+    log.Printf(&quot;获取所有的 worker 失败：%v&quot;, err)  
+}  
+
+fmt.Println(task)  
+</code></pre>
+<p>}</p>
+<p>在这段代码中，main goroutine 相当于一个 dispacher，负责任务的分发。它先请求信号量，如果获取成功，就会启动一个 goroutine 去处理计算，然后，这个 goroutine 会释放这个信号量（有意思的是，信号量的获取是在 main goroutine，信号量的释放是在 worker goroutine 中），如果获取不成功，就等到有信号量可以使用的时候，再去获取。</p>
+<p>需要提醒你的是，其实，在这个例子中，还有一个值得我们学习的知识点，就是最后的那一段处理（第 25 行）。<strong>如果在实际应用中，你想等所有的 Worker 都执行完，就可以获取最大计数值的信号量</strong>。</p>
+<p>Go 扩展库中的信号量是使用互斥锁 +List 实现的。互斥锁实现其它字段的保护，而 List 实现了一个等待队列，等待者的通知是通过 Channel 的通知机制实现的。</p>
+<p>我们来看一下信号量 Weighted 的数据结构：</p>
+<p>type Weighted struct {<br>
+size    int64         // 最大资源数<br>
+cur     int64         // 当前已被使用的资源<br>
+mu      sync.Mutex    // 互斥锁，对字段的保护<br>
+waiters list.List     // 等待队列<br>
+}</p>
+<p>在信号量的几个实现方法里，Acquire 是代码最复杂的一个方法，它不仅仅要监控资源是否可用，而且还要检测 Context 的 Done 是否已关闭。我们来看下它的实现代码。</p>
+<p>func (s *Weighted) Acquire(ctx context.Context, n int64) error {<br>
+s.mu.Lock()<br>
+// fast path, 如果有足够的资源，都不考虑 ctx.Done 的状态，将 cur 加上 n 就返回<br>
+if s.size-s.cur &gt;= n &amp;&amp; s.waiters.Len() == 0 {<br>
+s.cur += n<br>
+s.mu.Unlock()<br>
+return nil<br>
+}</p>
+<pre><code>    // 如果是不可能完成的任务，请求的资源数大于能提供的最大的资源数  
+if n &gt; s.size {  
+  s.mu.Unlock()  
+        // 依赖 ctx 的状态返回，否则一直等待  
+  &lt;-ctx.Done()  
+  return ctx.Err()  
+}  
+
+    // 否则就需要把调用者加入到等待队列中  
+    // 创建了一个 ready chan，以便被通知唤醒  
+ready := make(chan struct{})  
+w := waiter{n: n, ready: ready}  
+elem := s.waiters.PushBack(w)  
+s.mu.Unlock()  
+
+
+    // 等待  
+select {  
+case &lt;-ctx.Done(): // context 的 Done 被关闭  
+  err := ctx.Err()  
+  s.mu.Lock()  
+  select {  
+  case &lt;-ready: // 如果被唤醒了，忽略 ctx 的状态  
+    err = nil  
+  default: 通知 waiter  
+    isFront := s.waiters.Front() == elem  
+    s.waiters.Remove(elem)  
+    // 通知其它的 waiters，检查是否有足够的资源  
+    if isFront &amp;&amp; s.size &gt; s.cur {  
+      s.notifyWaiters()  
+    }  
+  }  
+  s.mu.Unlock()  
+  return err  
+case &lt;-ready: // 被唤醒了  
+  return nil  
+}  
+</code></pre>
+<p>}</p>
+<p>其实，为了提高性能，这个方法中的 fast path 之外的代码，可以抽取成 acquireSlow 方法，以便其它 Acquire 被内联。</p>
+<p>Release 方法将当前计数值减去释放的资源数 n，并唤醒等待队列中的调用者，看是否有足够的资源被获取。</p>
+<p>func (s *Weighted) Release(n int64) {<br>
+s.mu.Lock()<br>
+s.cur -= n<br>
+if s.cur &lt; 0 {<br>
+s.mu.Unlock()<br>
+panic(&ldquo;semaphore: released more than held&rdquo;)<br>
+}<br>
+s.notifyWaiters()<br>
+s.mu.Unlock()<br>
+}</p>
+<p>notifyWaiters 方法就是逐个检查等待的调用者，如果资源不够，或者是没有等待者了，就返回：</p>
+<p>func (s *Weighted) notifyWaiters() {<br>
+for {<br>
+next := s.waiters.Front()<br>
+if next == nil {<br>
+break // No more waiters blocked.<br>
+}</p>
+<pre><code>  w := next.Value.(waiter)  
+  if s.size-s.cur &lt; w.n {  
+    //避免饥饿，这里还是按照先入先出的方式处理  
+    break  
+  }  
+
+  s.cur += w.n  
+  s.waiters.Remove(next)  
+  close(w.ready)  
+}  
+</code></pre>
+<p>}</p>
+<p>notifyWaiters 方法是按照先入先出的方式唤醒调用者。当释放 100 个资源的时候，如果第一个等待者需要 101 个资源，那么，队列中的所有等待者都会继续等待，即使有的等待者只需要 1 个资源。这样做的目的是避免饥饿，否则的话，资源可能总是被那些请求资源数小的调用者获取，这样一来，请求资源数巨大的调用者，就没有机会获得资源了。</p>
+<p>好了，到这里，你就知道了官方扩展库的信号量实现方法，接下来你就可以使用信号量了。不过，在此之前呢，我想给你讲几个使用时的常见错误。这部分内容可是帮助你避坑的，我建议你好好学习。</p>
+<h1 id="使用信号量的常见错误">使用信号量的常见错误</h1>
+<p>保证信号量不出错的前提是正确地使用它，否则，公平性和安全性就会受到损害，导致程序 panic。</p>
+<p>在使用信号量时，最常见的几个错误如下：</p>
+<ol>
+<li>请求了资源，但是忘记释放它；</li>
+<li>释放了从未请求的资源；</li>
+<li>长时间持有一个资源，即使不需要它；</li>
+<li>不持有一个资源，却直接使用它。</li>
+</ol>
+<p>不过，即使你规避了这些坑，在同时使用多种资源，不同的信号量控制不同的资源的时候，也可能会出现死锁现象，比如哲学家就餐问题。</p>
+<p>就 Go 扩展库实现的信号量来说，在调用 Release 方法的时候，你可以传递任意的整数。但是，如果你传递一个比请求到的数量大的错误的数值，程序就会 panic。如果传递一个负数，会导致资源永久被持有。如果你请求的资源数比最大的资源数还大，那么，调用者可能永远被阻塞。</p>
+<p>所以，<strong>使用信号量遵循的原则就是请求多少资源，就释放多少资源</strong>。你一定要注意，必须使用正确的方法传递整数，不要“耍小聪明”，而且，请求的资源数一定不要超过最大资源数。</p>
+<h1 id="其它信号量的实现">其它信号量的实现</h1>
+<p>除了官方扩展库的实现，实际上，我们还有很多方法实现信号量，比较典型的就是使用 Channel 来实现。</p>
+<p>根据之前的 Channel 类型的介绍以及 Go 内存模型的定义，你应该能想到，使用一个 buffer 为 n 的 Channel 很容易实现信号量，比如下面的代码，我们就是使用 chan struct{}类型来实现的。</p>
+<p>在初始化这个信号量的时候，我们设置它的初始容量，代表有多少个资源可以使用。它使用 Lock 和 Unlock 方法实现请求资源和释放资源，正好实现了 Locker 接口。</p>
+<p>// Semaphore 数据结构，并且还实现了 Locker 接口<br>
+type semaphore struct {<br>
+sync.Locker<br>
+ch chan struct{}<br>
+}</p>
+<p>// 创建一个新的信号量<br>
+func NewSemaphore(capacity int) sync.Locker {<br>
+if capacity &lt;= 0 {<br>
+capacity = 1 // 容量为 1 就变成了一个互斥锁<br>
+}<br>
+return &amp;semaphore{ch: make(chan struct{}, capacity)}<br>
+}</p>
+<p>// 请求一个资源<br>
+func (s *semaphore) Lock() {<br>
+s.ch &lt;- struct{}{}<br>
+}</p>
+<p>// 释放资源<br>
+func (s *semaphore) Unlock() {<br>
+&lt;-s.ch<br>
+}</p>
+<p>当然，你还可以自己扩展一些方法，比如在请求资源的时候使用 Context 参数（Acquire(ctx)）、实现 TryLock 等功能。</p>
+<p>看到这里，你可能会问，这个信号量的实现看起来非常简单，而且也能应对大部分的信号量的场景，为什么官方扩展库的信号量的实现不采用这种方法呢？其实，具体是什么原因，我也不知道，但是我必须要强调的是，官方的实现方式有这样一个功能：<strong>它可以一次请求多个资源，这是通过 Channel 实现的信号量所不具备的</strong>。</p>
+<p>除了 Channel，marusama/semaphore也实现了一个可以动态更改资源容量的信号量，也是一个非常有特色的实现。如果你的资源数量并不是固定的，而是动态变化的，我建议你考虑一下这个信号量库。</p>
+<h1 id="总结">总结</h1>
+<p>这是一个很奇怪的现象：标准库中实现基本并发原语（比如 Mutex）的时候，强烈依赖信号量实现等待队列和通知唤醒，但是，标准库中却没有把这个实现直接暴露出来放到标准库，而是通过第三库提供。</p>
+<p>不管怎样，信号量这个并发原语在多资源共享的并发控制的场景中被广泛使用，有时候也会被 Channel 类型所取代，因为一个 buffered chan 也可以代表 n 个资源。</p>
+<p>但是，官方扩展的信号量也有它的优势，就是可以一次获取多个资源。<strong>在批量获取资源的场景中，我建议你尝试使用官方扩展的信号量</strong>。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/47eedff8e99262d662018f59020f1e36.png" alt=""></p>
+<h1 id="思考题">思考题</h1>
+<ol>
+<li>你能用 Channel 实现信号量并发原语吗？你能想到几种实现方式？</li>
+<li>为什么信号量的资源数设计成 int64 而不是 uint64 呢？</li>
+</ol>
+<p>欢迎在留言区写下你的思考和答案，我们一起交流讨论。如果你觉得有所收获，也欢迎你把今天的内容分享给你的朋友或同事。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/">Go并发编程实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/16__semaphore%E5%A6%82%E4%BD%95%E5%BF%AB%E9%80%9F%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E9%99%90%E6%B5%81%E5%99%A8/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16__Semaphore：如何快速实现一个限流器？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/16__topicdeletionmanager_topic%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E5%88%A0%E9%99%A4%E7%9A%84/">
+            <span class="next-text nav-default">16__TopicDeletionManager：_Topic是怎么被删除的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

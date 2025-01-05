@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>07__工具进化：如何实现一个分布式压测平台 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是吴骏龙。工欲善其事必先利其器，今天我将与你分享如何自己实现一个分布式压测平台。
+现在只要是规模大一些的互联网公司，都在不遗余力地开发自己的压测平台，比如京东、美团、阿里、360。可能你会问，市面上已经有无数的开源压测工具和平台，比如 JMeter、Locust、nGrinder、Gatling 等，为什么要自己做呢？我在和一些大厂的同行交流经验时，发现对于常见开源压测工具的诟病不外乎有以下几点。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/07__%E5%B7%A5%E5%85%B7%E8%BF%9B%E5%8C%96%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E5%88%86%E5%B8%83%E5%BC%8F%E5%8E%8B%E6%B5%8B%E5%B9%B3%E5%8F%B0/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/07__%E5%B7%A5%E5%85%B7%E8%BF%9B%E5%8C%96%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E5%88%86%E5%B8%83%E5%BC%8F%E5%8E%8B%E6%B5%8B%E5%B9%B3%E5%8F%B0/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="07__工具进化：如何实现一个分布式压测平台">
+  <meta property="og:description" content="你好，我是吴骏龙。工欲善其事必先利其器，今天我将与你分享如何自己实现一个分布式压测平台。
+现在只要是规模大一些的互联网公司，都在不遗余力地开发自己的压测平台，比如京东、美团、阿里、360。可能你会问，市面上已经有无数的开源压测工具和平台，比如 JMeter、Locust、nGrinder、Gatling 等，为什么要自己做呢？我在和一些大厂的同行交流经验时，发现对于常见开源压测工具的诟病不外乎有以下几点。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容量保障核心技术与实战">
+
+  <meta itemprop="name" content="07__工具进化：如何实现一个分布式压测平台">
+  <meta itemprop="description" content="你好，我是吴骏龙。工欲善其事必先利其器，今天我将与你分享如何自己实现一个分布式压测平台。
+现在只要是规模大一些的互联网公司，都在不遗余力地开发自己的压测平台，比如京东、美团、阿里、360。可能你会问，市面上已经有无数的开源压测工具和平台，比如 JMeter、Locust、nGrinder、Gatling 等，为什么要自己做呢？我在和一些大厂的同行交流经验时，发现对于常见开源压测工具的诟病不外乎有以下几点。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6123">
+  <meta itemprop="keywords" content="容量保障核心技术与实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="07__工具进化：如何实现一个分布式压测平台">
+  <meta name="twitter:description" content="你好，我是吴骏龙。工欲善其事必先利其器，今天我将与你分享如何自己实现一个分布式压测平台。
+现在只要是规模大一些的互联网公司，都在不遗余力地开发自己的压测平台，比如京东、美团、阿里、360。可能你会问，市面上已经有无数的开源压测工具和平台，比如 JMeter、Locust、nGrinder、Gatling 等，为什么要自己做呢？我在和一些大厂的同行交流经验时，发现对于常见开源压测工具的诟病不外乎有以下几点。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">07__工具进化：如何实现一个分布式压测平台</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6123 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#架构设计思路">架构设计思路</a></li>
+        <li><a href="#主要功能实现方案和原理">主要功能实现方案和原理</a>
+          <ul>
+            <li><a href="#1-如何实现测试状态流转">1. 如何实现测试状态流转</a></li>
+            <li><a href="#2-如何获取和展示实时数据热数据">2. 如何获取和展示实时数据（热数据）</a></li>
+            <li><a href="#3-如何处理结果数据冷数据">3. 如何处理结果数据（冷数据）</a></li>
+            <li><a href="#4-如何进行吞吐量限制与动态调节">4. 如何进行吞吐量限制与动态调节</a></li>
+            <li><a href="#5-如何实现配置集功能">5. 如何实现配置集功能</a></li>
+            <li><a href="#6-监控模块">6. 监控模块</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后讨论">课后讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是吴骏龙。工欲善其事必先利其器，今天我将与你分享如何自己实现一个分布式压测平台。</p>
+<p>现在只要是规模大一些的互联网公司，都在不遗余力地开发自己的压测平台，比如京东、美团、阿里、360。可能你会问，市面上已经有无数的开源压测工具和平台，比如 JMeter、Locust、nGrinder、Gatling 等，为什么要自己做呢？我在和一些大厂的同行交流经验时，发现对于常见开源压测工具的诟病不外乎有以下几点。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/726037bff8375ccd5ab3ce38435ea157.png" alt=""></p>
+<p>从开源压测工具和平台的这些缺点中，我们可以看出，对于企业来说，自研压测平台就是要满足以下三点需求：</p>
+<p><strong>1. 平台化：</strong> 企业需要一个平台化的压测工具，每个团队都可以在这个平台上协作，而开源工具大多是 C/S 类型（客户端 / 服务器体系结构），缺乏平台化支持。</p>
+<p><strong>2. 标准化：</strong> 企业需要一个统一的标准化压测平台，最好能够和公司的审批流程、管理平台等集成，而开源工具在这方面的扩展性一般不强。</p>
+<p><strong>3. 控制成本：</strong> 企业需要控制压测平台的维护成本，对于规模大的公司，自研优于使用开源。虽然开源压测工具由社区维护，但反馈较慢，自己维护的成本又比较高，不如重写一个或者二次开发。</p>
+<p>在这一讲，我会介绍一套由我设计的基于 JMeter 的分布式压测平台实现方案，这套方案也兼顾了开源工具的一些成熟功能，目前已经在阿里本地生活团队使用了超过 4 年，能够支撑近百万压测并发量，累计输出了近 4000 亿次请求量，管理近 600 台压测机，依然没有出现明显瓶颈。这些成绩到底是怎么做到的，我们来一探究竟吧。</p>
+<h2 id="架构设计思路">架构设计思路</h2>
+<p>首先，实现一个分布式压测平台，要能解决上面提到的绝大部分问题，需要实现的功能可以细化为以下几个方面：</p>
+<ol>
+<li><strong>用例管理：</strong> 用户建立测试用例，包含脚本文件、数据文件和插件，平台进行分类管理并持久化。</li>
+<li><strong>压测执行：</strong> 一键触发测试用例，可指定各种运行参数，可以指定多台压测机分布式执行，可以批量执行多个测试用例，压测过程中能够动态调节压测量。</li>
+<li><strong>实时结果（热数据）：</strong> 压测过程中，实时展示响应时间、吞吐量、错误率等概要数据。由于这些数据都是在压测时需要高频关注的，我们将其称之为“热数据”。</li>
+<li><strong>压测结果（冷数据）：</strong> 在压测结束后，展示平均响应时间、平均吞吐量，90/95/99 线等更详尽的数据。这部分数据主要是供压测后的分析工作使用，不需要实时获取，因此被称之为“冷数据”。</li>
+<li><strong>压测机管理：</strong> 平台能够与压测机进行交互，调度压测机完成压测执行工作。</li>
+<li><strong>安全保障：</strong> 平台应具备一定的监控机制，对压测过程中的一些异常情况进行干预。</li>
+</ol>
+<p>我们建设分布式压测平台的理念是“取其精华去其糟粕”，<strong>尽可能复用已有开源工具的成熟功能，因为这部分功能相对稳定，不需要重复造轮子；对开源工具不成熟的功能应当规避，在压测平台中进行实现；对开源工具不具备的功能，则完全在压测平台中实现。</strong></p>
+<p>下图是分布式压测平台的顶层设计图，它是典型的 Java Web 项目，平台本身不执行测试只做调度，避免成为施压的瓶颈，后台均使用 JMeter 执行测试。平台会对挂载的压测机进行心跳检测，确保压测机是可用的。用例和数据文件可以存储在服务器本地，或者采用MinIO进行高可用的文件对象存储。压测期间产生的冷数据持久化至数据库，热数据持久化至时序数据库（InfluxDB）并定期清理。平台允许挂载外部监控模块，对压测过程进行干预。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/4d7f14f998c0fe4af398779f54bfe970.png" alt=""></p>
+<p>这里，你需要注意，在使用 JMeter 进行压测时，如果并发量比较大，单机的资源配置可能无法支撑，这时需要联合多机进行分布式压测，然而 JMeter 自身的分布式压测功能是有一定缺陷的：</p>
+<ol>
+<li>JMeter 的分布式执行和单机执行方式的差异较大，需要做很多额外配置，由此产生大量运维工作。</li>
+<li>JMeter 分布式执行模式，master 节点通常不参与压测，而是收集 slave 节点的压测信息，这会造成一定程度上的资源浪费。</li>
+<li>JMeter 分布式执行模式，slave 节点会将每个请求打点都实时回传给 master 节点，造成大量的带宽消耗。</li>
+</ol>
+<p>这时候怎么办呢？上面我提到过，对开源工具不成熟的功能应当规避，因此，我们可以在每台压测机中植入一个 Agent，它能够与压测平台服务器通过长连接的方式建立通信，这样平台就可以直接对压测机进行调度。这种方案相当于我们在平台层重新实现了 JMeter 的分布式调度功能，两者的实现对比见下表。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/ab0b6168b70ac8f4eaa25f8cbb000eab.png" alt=""></p>
+<p>这个方案也一并实现了<strong>压测过程中的冷热数据分离</strong>，冷数据在测试完成后才会传输，如果不需要压测端数据，甚至可以配置不存储冷数据，因此该方案的扩展性是非常友好的，理论上支持的 TPS 没有上限。</p>
+<h2 id="主要功能实现方案和原理">主要功能实现方案和原理</h2>
+<p>说完了需要实现的功能和架构设计思路，相信你对我们要实现的压测平台已经有了初步认识，下面我就从平台的 6 大功能实现方案和原理进行展开，沿着基础功能到高阶功能的顺序进行讲解，展开的粒度大约控制在让你稍加思考就能上手实现的程度，你可以选择擅长的编程语言及前后端框架去实现具体功能。</p>
+<p>如果你希望能更直观地看到整个平台的功能全貌，我也制作了一个预览视频，在这一讲的最后我会提供给你。</p>
+<h3 id="1-如何实现测试状态流转">1. 如何实现测试状态流转</h3>
+<p>测试状态流转是压测平台管理测试工作的核心，所以我放在第一个讲。和人类的生老病死一样，每一轮成功的测试工作会经历一个完整的生命周期，可以描绘成下面这条主线。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/bb8ee46100211a0b1aba642c2ed579d9.png" alt=""></p>
+<p>其中，我将<strong>配置、触发、运行、收集、清理定义为五大内部行为</strong>（平台内部逻辑管控），这五大内部行为都会改变测试的状态；同时，我们还会允许一些外部行为去干预测试工作，比如在运行过程中需要人为停止测试，外挂的监控组件判断异常后主动熔断测试等，这些外部行为也会改变测试的状态。你可以通过下面的表格，理解各个行为对测试状态的影响，以及对应的后续行为是什么。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/e94abe7c0443f3a1813a74b768731060.png" alt=""></p>
+<p>将这些状态变换的触发条件和转换过程绘制成状态流转图，就是下面这个样子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/2df3b7b1ebecf7f53526f22eb691cc08.png" alt=""></p>
+<p>说白了，压测平台对测试状态的管理，就是通过代码实现出这张图的所有逻辑。其中的关键是，<strong>无论测试流程出现何种分支（正常或异常），最后都要能形成闭环（即起点一定最终要达到终点）</strong>，这对系统的健壮性非常重要，因为如果测试状态卡在任何中间状态，本质都是平台对其失去了管理，测试的信息都丢失了。</p>
+<h3 id="2-如何获取和展示实时数据热数据">2. 如何获取和展示实时数据（热数据）</h3>
+<p>上面我讲到了实现测试状态流转的整体思路，其中在“运行中”状态下，我们需要获取压测时的实时数据，以便实时观察压测情况。</p>
+<p>我们这套分布式压测平台实现方案，是基于 JMeter 的，但遗憾的是，JMeter 本身并不提供图形化的实时数据展示功能，以往我们只能通过输出日志看到一些粗略的信息。在压测平台中，我们就对实时数据展示功能进行了实现，主要原理是通过 JMeter 的 Backend Listener 将测试结果实时发往 InfluxDB，同时平台向 InfluxDB 轮询查询数据，得到实时曲线并展示给用户。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/8a73e9073d77ed0d4c82285fd2900964.png" alt=""></p>
+<p>当然，你也可以直接基于流行的开源数据可视化系统Grafana进行数据展示。</p>
+<p>另外，补充一句，我在 2017 年为 JMeter 贡献了基于 UDP 协议与 InfluxDB 传输数据的 Backend Listener，比起当时官方支持的 HTTP 协议，传输效率更高，被列为 JMeter 3.3 的核心改进项，如果你也想使用这个 UDP 协议的 Backend Listener 的话，请确保 JMeter 版本 ≥ 3.3，欢迎你尝试。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/e413852e318505ab1b101724f5ceb586.png" alt=""></p>
+<h3 id="3-如何处理结果数据冷数据">3. 如何处理结果数据（冷数据）</h3>
+<p>实时数据要讲究快，能实时观察压测结果，比如，我们只要看到响应时间和错误率就可以基本了解压测当时的状态了。但对结果数据要更讲究全，目的是在压测结束后对压测结果做详细分析时，能精细到看到每个报错信息是什么。</p>
+<p>由于压测平台自己实现了分布式压测模式，因此在拿到每台压测机的结果文件后，也需要自行对这些结果文件的内容进行合并和解析，并持久化记录下来。这里所谓的结果文件其实就是压测生成的 JTL 文件，我们先来看下 JTL 文件的一个片段。</p>
+<p>timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect<br>
+1617696530005,81,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,78,0,43<br>
+1617696530088,32,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,32,0,0<br>
+1617696530120,32,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,32,0,0<br>
+1617696530152,32,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,32,0,0<br>
+1617696530184,31,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530216,31,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530248,31,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530280,31,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530312,31,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530343,32,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,31,0,0<br>
+1617696530375,32,HTTP 请求，200,OK，线程组 1-1,text,true,,2497,118,1,1,http://www.baidu.com/,32,0,0</p>
+<p>JTL 文件的特点很鲜明，可以看到，相对应每一行的单条结果数据的大小非常小（大约只有 100 多个字节），但总量很大（上面的例子只是片段，实际可能有几万到几百万条）。如果我们只是简单的将所有数据存储起来，将会占用大量的存储空间，因此结果数据需要做预聚合再存入。</p>
+<p>预聚合是怎么做的呢？下面代码展示了聚合存储的数据结构，核心是以 label（JTL 中的 label）作大分类，维度（errorMsg、errorCode 等）作小分类，以时间作为聚合标准，interval 固定，固定聚合为 60 个点，从而保证存储大小不会过大。</p>
+<p>{<br>
+&ldquo;label&rdquo;: &ldquo;upload&rdquo;, &ndash; 大分类，比如这条记录只针对 upload label<br>
+&ldquo;totalCount&rdquo;: 428,<br>
+&ldquo;totalErrorCount&rdquo;: 12,<br>
+&ldquo;errorMsg&rdquo;: [ &ndash; 维度字段，作小分类<br>
+{<br>
+&ldquo;msg&rdquo;: &ldquo;io.exception&rdquo;,<br>
+&ldquo;count&rdquo;: 12<br>
+},&hellip; &ndash; 固定聚合成 60 个点<br>
+],<br>
+&ldquo;errorCode&rdquo;: [<br>
+{<br>
+&ldquo;code&rdquo;: &ldquo;404&rdquo;,<br>
+&ldquo;count&rdquo;: 12<br>
+},&hellip;<br>
+],<br>
+&ldquo;count&rdquo;: [<br>
+12, …, 15<br>
+],<br>
+&ldquo;error&rdquo;: [<br>
+12, …, 15<br>
+],<br>
+&ldquo;rt&rdquo;: [<br>
+12, …, 15<br>
+],<br>
+&ldquo;minRt&rdquo;: [<br>
+12, …, 15<br>
+],<br>
+&ldquo;maxRt&rdquo;: [<br>
+12, …, 15<br>
+]<br>
+}</p>
+<p>结果数据的这种存储方式，既保证了不会占用太大的存储空间，又能够汇总出丰富全面的数据。</p>
+<h3 id="4-如何进行吞吐量限制与动态调节">4. 如何进行吞吐量限制与动态调节</h3>
+<p>测试状态流转、冷热数据的获取和处理是压测平台最基本的功能，下面我来介绍一些更高阶的功能，先从吞吐量控制与动态调节开始吧。在压测时，<strong>“控量”是非常重要的</strong>，JMeter 是根据线程数大小来控制压力强弱的，但我们制定的压测目标中的指标往往是吞吐量（QPS/TPS），这就给测试人员带来了不便之处，必须一边调整线程数，一边观察 QPS/TPS 达到什么量级了。</p>
+<p>为了解决这个问题，JMeter 提供了吞吐量控制器的插件，我们可以通过设定吞吐量上限来限制 QPS/TPS，达到控量的效果。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/bcbd3501d558b7aa93e8b7168088f6f6.png" alt=""></p>
+<p>上面的做法能够确保将吞吐量控制在一个固定值上，但这样还远远不够，实际工作中我们希望在每次压测执行时能够随时调节吞吐量，比如，在某个压力下服务容量没有问题，我们希望在不停止压测的情况下，再加一些压力，这样的功能该如何实现呢？</p>
+<p>我提供的方案也很简单，依然是基于吞吐量控制器，基本的实现原理是将吞吐量限制值设为占位符（如下图中的 ${__P(throughput, 99999999)}，throughput 就是占位符），利用 JMeter 的 BeanShell 功能，通过执行外部命令的方式，在运行时注入具体值，达到动态调节吞吐量的目的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/6b217754a9250e9a2b2724fc35405b9d.png" alt=""></p>
+<p>上面提到的外部命令具体为：</p>
+<p>java -jar &lt;jmeter_path&gt;/lib/bshclient.jar localhost 9000 update.bsh <qps></p>
+<p>其中，update.bsh 文件的内容为：</p>
+<p>import org.apache.jmeter.util.JMeterUtils;</p>
+<p>getprop(p){ // get a JMeter property<br>
+return JMeterUtils.getPropDefault(p,&quot;&quot;);<br>
+}</p>
+<p>setprop(p,v){ // set a JMeter property<br>
+print(&ldquo;Setting property &lsquo;&quot;+p+&rdquo;&rsquo; to &lsquo;&quot;+v+&quot;&rsquo;.&quot;);<br>
+JMeterUtils.getJMeterProperties().setProperty(p, v);<br>
+}</p>
+<p>setprop(&ldquo;throughput&rdquo;, args[0]);</p>
+<p>压测平台将上述这些工作统一封装后提供出接口，前端界面只要留出输入框供用户填写吞吐量的参数，就可以方便的使用了。</p>
+<h3 id="5-如何实现配置集功能">5. 如何实现配置集功能</h3>
+<p>我们再来聊一个和压测运行相关的重要功能，称之为“配置集”。这个功能其实当初并不在平台设计的考虑范围内，但随着全链路压测规模的日益壮大，需要同时执行的用例数量越来越多，每次执行时都得一个一个去触发，手忙脚乱，有了这个痛点，引发了我们对配置集功能的探索。</p>
+<p><strong>配置集功能的本质是“批量运行多个测试用例”</strong>，如下图所示，用户只需提前在配置集中添加需要执行的测试用例，以及每个执行轮次的配置信息，比如线程数、持续时间等。配置集设定完成后，选择某个轮次，就能基于相应的配置一键触发所有测试用例。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/248ecaf9a80f8739e10aba1ce52512b7.png" alt=""></p>
+<p>从实现的角度来讲，配置集是映射多个用例的数据结构，而刚我们提到的“轮次”的概念，是指对同一个配置集设定多轮不同的配置项，每个配置项还是作用在测试用例上，目的是进一步提高可复用性。简而言之，<strong>记住这个公式：“配置集 1：N 测试用例；测试用例 1：N 轮次配置”</strong>，即一个配置集对应多个测试用例，一个测试用例对应多个轮次配置。再直观一些，你可以直接通过下面的代码理解这个逻辑。</p>
+<p>{<br>
+&ldquo;_id&rdquo; : ObjectId(&ldquo;603c7f8f587ca226d257b144&rdquo;),<br>
+&ldquo;testPlanName&rdquo; : &ldquo;addTestPlan&rdquo;,<br>
+&ldquo;testPlanUnitList&rdquo; : [ &ndash; 一个配置集对应多个测试用例<br>
+{<br>
+&ldquo;testcaseId&rdquo; : &ldquo;5fc4dd4ee9d7d7b19d0f5152&rdquo;,<br>
+……<br>
+&ldquo;testRoundList&rdquo; : [ &ndash; 一个测试用例对应多个轮次配置<br>
+{<br>
+&ldquo;threadCount&rdquo; : 1,<br>
+&ldquo;duration&rdquo; : NumberLong(60),<br>
+&ldquo;rampUp&rdquo; : 0,<br>
+&ldquo;detailLog&rdquo; : true,<br>
+&ldquo;realTimeLog&rdquo; : true,<br>
+&ldquo;throughput&rdquo; : 100,<br>
+&ldquo;name&rdquo; : &ldquo;配置 1&rdquo;,<br>
+&ldquo;qpsStep&rdquo; : 0<br>
+}， ……<br>
+]<br>
+}<br>
+],<br>
+……<br>
+}</p>
+<p>由于在配置集中同时管理着多个用例的所有信息，因此还可以实现一些高级操作，比如：某个用例先执行一段时间后，其他用例再启动，其本质就是单独先触发一个用例，等待固定时间后再触发其余用例；或是，运行时临时改变其中几个用例的 QPS 上限，其他用例保持不变，其本质就是对单个用例进行吞吐量调节，等等。</p>
+<h3 id="6-监控模块">6. 监控模块</h3>
+<p>我已经介绍了很多关于压测运行和压测数据的功能模块，最后我们来学习一下监控模块，它同样也是压测平台非常重要的组成部分，也是<strong>几乎所有开源压测工具都缺乏的功能模块</strong>。监控模块可以分为两类，分别是内部监控模块和外部监控模块。</p>
+<p>内部监控模块主要针对压测平台自身运行过程进行监控和干预，观察压测是否处于正常进行中，如果遇到异常情况，如线程异常终止、没有持续的测试数据流出、磁盘打满等，则立刻终止测试，反馈异常结果并记录日志供排查。</p>
+<p>内部监控模块实现起来也很简单，在触发压测后，我们也同时启动一个任务对使用的压测机进行监控，监控的内容可以是磁盘使用量、压测数据流的状态等等，如果识别到异常，则触发相应的异常逻辑即可。</p>
+<p>第二类监控为外部监控模块，主要用来对接外部监控系统，这个模块很重要，除了方便观察系统指标以外，其最关键的作用是能够反向干预压测工作，协助用户规避风险，尤其是针对线上压测这类高风险工作。比如，当监控到服务端的错误率达到一定阈值时，立刻停止当次测试。</p>
+<p>外部监控模块的实现，需要与外部监控系统提供的接口对接，如果有些监控系统自带报警功能，那么就更好了，压测平台在获取到报警信息后可以立刻停止测试。</p>
+<p>以对接 Grafana 监控为例，最简单的方式莫过于采用 Webhook 的方式，我们只需要指定一个接口并配置到 Grafana 中，在监控告警事件发生时，Grafana 就会回调这个接口，触发相应的停止测试的动作。当然，也可以触发其他动作，这取决于接口的逻辑。在Grafana 使用手册中提供了详细的对接案例，你可以进一步阅读，加深理解。</p>
+<h2 id="总结">总结</h2>
+<p>工欲善其事必先利其器，压测平台作为容量保障的工具枢纽，其地位不言而喻。一个扩展性好、设计健壮、体验优秀的压测平台，能够对容量保障工作带来巨大帮助。</p>
+<p>这一讲中，我介绍了一个基于 JMeter 的分布式压测平台的实现方案，它解决了企业对于压测工具的三个重要诉求：平台化、标准化和控制成本。如果你的团队已经习惯于使用流行的 JMeter 进行压测，那么上手这个平台几乎是没有什么成本的，因为它 100% 兼容 JMeter。</p>
+<p>平台的主要功能可以分为几大部分去看，首先是测试状态，我们明确了测试行为和测试状态之间的流转关系，确保无论测试过程是正常执行还是异常终止，整个流程都能闭环完结。</p>
+<p>其次是测试数据，我们将数据分为热数据和冷数据，分别对应实时数据和结果数据，并采用了完全不同的思路去实现，确保各自的特点能够充分发挥。</p>
+<p>接下来，我们聊到了测试运行过程中的两个重要功能，吞吐量动态调节和配置集。其中，吞吐量动态调节利用了 JMeter BeanShell 的动态传参功能，我们只需要暴露吞吐量作为参数即可；而配置集则是平台对多测试用例运行的一种实现，能够方便我们批量执行大量测试用例。</p>
+<p>最后，监控模块是压测工作安全性的重要保证，内部监控模块对压测本身的状态进行检查，如有异常及时反馈；外部监控模块则是对接外部监控系统，在服务出现异常时主动终止测试。</p>
+<p>通过今天的学习，希望能够让你了解分布式压测平台实现的重点和难点，也期待你能够创造更多方便友好的功能，为容量保障工作的降本提效贡献一份力。</p>
+<h2 id="课后讨论">课后讨论</h2>
+<p>这里，我给出一个分布式压测平台的预览视频，包含这一讲提到的所有功能，它可以作为你的实现蓝本。如果观看了视频后，你有了什么新的思路或启发，欢迎分享给我，我们共同探讨。</p>
+<p>Sorry, your browser doesn&rsquo;t support embedded videos.</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/ec3ef0380d885723bb2413e4e62c84a7.png" alt=""></p>
+<p></p>
+<p>00:00 / 00:00</p>
+<p></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E9%87%8F%E4%BF%9D%E9%9A%9C%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/">容量保障核心技术与实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A0%94%E5%8F%91%E6%95%88%E7%8E%87%E7%A0%B4%E5%B1%80%E4%B9%8B%E9%81%93/07__%E5%88%86%E6%94%AF%E7%AE%A1%E7%90%86facebook%E7%9A%84%E7%AD%96%E7%95%A5%E9%80%82%E5%90%88%E6%88%91%E7%9A%84%E5%9B%A2%E9%98%9F%E5%90%97/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">07__分支管理：Facebook的策略，适合我的团队吗？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AF%B4%E9%80%8F%E5%8C%BA%E5%9D%97%E9%93%BE/07__%E5%85%B1%E8%AF%86%E4%B8%8A%E6%8B%9C%E5%8D%A0%E5%BB%B7%E5%B0%86%E5%86%9B%E4%B9%9F%E8%AE%B2%E5%B0%91%E6%95%B0%E6%9C%8D%E4%BB%8E%E5%A4%9A%E6%95%B0/">
+            <span class="next-text nav-default">07__共识（上）：拜占廷将军也讲少数服从多数？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

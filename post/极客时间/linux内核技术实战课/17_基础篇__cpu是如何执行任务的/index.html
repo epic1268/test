@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17_基础篇__CPU是如何执行任务的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是邵亚方。
+如果你做过性能优化的话，你应该有过这些思考，比如说：
+如何让 CPU 读取数据更快一些？ 同样的任务，为什么有时候执行得快，有时候执行得慢？ 我的任务有些比较重要，CPU 如果有争抢时，我希望可以先执行这些任务，这该怎么办呢？ 多线程并行读写数据是如何保障同步的？ … 要想明白这些问题，你就需要去了解 CPU 是如何执行任务的，只有明白了 CPU 的执行逻辑，你才能更好地控制你的任务执行，从而获得更好的性能。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/17_%E5%9F%BA%E7%A1%80%E7%AF%87__cpu%E6%98%AF%E5%A6%82%E4%BD%95%E6%89%A7%E8%A1%8C%E4%BB%BB%E5%8A%A1%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/17_%E5%9F%BA%E7%A1%80%E7%AF%87__cpu%E6%98%AF%E5%A6%82%E4%BD%95%E6%89%A7%E8%A1%8C%E4%BB%BB%E5%8A%A1%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17_基础篇__CPU是如何执行任务的？">
+  <meta property="og:description" content="你好，我是邵亚方。
+如果你做过性能优化的话，你应该有过这些思考，比如说：
+如何让 CPU 读取数据更快一些？ 同样的任务，为什么有时候执行得快，有时候执行得慢？ 我的任务有些比较重要，CPU 如果有争抢时，我希望可以先执行这些任务，这该怎么办呢？ 多线程并行读写数据是如何保障同步的？ … 要想明白这些问题，你就需要去了解 CPU 是如何执行任务的，只有明白了 CPU 的执行逻辑，你才能更好地控制你的任务执行，从而获得更好的性能。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Linux内核技术实战课">
+
+  <meta itemprop="name" content="17_基础篇__CPU是如何执行任务的？">
+  <meta itemprop="description" content="你好，我是邵亚方。
+如果你做过性能优化的话，你应该有过这些思考，比如说：
+如何让 CPU 读取数据更快一些？ 同样的任务，为什么有时候执行得快，有时候执行得慢？ 我的任务有些比较重要，CPU 如果有争抢时，我希望可以先执行这些任务，这该怎么办呢？ 多线程并行读写数据是如何保障同步的？ … 要想明白这些问题，你就需要去了解 CPU 是如何执行任务的，只有明白了 CPU 的执行逻辑，你才能更好地控制你的任务执行，从而获得更好的性能。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3678">
+  <meta itemprop="keywords" content="Linux内核技术实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17_基础篇__CPU是如何执行任务的？">
+  <meta name="twitter:description" content="你好，我是邵亚方。
+如果你做过性能优化的话，你应该有过这些思考，比如说：
+如何让 CPU 读取数据更快一些？ 同样的任务，为什么有时候执行得快，有时候执行得慢？ 我的任务有些比较重要，CPU 如果有争抢时，我希望可以先执行这些任务，这该怎么办呢？ 多线程并行读写数据是如何保障同步的？ … 要想明白这些问题，你就需要去了解 CPU 是如何执行任务的，只有明白了 CPU 的执行逻辑，你才能更好地控制你的任务执行，从而获得更好的性能。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17_基础篇__CPU是如何执行任务的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3678 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#cpu-是如何读写数据的">CPU 是如何读写数据的？</a></li>
+        <li><a href="#cpu-是如何选择线程执行的">CPU 是如何选择线程执行的？</a></li>
+        <li><a href="#课堂总结">课堂总结</a></li>
+        <li><a href="#课后作业">课后作业</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是邵亚方。</p>
+<p>如果你做过性能优化的话，你应该有过这些思考，比如说：</p>
+<ol>
+<li>如何让 CPU 读取数据更快一些？</li>
+<li>同样的任务，为什么有时候执行得快，有时候执行得慢？</li>
+<li>我的任务有些比较重要，CPU 如果有争抢时，我希望可以先执行这些任务，这该怎么办呢？</li>
+<li>多线程并行读写数据是如何保障同步的？</li>
+<li>…</li>
+</ol>
+<p>要想明白这些问题，你就需要去了解 CPU 是如何执行任务的，只有明白了 CPU 的执行逻辑，你才能更好地控制你的任务执行，从而获得更好的性能。</p>
+<h2 id="cpu-是如何读写数据的">CPU 是如何读写数据的？</h2>
+<p>我先带你来看下 CPU 的架构，因为你只有理解了 CPU 的架构，你才能更好地理解 CPU 是如何执行指令的。CPU 的架构图如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/05fba2816bfbbab087e4a454966cc9c7.png" alt=""></p>
+<p>CPU 架构</p>
+<p>你可以直观地看到，对于现代处理器而言，一个实体 CPU 通常会有两个逻辑线程，也就是上图中的 Core 0 和 Core 1。每个 Core 都有自己的 L1 Cache，L1 Cache 又分为 dCache 和 iCache，对应到上图就是 L1d 和 L1i。L1 Cache 只有 Core 本身可以看到，其他的 Core 是看不到的。同一个实体 CPU 中的这两个 Core 会共享 L2 Cache，其他的实体 CPU 是看不到这个 L2 Cache 的。所有的实体 CPU 会共享 L3 Cache。这就是典型的 CPU 架构。</p>
+<p>相信你也看到，在 CPU 外还会有内存（DRAM）、磁盘等，这些存储介质共同构成了体系结构里的金字塔存储层次。如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/ecdeb88a003a6bfb0ad97175efff2408.png" alt=""></p>
+<p>金字塔存储层次</p>
+<p>在这个“金字塔”中，越往下，存储容量就越大，它的速度也会变得越慢。Jeff Dean 曾经研究过 CPU 对各个存储介质的访问延迟，具体你可以看下latency里的数据，里面详细记录了每个存储层次的访问延迟，这也是我们在性能优化时必须要知道的一些延迟数据。你可不要小瞧它，在某些场景下，这些不同存储层次的访问延迟差异可能会导致非常大的性能差异。</p>
+<p>我们就以 Cache 访问延迟（L1 0.5ns，L2 10ns）和内存访问延迟（100ns）为例，我给你举一个实际的案例来说明访问延迟的差异对性能的影响。</p>
+<p>之前我在做网络追踪系统时，为了更方便地追踪 TCP 连接，我给 Linux Kernel 提交了一个 PATCH 来记录每个连接的编号，具体你可以参考这个 commit：net: init sk_cookie for inet socket。该 PATCH 的大致作用是，在每次创建一个新的 TCP 连接时（关于 TCP 这部分知识，你可以去温习上一个模块的内容），它都会使用 net namespace（网络命名空间）中的 cookie_gen 生成一个 cookie 给这个新建的连接赋值。</p>
+<p>可是呢，在这个 PATCH 被合入后，Google 工程师 Eric Dumazet 发现在他的 SYN Flood 测试中网络吞吐量会下降约 24%。后来经过分析发现，这是因为 net namespace 中所有 TCP 连接都在共享 cookie_gen。在高并发情况下，瞬间会有非常多的新建 TCP 连接，这时候 cookie_gen 就成了一个非常热的数据，从而被缓存在 Cache 中。如果 cookie_gen 的内容被修改的话，Cache 里的数据就会失效，那么当有其他新建连接需要读取这个数据时，就不得不再次从内存中去读取。而你知道，内存的延迟相比 Cache 的延迟是大很多的，这就导致了严重的性能下降。这个问题就是典型的 False Sharing，也就是 Cache 伪共享问题。</p>
+<p>正因为这个 PATCH 给高并发建连这种场景带来了如此严重的性能损耗，所以它就被我们给回退（Revert）了，你具体可以看Revert &ldquo;net: init sk_cookie for inet socket&quot;这个 commit。不过，cookie_gen 对于网络追踪还是很有用的，比如说在使用 ebpf 来追踪 cgroup 的 TCP 连接时，所以后来 Facebook 的一个工程师把它从 net namespace 这个结构体里移了出来，改为了一个全局变量。</p>
+<p>由于 net namespace 被很多 TCP 连接共享，因此这个结构体非常容易产生这类 Cache 伪共享问题，Eric Dumazet 也在这里引入过一个 Cache 伪共享问题：net: reorder‘struct net’fields to avoid false sharing。</p>
+<p>接下来，我们就来看一下 Cache 伪共享问题究竟是怎么回事。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/cfffda0a8b4262b15350b5e0d388167e.png" alt=""></p>
+<p>Cache Line False Sharing</p>
+<p>如上图所示，两个 CPU 上并行运行着两个不同线程，它们同时从内存中读取两个不同的数据，这两个数据的地址在物理内存上是连续的，它们位于同一个 Cache Line 中。CPU 从内存中读数据到 Cache 是以 Cache Line 为单位的，所以该 Cache Line 里的数据被同时读入到了这两个 CPU 的各自 Cache 中。紧接着这两个线程分别改写不同的数据，每次改写 Cache 中的数据都会将整个 Cache Line 置为无效。因此，虽然这两个线程改写的数据不同，但是由于它们位于同一个 Cache Line 中，所以一个 CPU 中的线程在写数据时会导致另外一个 CPU 中的 Cache Line 失效，而另外一个 CPU 中的线程在读写数据时就会发生 cache miss，然后去内存读数据，这就大大降低了性能。</p>
+<p>Cache 伪共享问题可以说是性能杀手，我们在写代码时一定要留意那些频繁改写的共享数据，必要的时候可以将它跟其他的热数据放在不同的 Cache Line 中避免伪共享问题，就像我们在内核代码里经常看到的 ____cacheline_aligned 所做的那样。</p>
+<p>那怎么来观测 Cache 伪共享问题呢？你可以使用perf c2c这个命令，但是这需要较新版本内核支持才可以。不过，perf 同样可以观察 cache miss 的现象，它对很多性能问题的分析还是很有帮助的。</p>
+<p>CPU 在写完 Cache 后将 Cache 置为无效（invalidate）, 这本质上是为了保障多核并行计算时的数据一致性，一致性问题是 Cache 这个存储层次很典型的问题。</p>
+<p>我们再来看内存这个存储层次中的典型问题：并行计算时的竞争，即两个 CPU 同时去操作同一个物理内存地址时的竞争。关于这类问题，我举一些简单的例子给你说明一下。</p>
+<p>以 C 语言为例：</p>
+<p>struct foo {<br>
+int a;<br>
+int b;<br>
+};</p>
+<p>在这段示例代码里，我们定义了一个结构体，该结构体里的两个成员 a 和 b 在地址上是连续的。如果 CPU 0 去写 a，同时 CPU 1 去读 b 的话，此时不会有竞争，因为 a 和 b 是不同的地址。不过，a 和 b 由于在地址上是连续的，它们可能会位于同一个 Cache Line 中，所以为了防止前面提到的 Cache 伪共享问题，我们可以强制将 b 的地址设置为 Cache Line 对齐地址，如下:</p>
+<p>struct foo {<br>
+int a;<br>
+int b ____cacheline_aligned;<br>
+};</p>
+<p>接下来，我们看下另外一种情况：</p>
+<p>struct foo {<br>
+int a:1;<br>
+int b:1;<br>
+};</p>
+<p>这个示例程序定义了两个位域（bit field），a 和 b 的地址是一样的，只是属于该地址的不同 bit。在这种情况下，CPU 0 去写 a（a = 1），同时 CPU 1 去写 b（b = 1），就会产生竞争。在总线仲裁后，先写的数据就会被后写的数据给覆盖掉。这就是执行 RMW 操作时典型的竞争问题。在这种场景下，就需要同步原语了，比如使用 atomic 操作。</p>
+<p>关于位操作，我们来看一个实际的案例。这是我前段时间贡献给 Linux 内核的一个 PATCH：psi: Move PF_MEMSTALL out of task-&gt;flags，它在 struct task_struct 这个结构体里增加了一个 in_memstall 的位域，在该 PATCH 里无需考虑多线程并行操作该位域时的竞争问题，你知道这是为什么吗？我将它作为一个课后思考题留给你，欢迎你在留言区与我讨论交流。为了让这个问题简单些，我给你一个提示：如果你留意过 task_struct 这个结构体里的位域被改写的情况，你会发现只有 current（当前在运行的线程）可以写，而其他线程只能去读。但是 PF_* 这些全局 flag 可以被其他线程写，而不仅仅是 current 来写。</p>
+<p>Linux 内核里的 task_struct 结构体就是用来表示一个线程的，每个线程都有唯一对应的 task_struct 结构体，它也是内核进行调度的基本单位。我们继续来看下 CPU 是如何选择线程来执行的。</p>
+<h2 id="cpu-是如何选择线程执行的">CPU 是如何选择线程执行的？</h2>
+<p>你知道，一个系统中可能会运行着非常多的线程，这些线程数可能远超系统中的 CPU 核数，这时候这些任务就需要排队，每个 CPU 都会维护着自己运行队列（runqueue）里的线程。这个运行队列的结构大致如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/02f400f7f5a940de5a7cc8dd61789ee7.png" alt=""></p>
+<p>CPU 运行队列</p>
+<p>每个 CPU 都有自己的运行队列（runqueue），需要运行的线程会被加入到这个队列中。因为有些线程的优先级高，Linux 内核为了保障这些高优先级任务的执行，设置了不同的调度类（Scheduling Class），如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/8827f9cc914d44110f58d6427e0ab13f.png" alt=""></p>
+<p>这几个调度类的优先级如下：Deadline &gt; Realtime &gt; Fair。Linux 内核在选择下一个任务执行时，会按照该顺序来进行选择，也就是先从 dl_rq 里选择任务，然后从 rt_rq 里选择任务，最后从 cfs_rq 里选择任务。所以实时任务总是会比普通任务先得到执行。</p>
+<p>如果你的某些任务对延迟容忍度很低，比如说在嵌入式系统中就有很多这类任务，那就可以考虑将你的任务设置为实时任务，比如将它设置为 SCHED_FIFO 的任务：</p>
+<blockquote>
+<p>$ chrt -f -p 1 1327</p>
+</blockquote>
+<p>如果你不做任何设置的话，用户线程在默认情况下都是普通线程，也就是属于 Fair 调度类，由 CFS 调度器来进行管理。CFS 调度器的目的是为了实现线程运行的公平性，举个例子，假设一个 CPU 上有两个线程需要执行，那么每个线程都将分配 50% 的 CPU 时间，以保障公平性。其实，各个线程之间执行时间的比例，也是可以人为干预的，比如在 Linux 上可以调整进程的 nice 值来干预，从而让优先级高一些的线程执行更多时间。这就是 CFS 调度器的大致思想。</p>
+<p>好了，我们这堂课就先讲到这里。</p>
+<h2 id="课堂总结">课堂总结</h2>
+<p>我来总结一下这节课的知识点：</p>
+<ol>
+<li>要想明白 CPU 是如何执行任务的，你首先需要去了解 CPU 的架构；</li>
+<li>CPU 的存储层次对大型软件系统的性能影响会很明显，也是你在性能调优时需要着重考虑的；</li>
+<li>高并发场景下的 Cache Line 伪共享问题是一个普遍存在的问题，你需要留意一下它；</li>
+<li>系统中需要运行的线程数可能大于 CPU 核数，这样就会导致线程排队等待 CPU，这可能会导致一些延迟。如果你的任务对延迟容忍度低，你可以通过一些手段来人为干预 Linux 默认的调度策略。</li>
+</ol>
+<h2 id="课后作业">课后作业</h2>
+<p>这节课的作业就是我们前面提到的思考题：在psi: Move PF_MEMSTALL out of task-&gt;flags这个 PATCH 中，为什么没有考虑多线程并行操作新增加的位域（in_memstall）时的竞争问题？欢迎你在留言区与我讨论。</p>
+<p>感谢你的阅读，如果你认为这节课的内容有收获，也欢迎把它分享给你的朋友，我们下一讲见。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/linux%E5%86%85%E6%A0%B8%E6%8A%80%E6%9C%AF%E5%AE%9E%E6%88%98%E8%AF%BE/">Linux内核技术实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%99%BD%E8%AF%9D%E6%B3%95%E5%BE%8B42%E8%AE%B2/17_%E9%BB%84%E8%89%B2%E7%BD%91%E7%AB%99%E4%B8%8D%E4%BB%85%E4%BB%85%E6%98%AF%E9%BB%84%E8%89%B2%E7%BD%AA%E5%90%8D/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">17_黄色网站？不仅仅是“黄色”罪名</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A8%8B%E5%BA%8F%E5%91%98%E8%BF%9B%E9%98%B6%E6%94%BB%E7%95%A5/17_%E6%A3%80%E8%A7%86%E8%AE%A1%E5%88%92%E7%9A%84%E5%8F%AF%E8%A1%8C%E6%97%B6%E9%97%B4%E4%B8%8E%E6%89%BF%E8%AF%BA/">
+            <span class="next-text nav-default">17_检视：计划的可行——时间与承诺</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

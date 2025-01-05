@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>06__存储系统：空间换时间，还是时间换空间？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是吴磊。
+今天，我们来学习 Spark 的存储系统，它和我们上一讲学过的调度系统一样，都是 Spark 分布式计算引擎的基础设施之一。
+你可能会问：“在日常的开发工作中，除了业务逻辑实现，我真的需要去关心这么底层的东西吗？”确实，存储系统离开发者比较远。不过，如果把目光落在存储系统所服务的对象上，你很可能会改变这种看法。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/06__%E5%AD%98%E5%82%A8%E7%B3%BB%E7%BB%9F%E7%A9%BA%E9%97%B4%E6%8D%A2%E6%97%B6%E9%97%B4%E8%BF%98%E6%98%AF%E6%97%B6%E9%97%B4%E6%8D%A2%E7%A9%BA%E9%97%B4/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/06__%E5%AD%98%E5%82%A8%E7%B3%BB%E7%BB%9F%E7%A9%BA%E9%97%B4%E6%8D%A2%E6%97%B6%E9%97%B4%E8%BF%98%E6%98%AF%E6%97%B6%E9%97%B4%E6%8D%A2%E7%A9%BA%E9%97%B4/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="06__存储系统：空间换时间，还是时间换空间？">
+  <meta property="og:description" content="你好，我是吴磊。
+今天，我们来学习 Spark 的存储系统，它和我们上一讲学过的调度系统一样，都是 Spark 分布式计算引擎的基础设施之一。
+你可能会问：“在日常的开发工作中，除了业务逻辑实现，我真的需要去关心这么底层的东西吗？”确实，存储系统离开发者比较远。不过，如果把目光落在存储系统所服务的对象上，你很可能会改变这种看法。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Spark性能调优实战">
+
+  <meta itemprop="name" content="06__存储系统：空间换时间，还是时间换空间？">
+  <meta itemprop="description" content="你好，我是吴磊。
+今天，我们来学习 Spark 的存储系统，它和我们上一讲学过的调度系统一样，都是 Spark 分布式计算引擎的基础设施之一。
+你可能会问：“在日常的开发工作中，除了业务逻辑实现，我真的需要去关心这么底层的东西吗？”确实，存储系统离开发者比较远。不过，如果把目光落在存储系统所服务的对象上，你很可能会改变这种看法。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5180">
+  <meta itemprop="keywords" content="Spark性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="06__存储系统：空间换时间，还是时间换空间？">
+  <meta name="twitter:description" content="你好，我是吴磊。
+今天，我们来学习 Spark 的存储系统，它和我们上一讲学过的调度系统一样，都是 Spark 分布式计算引擎的基础设施之一。
+你可能会问：“在日常的开发工作中，除了业务逻辑实现，我真的需要去关心这么底层的东西吗？”确实，存储系统离开发者比较远。不过，如果把目光落在存储系统所服务的对象上，你很可能会改变这种看法。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">06__存储系统：空间换时间，还是时间换空间？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5180 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#spark-存储系统是为谁服务的">Spark 存储系统是为谁服务的？</a></li>
+        <li><a href="#存储系统的基本组件有哪些">存储系统的基本组件有哪些？</a></li>
+        <li><a href="#透过-rdd-缓存看-memorystore">透过 RDD 缓存看 MemoryStore</a></li>
+        <li><a href="#透过-shuffle-看-diskstore">透过 Shuffle 看 DiskStore</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#每日一练">每日一练</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是吴磊。</p>
+<p>今天，我们来学习 Spark 的存储系统，它和我们上一讲学过的调度系统一样，都是 Spark 分布式计算引擎的基础设施之一。</p>
+<p>你可能会问：“在日常的开发工作中，除了业务逻辑实现，我真的需要去关心这么底层的东西吗？”确实，存储系统离开发者比较远。不过，如果把目光落在存储系统所服务的对象上，你很可能会改变这种看法。</p>
+<p>接下来，咱们就先来看看 Spark 存储系统都为谁服务，再去探讨它有哪些重要组件，以及它是如何工作的，带你一次性摸透存储系统。</p>
+<h2 id="spark-存储系统是为谁服务的">Spark 存储系统是为谁服务的？</h2>
+<p>Spark 存储系统用于存储 3 个方面的数据，<strong>分别是 RDD 缓存、Shuffle 中间文件、广播变量。我们一个一个来说。</strong></p>
+<p>RDD 缓存指的<strong>是将 RDD 以缓存的形式物化到内存或磁盘的过程</strong>。对于一些计算成本和访问频率都比较高的 RDD 来说，缓存有两个好处：一是通过截断 DAG，可以降低失败重试的计算开销；二是通过对缓存内容的访问，可以有效减少从头计算的次数，从整体上提升作业端到端的执行性能。</p>
+<p>而要说起 Shuffle 中间文件，我们就不得不提 Shuffle 这个话题。在很多场景中，Shuffle 都扮演着性能瓶颈的角色，解决掉 Shuffle 引入的问题之后，执行性能往往能有立竿见影的提升。因此，凡是与 Shuffle 有关的环节，你都需要格外地重视。</p>
+<p>关于 Shuffle 的工作原理，我们后面会详细来讲。这里，咱们先简单理解一下 Shuffle 的计算过程就可以了。它的计算过程可以分为 2 个阶段：</p>
+<ol>
+<li><strong>Map 阶段</strong>：Shuffle writer 按照 Reducer 的分区规则将中间数据写入本地磁盘；</li>
+<li><strong>Reduce 阶段</strong>：Shuffle reader 从各个节点下载数据分片，并根据需要进行聚合计算。</li>
+</ol>
+<p>Shuffle 中间文件实际上就是 Shuffle Map 阶段的输出结果，这些结果会以文件的形式暂存于本地磁盘。在 Shuffle Reduce 阶段，Reducer 通过网络拉取这些中间文件用于聚合计算，如求和、计数等。在集群范围内，Reducer 想要拉取属于自己的那部分中间数据，就必须要知道这些数据都存储在哪些节点，以及什么位置。而这些关键的元信息，正是由 Spark 存储系统保存并维护的。因此你看，<strong>没有存储系统，Shuffle 是玩不转的。</strong></p>
+<p>最后，我们再来说说广播变量。在日常开发中，广播变量往往用于在集群范围内分发访问频率较高的小数据。**利用存储系统，广播变量可以在 Executors 进程范畴内保存全量数据。**这样一来，对于同一 Executors 内的所有计算任务，应用就能够以 Process local 的本地性级别，来共享广播变量中携带的全量数据了。</p>
+<p>总的来说，<strong>这 3 个服务对象是 Spark 应用性能调优的有力“抓手”，而它们又和存储系统有着密切的联系，因此想要有效运用这 3 个方面的调优技巧，我们就必须要对存储系统有足够的理解。</strong></p>
+<h2 id="存储系统的基本组件有哪些">存储系统的基本组件有哪些？</h2>
+<p>与调度系统类似，Spark 存储系统是一个囊括了众多组件的复合系统，如 BlockManager、BlockManagerMaster、MemoryStore、DiskStore 和 DiskBlockManager 等等。</p>
+<p>不过，家有千口、主事一人，<strong>BlockManager 是其中最为重要的组件，它在 Executors 端负责统一管理和协调数据的本地存取与跨节点传输</strong>。这怎么理解呢？我们可以从 2 方面来看。</p>
+<ol>
+<li>对外，BlockManager 与 Driver 端的 BlockManagerMaster 通信，不仅定期向 BlockManagerMaster 汇报本地数据元信息，还会不定时按需拉取全局数据存储状态。另外，不同 Executors 的 BlockManager 之间也会以 Server/Client 模式跨节点推送和拉取数据块。</li>
+<li>对内，BlockManager 通过组合存储系统内部组件的功能来实现数据的存与取、收与发。</li>
+</ol>
+<p>那么，对于 RDD 缓存、Shuffle 中间文件和广播变量这 3 个服务对象来说，BlockManager 又是如何存储的呢？<strong>Spark 存储系统提供了两种存储抽象：MemoryStore 和 DiskStore。BlockManager 正是利用它们来分别管理数据在内存和磁盘中的存取。</strong></p>
+<p>其中，广播变量的全量数据存储在 Executors 进程中，因此它由 MemoryStore 管理。Shuffle 中间文件往往会落盘到本地节点，所以这些文件的落盘和访问就要经由 DiskStore。相比之下，RDD 缓存会稍微复杂一些，由于 RDD 缓存支持内存缓存和磁盘缓存两种模式，因此我们要视情况而定，缓存在内存中的数据会封装到 MemoryStore，缓存在磁盘上的数据则交由 DiskStore 管理。</p>
+<p>有了 MemoryStore 和 DiskStore，我们暂时解决了数据“存在哪儿”的问题。但是，这些数据该以“什么形式”存储到 MemoryStore 和 DiskStore 呢？<strong>对于数据的存储形式，Spark 存储系统支持两种类型：对象值（Object Values）和字节数组（Byte Array）</strong>。它们之间可以相互转换，其中，对象值压缩为字节数组的过程叫做序列化，而字节数组还原成原始对象值的过程就叫做反序列化。</p>
+<p>形象点来说，序列化的字节数组就像是从宜家家具超市购买的待组装板材，对象值则是将板材根据说明书组装而成的各种桌椅板凳。显而易见，对象值这种存储形式的优点是拿来即用、所见即所得，缺点是所需的存储空间较大、占地儿。相比之下，序列化字节数组的空间利用率要高得多。不过要是你着急访问里面的数据对象，还得进行反序列化，有点麻烦。</p>
+<p>**由此可见，对象值和字节数组二者之间存在着一种博弈关系，**也就是所谓的“以空间换时间”和“以时间换空间”，两者之间该如何取舍，我们还是要看具体的应用场景。<strong>核心原则就是：如果想省地儿，你可以优先考虑字节数组；如果想以最快的速度访问对象，还是对象值更直接一些。</strong> 不过，这种选择的烦恼只存在于 MemoryStore 之中，而 DiskStore 只能存储序列化后的字节数组，毕竟，凡是落盘的东西，都需要先进行序列化。</p>
+<h2 id="透过-rdd-缓存看-memorystore">透过 RDD 缓存看 MemoryStore</h2>
+<p>知道了存储系统有哪些核心的组件，下面，我们接着来说说 MemoryStore 和 DiskStore 这两个组件是怎么管理内存和磁盘数据的。</p>
+<p>刚刚我们提到，<strong>MemoryStore 同时支持存储对象值和字节数组这两种不同的数据形式，并且统一采用 MemoryEntry 数据抽象对它们进行封装</strong>。</p>
+<p>MemoryEntry 有两个实现类：DeserializedMemoryEntry 和 SerializedMemoryEntry，分别用于封装原始对象值和序列化之后的字节数组。DeserializedMemoryEntry 用 Array[T] 来存储对象值序列，其中 T 是对象类型，而 SerializedMemoryEntry 使用 ByteBuffer 来存储序列化后的字节序列。</p>
+<p>得益于 MemoryEntry 对于对象值和字节数组的统一封装，MemoryStore 能够借助一种高效的数据结构来统一存储与访问数据块：LinkedHashMap[BlockId, MemoryEntry]，即 Key 为 BlockId，Value 是 MemoryEntry 的链式哈希字典。在这个字典中，一个 Block 对应一个 MemoryEntry。显然，这里的 MemoryEntry 既可以是 DeserializedMemoryEntry，也可以是 SerializedMemoryEntry。有了这个字典，我们通过 BlockId 即可方便地查找和定位 MemoryEntry，实现数据块的快速存取。</p>
+<p>概念这么多，命名也这么相似，是不是看起来就让人“头大”？别着急，接下来，咱们以 RDD 缓存为例，来看看存储系统是如何利用这些数据结构，把 RDD 封装的数据实体缓存到内存里去。</p>
+<p>在 RDD 的语境下，我们往往用数据分片（Partitions/Splits）来表示一份分布式数据，但在存储系统的语境下，我们经常会用数据块（Blocks）来表示数据存储的基本单元。<strong>在逻辑关系上，RDD 的数据分片与存储系统的 Block 一一对应，也就是说一个 RDD 数据分片会被物化成一个内存或磁盘上的 Block。</strong></p>
+<p>因此，如果用一句话来概括缓存 RDD 的过程，就是将 RDD 计算数据的迭代器（Iterator）进行物化的过程，流程如下所示。具体来说，可以分成三步走。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/65f8effedf9e1e3b05f232a6e65d75c2.png" alt=""></p>
+<p>利用 MemoryStore 在内存中缓存 RDD 数据内容</p>
+<p>既然要把数据内容缓存下来，自然得先把 RDD 的迭代器展开成实实在在的数据值才行。因此，**第一步就是通过调用 putIteratorAsValues 或是 putIteratorAsBytes 方法，把 RDD 迭代器展开为数据值，然后把这些数据值暂存到一个叫做 ValuesHolder 的数据结构里。**这一步，我们通常把它叫做“Unroll”。</p>
+<p>**第二步，为了节省内存开销，我们可以在存储数据值的 ValuesHolder 上直接调用 toArray 或是 toByteBuffer 操作，把 ValuesHolder 转换为 MemoryEntry 数据结构。**注意啦，这一步的转换不涉及内存拷贝，也不产生额外的内存开销，因此 Spark 官方把这一步叫做“从 Unroll memory 到 Storage memory 的 Transfer（转移）”。</p>
+<p>**第三步，这些包含 RDD 数据值的 MemoryEntry 和与之对应的 BlockId，会被一起存入 Key 为 BlockId、Value 是 MemoryEntry 引用的链式哈希字典中。**因此，LinkedHashMap[BlockId, MemoryEntry] 缓存的是关于数据存储的元数据，MemoryEntry 才是真正保存 RDD 数据实体的存储单元。换句话说，大面积占用内存的不是哈希字典，而是一个又一个的 MemoryEntry。</p>
+<p>总的来说，RDD 数据分片、Block 和 MemoryEntry 三者之间是一一对应的，当所有的 RDD 数据分片都物化为 MemoryEntry，并且所有的（Block ID, MemoryEntry）对都记录到 LinkedHashMap 字典之后，RDD 就完成了数据缓存到内存的过程。</p>
+<p>这里，你可能会问：“如果内存空间不足以容纳整个 RDD 怎么办？”很简单，强行把大 RDD 塞进有限的内存空间肯定不是明智之举，所以 Spark 会按照 LRU 策略逐一清除字典中最近、最久未使用的 Block，以及其对应的 MemoryEntry。相比频繁的展开、物化、换页所带来的性能开销，缓存下来的部分数据对于 RDD 高效访问的贡献可以说微乎其微。</p>
+<h2 id="透过-shuffle-看-diskstore">透过 Shuffle 看 DiskStore</h2>
+<p>相比 MemoryStore，DiskStore 就相对简单很多，因为它并不需要那么多的中间数据结构才能完成数据的存取。<strong>DiskStore 中数据的存取本质上就是字节序列与磁盘文件之间的转换</strong>，它通过 putBytes 方法把字节序列存入磁盘文件，再通过 getBytes 方法将文件内容转换为数据块。</p>
+<p>不过，要想完成两者之间的转换，像数据块与文件的对应关系、文件路径等等这些元数据是必不可少的。MemoryStore 采用链式哈希字典来维护类似的元数据，DiskStore 这个狡猾的家伙并没有亲自维护这些元数据，而是请了 DiskBlockManager 这个给力的帮手。</p>
+<p>**DiskBlockManager 的主要职责就是，记录逻辑数据块 Block 与磁盘文件系统中物理文件的对应关系，每个 Block 都对应一个磁盘文件。**同理，每个磁盘文件都有一个与之对应的 Block ID，这就好比货架上的每一件货物都有唯一的 ID 标识。</p>
+<p>DiskBlockManager 在初始化的时候，首先根据配置项 spark.local.dir 在磁盘的相应位置创建文件目录。然后，在 spark.local.dir 指定的所有目录下分别创建子目录，子目录的个数由配置项 spark.diskStore.subDirectories 控制，它默认是 64。所有这些目录均用于存储通过 DiskStore 进行物化的数据文件，如 RDD 缓存文件、Shuffle 中间结果文件等。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/53d9cb3dcbb085391abb83ae30d3cf95.png" alt=""></p>
+<p>DiskStore 中数据的存与取</p>
+<p>接下来，我们再以 Shuffle 中间文件为例，来说说 DiskStore 与 DiskBlockManager 的交互过程。</p>
+<p>**Spark 默认采用 SortShuffleManager 来管理 Stages 间的数据分发，在 Shuffle write 过程中，有 3 类结果文件：temp_shuffle_XXX、shuffle_XXX.data 和 shuffle_XXX.index。**Data 文件存储分区数据，它是由 temp 文件合并而来的，而 index 文件记录 data 文件内不同分区的偏移地址。Shuffle 中间文件具体指的就是 data 文件和 index 文件，temp 文件作为暂存盘文件最终会被删除。</p>
+<p>在 Shuffle write 的不同阶段，Shuffle manager 通过 BlockManager 调用 DiskStore 的 putBytes 方法将数据块写入文件。文件由 DiskBlockManager 创建，文件名就是 putBytes 方法中的 Block ID，这些文件会以“temp_shuffle”或“shuffle”开头，保存在 spark.local.dir 目录下的子目录里。</p>
+<p>在 Shuffle read 阶段，Shuffle manager 再次通过 BlockManager 调用 DiskStore 的 getBytes 方法，读取 data 文件和 index 文件，将文件内容转化为数据块，最终这些数据块会通过网络分发到 Reducer 端进行聚合计算。</p>
+<h2 id="小结">小结</h2>
+<p>掌握存储系统是我们进行 Spark 性能调优的关键一步，我们可以分为三步来掌握。</p>
+<p>第一步，我们要明确存储系统的服务对象，分别是 RDD 缓存、Shuffle 和广播变量。</p>
+<ol>
+<li>RDD 缓存：一些计算成本和访问频率较高的 RDD，可以以缓存的形式物化到内存或磁盘中。这样一来，既可以避免 DAG 频繁回溯的计算开销，也能有效提升端到端的执行性能</li>
+<li>Shuffle：Shuffle 中间文件的位置信息，都是由 Spark 存储系统保存并维护的，没有存储系统，Shuffle 是玩不转的</li>
+<li>广播变量：利用存储系统，广播变量可以在 Executors 进程范畴内保存全量数据，让任务以 Process local 的本地性级别，来共享广播变量中携带的全量数据。</li>
+</ol>
+<p>第二步，我们要搞清楚存储系统的两个重要组件：MemoryStore 和 DiskStore。其中，MemoryStore 用来管理数据在内存中的存取，DiskStore 用来管理数据在磁盘中的存取。</p>
+<p>对于存储系统的 3 个服务对象来说，广播变量由 MemoryStore 管理，Shuffle 中间文件的落盘和访问要经由 DiskStore，而 RDD 缓存因为会同时支持内存缓存和磁盘缓存两种模式，所以两种组件都有可能用到。</p>
+<p>最后，我们要理解 MemoryStore 和 DiskStore 的工作原理。</p>
+<p>MemoryStore 支持对象值和字节数组，统一采用 MemoryEntry 数据抽象对它们进行封装。对象值和字节数组二者之间存在着一种博弈关系，所谓的“以空间换时间”和“以时间换空间”，两者的取舍还要看具体的应用场景。</p>
+<p>DiskStore 则利用 DiskBlockManager 维护的数据块与磁盘文件的对应关系，来完成字节序列与磁盘文件之间的转换。</p>
+<h2 id="每日一练">每日一练</h2>
+<ol>
+<li>结合 RDD 数据存储到 MemoryStore 的过程，你能推演出通过 MemoryStore 通过 getValues/getBytes 方法去访问 RDD 缓存内容的过程吗？</li>
+<li>参考 RDD 缓存存储的过程，你能推演出广播变量存入 MemoryStore 的流程吗？</li>
+</ol>
+<p>期待在留言区看到你的思考和讨论，我们下一讲见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Spark性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/oauth2.0%E5%AE%9E%E6%88%98%E8%AF%BE/06__%E9%99%A4%E4%BA%86%E6%8E%88%E6%9D%83%E7%A0%81%E8%AE%B8%E5%8F%AF%E7%B1%BB%E5%9E%8Boauth_2.0%E8%BF%98%E6%94%AF%E6%8C%81%E4%BB%80%E4%B9%88%E6%8E%88%E6%9D%83%E6%B5%81%E7%A8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">06__除了授权码许可类型，OAuth_2.0还支持什么授权流程？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E5%B7%A5%E7%A8%8B%E4%B9%8B%E7%BE%8E/06__%E5%A4%A7%E5%8E%82%E9%83%BD%E5%9C%A8%E7%94%A8%E5%93%AA%E4%BA%9B%E6%95%8F%E6%8D%B7%E6%96%B9%E6%B3%95%E4%B8%8A/">
+            <span class="next-text nav-default">06__大厂都在用哪些敏捷方法？（上）</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

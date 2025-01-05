@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__ControllerChannelManager：Controller如何管理请求发送？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是胡夕。上节课，我们深入研究了 ControllerContext.scala 源码文件，掌握了 Kafka 集群定义的重要元数据。今天，我们来学习下 Controller 是如何给其他 Broker 发送请求的。
+掌握了这部分实现原理，你就能更好地了解 Controller 究竟是如何与集群 Broker 进行交互，从而实现管理集群元数据的功能的。而且，阅读这部分源码，还能帮你定位和解决线上问题。我先跟你分享一个真实的案例。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/12__controllerchannelmanagercontroller%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86%E8%AF%B7%E6%B1%82%E5%8F%91%E9%80%81/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/12__controllerchannelmanagercontroller%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86%E8%AF%B7%E6%B1%82%E5%8F%91%E9%80%81/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__ControllerChannelManager：Controller如何管理请求发送？">
+  <meta property="og:description" content="你好，我是胡夕。上节课，我们深入研究了 ControllerContext.scala 源码文件，掌握了 Kafka 集群定义的重要元数据。今天，我们来学习下 Controller 是如何给其他 Broker 发送请求的。
+掌握了这部分实现原理，你就能更好地了解 Controller 究竟是如何与集群 Broker 进行交互，从而实现管理集群元数据的功能的。而且，阅读这部分源码，还能帮你定位和解决线上问题。我先跟你分享一个真实的案例。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kafka核心源码解读">
+
+  <meta itemprop="name" content="12__ControllerChannelManager：Controller如何管理请求发送？">
+  <meta itemprop="description" content="你好，我是胡夕。上节课，我们深入研究了 ControllerContext.scala 源码文件，掌握了 Kafka 集群定义的重要元数据。今天，我们来学习下 Controller 是如何给其他 Broker 发送请求的。
+掌握了这部分实现原理，你就能更好地了解 Controller 究竟是如何与集群 Broker 进行交互，从而实现管理集群元数据的功能的。而且，阅读这部分源码，还能帮你定位和解决线上问题。我先跟你分享一个真实的案例。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5483">
+  <meta itemprop="keywords" content="Kafka核心源码解读">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__ControllerChannelManager：Controller如何管理请求发送？">
+  <meta name="twitter:description" content="你好，我是胡夕。上节课，我们深入研究了 ControllerContext.scala 源码文件，掌握了 Kafka 集群定义的重要元数据。今天，我们来学习下 Controller 是如何给其他 Broker 发送请求的。
+掌握了这部分实现原理，你就能更好地了解 Controller 究竟是如何与集群 Broker 进行交互，从而实现管理集群元数据的功能的。而且，阅读这部分源码，还能帮你定位和解决线上问题。我先跟你分享一个真实的案例。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__ControllerChannelManager：Controller如何管理请求发送？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5483 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#controller-发送请求类型">Controller 发送请求类型</a></li>
+        <li><a href="#requestsendthread">RequestSendThread</a></li>
+        <li><a href="#controllerchannelmanager">ControllerChannelManager</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后讨论">课后讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是胡夕。上节课，我们深入研究了 ControllerContext.scala 源码文件，掌握了 Kafka 集群定义的重要元数据。今天，我们来学习下 Controller 是如何给其他 Broker 发送请求的。</p>
+<p>掌握了这部分实现原理，你就能更好地了解 Controller 究竟是如何与集群 Broker 进行交互，从而实现管理集群元数据的功能的。而且，阅读这部分源码，还能帮你定位和解决线上问题。我先跟你分享一个真实的案例。</p>
+<p>当时还是在 Kafka 0.10.0.1 时代，我们突然发现，在线上环境中，很多元数据变更无法在集群的所有 Broker 上同步了。具体表现为，创建了主题后，有些 Broker 依然无法感知到。</p>
+<p>我的第一感觉是 Controller 出现了问题，但又苦于无从排查和验证。后来，我想到，会不会是 Controller 端请求队列中积压的请求太多造成的呢？因为当时 Controller 所在的 Broker 本身承载着非常重的业务，这是非常有可能的原因。</p>
+<p>在看了相关代码后，我们就在相应的源码中新加了一个监控指标，用于实时监控 Controller 的请求队列长度。当更新到生产环境后，我们很轻松地定位了问题。果然，由于 Controller 所在的 Broker 自身负载过大，导致 Controller 端的请求积压，从而造成了元数据更新的滞后。精准定位了问题之后，解决起来就很容易了。后来，社区于 0.11 版本正式引入了相关的监控指标。</p>
+<p>你看，阅读源码，除了可以学习优秀开发人员编写的代码之外，我们还能根据自身的实际情况做定制化方案，实现一些非开箱即用的功能。</p>
+<h2 id="controller-发送请求类型">Controller 发送请求类型</h2>
+<p>下面，我们就正式进入到 Controller 请求发送管理部分的学习。你可能会问：“Controller 也会给 Broker 发送请求吗？”当然！<strong>Controller 会给集群中的所有 Broker（包括它自己所在的 Broker）机器发送网络请求</strong>。发送请求的目的，是让 Broker 执行相应的指令。我用一张图，来展示下 Controller 都会发送哪些请求，如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/33144feb84f9101dd036744d6b40fb82.png" alt=""></p>
+<p>当前，Controller 只会向 Broker 发送三类请求，分别是 LeaderAndIsrRequest、StopReplicaRequest 和 UpdateMetadataRequest。注意，这里我使用的是“当前”！我只是说，目前仅有这三类，不代表以后不会有变化。事实上，我几乎可以肯定，以后能发送的 RPC 协议种类一定会变化的。因此，你需要掌握请求发送的原理。毕竟，所有请求发送都是通过相同的机制完成的。</p>
+<p>还记得我在第 8 节课提到的控制类请求吗？没错，这三类请求就是典型的控制类请求。我来解释下它们的作用。</p>
+<ol>
+<li>LeaderAndIsrRequest：最主要的功能是，告诉 Broker 相关主题各个分区的 Leader 副本位于哪台 Broker 上、ISR 中的副本都在哪些 Broker 上。在我看来，<strong>它应该被赋予最高的优先级，毕竟，它有令数据类请求直接失效的本领</strong>。试想一下，如果这个请求中的 Leader 副本变更了，之前发往老的 Leader 的 PRODUCE 请求是不是全部失效了？因此，我认为它是非常重要的控制类请求。</li>
+<li>StopReplicaRequest：告知指定 Broker 停止它上面的副本对象，该请求甚至还能删除副本底层的日志数据。这个请求主要的使用场景，是<strong>分区副本迁移</strong>和<strong>删除主题</strong>。在这两个场景下，都要涉及停掉 Broker 上的副本操作。</li>
+<li>UpdateMetadataRequest：顾名思义，该请求会更新 Broker 上的元数据缓存。集群上的所有元数据变更，都首先发生在 Controller 端，然后再经由这个请求广播给集群上的所有 Broker。在我刚刚分享的案例中，正是因为这个请求被处理得不及时，才导致集群 Broker 无法获取到最新的元数据信息。</li>
+</ol>
+<p>现在，社区越来越倾向于<strong>将重要的数据结构源代码从服务器端的 core 工程移动到客户端的 clients 工程中</strong>。这三类请求 Java 类的定义就封装在 clients 中，它们的抽象基类是 AbstractControlRequest 类，这个类定义了这三类请求的公共字段。</p>
+<p>我用代码展示下这三类请求及其抽象父类的定义，以便让你对 Controller 发送的请求类型有个基本的认识。这些类位于 clients 工程下的 src/main/java/org/apache/kafka/common/requests 路径下。</p>
+<p>先来看 AbstractControlRequest 类的主要代码：</p>
+<p>public abstract class AbstractControlRequest extends AbstractRequest {<br>
+public static final long UNKNOWN_BROKER_EPOCH = -1L;<br>
+public static abstract class Builder<T extends AbstractRequest> extends AbstractRequest.Builder<T> {<br>
+protected final int controllerId;<br>
+protected final int controllerEpoch;<br>
+protected final long brokerEpoch;<br>
+&hellip;&hellip;<br>
+}</p>
+<p>区别于其他的数据类请求，抽象类请求必然包含 3 个字段。</p>
+<ol>
+<li><strong>controllerId</strong>：Controller 所在的 Broker ID。</li>
+<li><strong>controllerEpoch</strong>：Controller 的版本信息。</li>
+<li><strong>brokerEpoch</strong>：目标 Broker 的 Epoch。</li>
+</ol>
+<p>后面这两个 Epoch 字段用于隔离 Zombie Controller 和 Zombie Broker，以保证集群的一致性。</p>
+<p>在同一源码路径下，你能找到 LeaderAndIsrRequest、StopReplicaRequest 和 UpdateMetadataRequest 的定义，如下所示：</p>
+<p>public class LeaderAndIsrRequest extends AbstractControlRequest { &hellip;&hellip; }<br>
+public class StopReplicaRequest extends AbstractControlRequest { &hellip;&hellip; }<br>
+public class UpdateMetadataRequest extends AbstractControlRequest { &hellip;&hellip; }</p>
+<h2 id="requestsendthread">RequestSendThread</h2>
+<p>说完了 Controller 发送什么请求，接下来我们说说怎么发。</p>
+<p>Kafka 源码非常喜欢生产者 - 消费者模式。该模式的好处在于，<strong>解耦生产者和消费者逻辑，分离两者的集中性交互</strong>。学完了“请求处理”模块，现在，你一定很赞同这个说法吧。还记得 Broker 端的 SocketServer 组件吗？它就在内部定义了一个线程共享的请求队列：它下面的 Processor 线程扮演 Producer，而 KafkaRequestHandler 线程扮演 Consumer。</p>
+<p>对于 Controller 而言，源码同样使用了这个模式：它依然是一个线程安全的阻塞队列，Controller 事件处理线程（第 13 节课会详细说它）负责向这个队列写入待发送的请求，而一个名为 RequestSendThread 的线程负责执行真正的请求发送。如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/684680ac5ae76b9171ee47d4c59a1998.png" alt=""></p>
+<p>Controller 会为集群中的每个 Broker 都创建一个对应的 RequestSendThread 线程。Broker 上的这个线程，持续地从阻塞队列中获取待发送的请求。</p>
+<p>那么，Controller 往阻塞队列上放什么数据呢？这其实是由源码中的 QueueItem 类定义的。代码如下：</p>
+<p>case class QueueItem(apiKey: ApiKeys, request: AbstractControlRequest.Builder[_ &lt;: AbstractControlRequest], callback: AbstractResponse =&gt; Unit, enqueueTimeMs: Long)</p>
+<p>每个 QueueItem 的核心字段都是 <strong>AbstractControlRequest.Builder 对象</strong>。你基本上可以认为，它就是阻塞队列上 AbstractControlRequest 类型。</p>
+<p>需要注意的是这里的“&lt;:”符号，它在 Scala 中表示<strong>上边界</strong>的意思，即字段 request 必须是 AbstractControlRequest 的子类，也就是上面说到的那三类请求。</p>
+<p>这也就是说，每个 QueueItem 实际保存的都是那三类请求中的其中一类。如果使用一个 BlockingQueue 对象来保存这些 QueueItem，那么，代码就实现了一个请求阻塞队列。这就是 RequestSendThread 类做的事情。</p>
+<p>接下来，我们就来学习下 RequestSendThread 类的定义。我给一些主要的字段添加了注释。</p>
+<p>class RequestSendThread(val controllerId: Int, // Controller 所在 Broker 的 Id<br>
+val controllerContext: ControllerContext, // Controller 元数据信息<br>
+val queue: BlockingQueue[QueueItem], // 请求阻塞队列<br>
+val networkClient: NetworkClient, // 用于执行发送的网络 I/O 类<br>
+val brokerNode: Node, // 目标 Broker 节点<br>
+val config: KafkaConfig, // Kafka 配置信息<br>
+val time: Time,<br>
+val requestRateAndQueueTimeMetrics: Timer,<br>
+val stateChangeLogger: StateChangeLogger,<br>
+name: String) extends ShutdownableThread(name = name) {<br>
+&hellip;&hellip;<br>
+}</p>
+<p>其实，RequestSendThread 最重要的是它的 <strong>doWork 方法</strong>，也就是执行线程逻辑的方法：</p>
+<p>override def doWork(): Unit = {<br>
+def backoff(): Unit = pause(100, TimeUnit.MILLISECONDS)<br>
+val QueueItem(apiKey, requestBuilder, callback, enqueueTimeMs) = queue.take() // 以阻塞的方式从阻塞队列中取出请求<br>
+requestRateAndQueueTimeMetrics.update(time.milliseconds() - enqueueTimeMs, TimeUnit.MILLISECONDS) // 更新统计信息<br>
+var clientResponse: ClientResponse = null<br>
+try {<br>
+var isSendSuccessful = false<br>
+while (isRunning &amp;&amp; !isSendSuccessful) {<br>
+try {<br>
+// 如果没有创建与目标 Broker 的 TCP 连接，或连接暂时不可用<br>
+if (!brokerReady()) {<br>
+isSendSuccessful = false<br>
+backoff() // 等待重试<br>
+}<br>
+else {<br>
+val clientRequest = networkClient.newClientRequest(brokerNode.idString, requestBuilder,<br>
+time.milliseconds(), true)<br>
+// 发送请求，等待接收 Response<br>
+clientResponse = NetworkClientUtils.sendAndReceive(networkClient, clientRequest, time)<br>
+isSendSuccessful = true<br>
+}<br>
+} catch {<br>
+case e: Throwable =&gt;<br>
+warn(s&quot;Controller $controllerId epoch ${controllerContext.epoch} fails to send request $requestBuilder &quot; +<br>
+s&quot;to broker $brokerNode. Reconnecting to broker.&quot;, e)<br>
+// 如果出现异常，关闭与对应 Broker 的连接<br>
+networkClient.close(brokerNode.idString)<br>
+isSendSuccessful = false<br>
+backoff()<br>
+}<br>
+}<br>
+// 如果接收到了 Response<br>
+if (clientResponse != null) {<br>
+val requestHeader = clientResponse.requestHeader<br>
+val api = requestHeader.apiKey<br>
+// 此 Response 的请求类型必须是 LeaderAndIsrRequest、StopReplicaRequest 或 UpdateMetadataRequest 中的一种<br>
+if (api != ApiKeys.LEADER_AND_ISR &amp;&amp; api != ApiKeys.STOP_REPLICA &amp;&amp; api != ApiKeys.UPDATE_METADATA)<br>
+throw new KafkaException(s&quot;Unexpected apiKey received: $apiKey&quot;)<br>
+val response = clientResponse.responseBody<br>
+stateChangeLogger.withControllerEpoch(controllerContext.epoch)<br>
+.trace(s&quot;Received response &quot; +<br>
+s&quot;${response.toString(requestHeader.apiVersion)} for request $api with correlation id &quot; +<br>
+s&quot;${requestHeader.correlationId} sent to broker $brokerNode&quot;)</p>
+<pre><code>    if (callback != null) {  
+      callback(response) // 处理回调  
+    }  
+  }  
+} catch {  
+  case e: Throwable =&gt;  
+    error(s&quot;Controller $controllerId fails to send a request to broker $brokerNode&quot;, e)  
+    networkClient.close(brokerNode.idString)  
+}  
+</code></pre>
+<p>}</p>
+<p>我用一张图来说明 doWork 的执行逻辑：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/428cae5833a65cb32e9fa802f5d0cd83.png" alt=""></p>
+<p>总体上来看，doWork 的逻辑很直观。它的主要作用是从阻塞队列中取出待发送的请求，然后把它发送出去，之后等待 Response 的返回。在等待 Response 的过程中，线程将一直处于阻塞状态。当接收到 Response 之后，调用 callback 执行请求处理完成后的回调逻辑。</p>
+<p>需要注意的是，RequestSendThread 线程对请求发送的处理方式与 Broker 处理请求不太一样。它调用的 sendAndReceive 方法在发送完请求之后，会原地进入阻塞状态，等待 Response 返回。只有接收到 Response，并执行完回调逻辑之后，该线程才能从阻塞队列中取出下一个待发送请求进行处理。</p>
+<h2 id="controllerchannelmanager">ControllerChannelManager</h2>
+<p>了解了 RequestSendThread 线程的源码之后，我们进入到 ControllerChannelManager 类的学习。</p>
+<p>这个类和 RequestSendThread 是合作共赢的关系。在我看来，它有两大类任务。</p>
+<ol>
+<li>管理 Controller 与集群 Broker 之间的连接，并为每个 Broker 创建 RequestSendThread 线程实例；</li>
+<li>将要发送的请求放入到指定 Broker 的阻塞队列中，等待该 Broker 专属的 RequestSendThread 线程进行处理。</li>
+</ol>
+<p>由此可见，它们是紧密相连的。</p>
+<p>ControllerChannelManager 类最重要的数据结构是 brokerStateInfo，它是在下面这行代码中定义的：</p>
+<p>protected val brokerStateInfo = new HashMap[Int, ControllerBrokerStateInfo]</p>
+<p>这是一个 HashMap 类型，Key 是 Integer 类型，其实就是集群中 Broker 的 ID 信息，而 Value 是一个 ControllerBrokerStateInfo。</p>
+<p>你可能不太清楚 ControllerBrokerStateInfo 类是什么，我先解释一下。它本质上是一个 POJO 类，仅仅是承载若干数据结构的容器，如下所示：</p>
+<p>case class ControllerBrokerStateInfo(networkClient: NetworkClient,<br>
+brokerNode: Node,<br>
+messageQueue: BlockingQueue[QueueItem],<br>
+requestSendThread: RequestSendThread,<br>
+queueSizeGauge: Gauge[Int],<br>
+requestRateAndTimeMetrics: Timer,<br>
+reconfigurableChannelBuilder: Option[Reconfigurable])</p>
+<p>它有三个非常关键的字段。</p>
+<ol>
+<li><strong>brokerNode</strong>：目标 Broker 节点对象，里面封装了目标 Broker 的连接信息，比如主机名、端口号等。</li>
+<li><strong>messageQueue</strong>：请求消息阻塞队列。你可以发现，Controller 为每个目标 Broker 都创建了一个消息队列。</li>
+<li><strong>requestSendThread</strong>：Controller 使用这个线程给目标 Broker 发送请求。</li>
+</ol>
+<p>你一定要记住这三个字段，因为它们是实现 Controller 发送请求的关键因素。</p>
+<p>为什么呢？我们思考一下，如果 Controller 要给 Broker 发送请求，肯定需要解决三个问题：发给谁？发什么？怎么发？“发给谁”就是由 brokerNode 决定的；messageQueue 里面保存了要发送的请求，因而解决了“发什么”的问题；最后的“怎么发”就是依赖 requestSendThread 变量实现的。</p>
+<p>好了，我们现在回到 ControllerChannelManager。它定义了 5 个 public 方法，我来一一介绍下。</p>
+<ol>
+<li><strong>startup 方法</strong>：Controller 组件在启动时，会调用 ControllerChannelManager 的 startup 方法。该方法会从元数据信息中找到集群的 Broker 列表，然后依次为它们调用 addBroker 方法，把它们加到 brokerStateInfo 变量中，最后再依次启动 brokerStateInfo 中的 RequestSendThread 线程。</li>
+<li><strong>shutdown 方法</strong>：关闭所有 RequestSendThread 线程，并清空必要的资源。</li>
+<li><strong>sendRequest 方法</strong>：从名字看，就是发送请求，实际上就是把请求对象提交到请求队列。</li>
+<li><strong>addBroker 方法</strong>：添加目标 Broker 到 brokerStateInfo 数据结构中，并创建必要的配套资源，如请求队列、RequestSendThread 线程对象等。最后，RequestSendThread 启动线程。</li>
+<li><strong>removeBroker 方法</strong>：从 brokerStateInfo 移除目标 Broker 的相关数据。</li>
+</ol>
+<p>这里面大部分的方法逻辑都很简单，从方法名字就可以看得出来。我重点说一下 <strong>addBroker</strong>，以及<strong>底层相关的私有方法 addNewBroker 和 startRequestSendThread 方法</strong>。</p>
+<p>毕竟，addBroker 是最重要的逻辑。每当集群中扩容了新的 Broker 时，Controller 就会调用这个方法为新 Broker 增加新的 RequestSendThread 线程。</p>
+<p>我们先来看 addBroker：</p>
+<p>def addBroker(broker: Broker): Unit = {<br>
+brokerLock synchronized {<br>
+// 如果该 Broker 是新 Broker 的话<br>
+if (!brokerStateInfo.contains(broker.id)) {<br>
+// 将新 Broker 加入到 Controller 管理，并创建对应的 RequestSendThread 线程<br>
+addNewBroker(broker)<br>
+// 启动 RequestSendThread 线程<br>
+startRequestSendThread(broker.id)<br>
+}<br>
+}<br>
+}</p>
+<p>整个代码段被 brokerLock 保护起来了。还记得 brokerStateInfo 的定义吗？它仅仅是一个 HashMap 对象，因为不是线程安全的，所以任何访问该变量的地方，都需要锁的保护。</p>
+<p>这段代码的逻辑是，判断目标 Broker 的序号，是否已经保存在 brokerStateInfo 中。如果是，就说明这个 Broker 之前已经添加过了，就没必要再次添加了；否则，addBroker 方法会对目前的 Broker 执行两个操作：</p>
+<ol>
+<li>把该 Broker 节点添加到 brokerStateInfo 中；</li>
+<li>启动与该 Broker 对应的 RequestSendThread 线程。</li>
+</ol>
+<p>这两步分别是由 addNewBroker 和 startRequestSendThread 方法实现的。</p>
+<p>addNewBroker 方法的逻辑比较复杂，我用注释的方式给出主要步骤：</p>
+<p>private def addNewBroker(broker: Broker): Unit = {<br>
+// 为该 Broker 构造请求阻塞队列<br>
+val messageQueue = new LinkedBlockingQueue[QueueItem]<br>
+debug(s&quot;Controller ${config.brokerId} trying to connect to broker ${broker.id}&quot;)<br>
+val controllerToBrokerListenerName = config.controlPlaneListenerName.getOrElse(config.interBrokerListenerName)<br>
+val controllerToBrokerSecurityProtocol = config.controlPlaneSecurityProtocol.getOrElse(config.interBrokerSecurityProtocol)<br>
+// 获取待连接 Broker 节点对象信息<br>
+val brokerNode = broker.node(controllerToBrokerListenerName)<br>
+val logContext = new LogContext(s&quot;[Controller id=${config.brokerId}, targetBrokerId=${brokerNode.idString}] &ldquo;)<br>
+val (networkClient, reconfigurableChannelBuilder) = {<br>
+val channelBuilder = ChannelBuilders.clientChannelBuilder(<br>
+controllerToBrokerSecurityProtocol,<br>
+JaasContext.Type.SERVER,<br>
+config,<br>
+controllerToBrokerListenerName,<br>
+config.saslMechanismInterBrokerProtocol,<br>
+time,<br>
+config.saslInterBrokerHandshakeRequestEnable,<br>
+logContext<br>
+)<br>
+val reconfigurableChannelBuilder = channelBuilder match {<br>
+case reconfigurable: Reconfigurable =&gt;<br>
+config.addReconfigurable(reconfigurable)<br>
+Some(reconfigurable)<br>
+case _ =&gt; None<br>
+}<br>
+// 创建 NIO Selector 实例用于网络数据传输<br>
+val selector = new Selector(<br>
+NetworkReceive.UNLIMITED,<br>
+Selector.NO_IDLE_TIMEOUT_MS,<br>
+metrics,<br>
+time,<br>
+&ldquo;controller-channel&rdquo;,<br>
+Map(&ldquo;broker-id&rdquo; -&gt; brokerNode.idString).asJava,<br>
+false,<br>
+channelBuilder,<br>
+logContext<br>
+)<br>
+// 创建 NetworkClient 实例<br>
+// NetworkClient 类是 Kafka clients 工程封装的顶层网络客户端 API<br>
+// 提供了丰富的方法实现网络层 IO 数据传输<br>
+val networkClient = new NetworkClient(<br>
+selector,<br>
+new ManualMetadataUpdater(Seq(brokerNode).asJava),<br>
+config.brokerId.toString,<br>
+1,<br>
+0,<br>
+0,<br>
+Selectable.USE_DEFAULT_BUFFER_SIZE,<br>
+Selectable.USE_DEFAULT_BUFFER_SIZE,<br>
+config.requestTimeoutMs,<br>
+ClientDnsLookup.DEFAULT,<br>
+time,<br>
+false,<br>
+new ApiVersions,<br>
+logContext<br>
+)<br>
+(networkClient, reconfigurableChannelBuilder)<br>
+}<br>
+// 为这个 RequestSendThread 线程设置线程名称<br>
+val threadName = threadNamePrefix match {<br>
+case None =&gt; s&quot;Controller-${config.brokerId}-to-broker-${broker.id}-send-thread&rdquo;<br>
+case Some(name) =&gt; s&quot;$name:Controller-${config.brokerId}-to-broker-${broker.id}-send-thread&quot;<br>
+}<br>
+// 构造请求处理速率监控指标<br>
+val requestRateAndQueueTimeMetrics = newTimer(<br>
+RequestRateAndQueueTimeMetricName, TimeUnit.MILLISECONDS, TimeUnit.SECONDS, brokerMetricTags(broker.id)<br>
+)<br>
+// 创建 RequestSendThread 实例<br>
+val requestThread = new RequestSendThread(config.brokerId, controllerContext, messageQueue, networkClient,<br>
+brokerNode, config, time, requestRateAndQueueTimeMetrics, stateChangeLogger, threadName)<br>
+requestThread.setDaemon(false)</p>
+<p>val queueSizeGauge = newGauge(QueueSizeMetricName, () =&gt; messageQueue.size, brokerMetricTags(broker.id))<br>
+// 创建该 Broker 专属的 ControllerBrokerStateInfo 实例<br>
+// 并将其加入到 brokerStateInfo 统一管理<br>
+brokerStateInfo.put(broker.id, ControllerBrokerStateInfo(networkClient, brokerNode, messageQueue,<br>
+requestThread, queueSizeGauge, requestRateAndQueueTimeMetrics, reconfigurableChannelBuilder))<br>
+}</p>
+<p>为了方便你理解，我还画了一张流程图形象说明它的执行流程：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/c138313d06ec3b455ea564673a688af5.png" alt=""></p>
+<p>addNewBroker 的关键在于，<strong>要为目标 Broker 创建一系列的配套资源</strong>，比如，NetworkClient 用于网络 I/O 操作、messageQueue 用于阻塞队列、requestThread 用于发送请求，等等。</p>
+<p>至于 startRequestSendThread 方法，就简单得多了，只有几行代码而已。</p>
+<p>protected def startRequestSendThread(brokerId: Int): Unit = {<br>
+// 获取指定 Broker 的专属 RequestSendThread 实例<br>
+val requestThread = brokerStateInfo(brokerId).requestSendThread<br>
+if (requestThread.getState == Thread.State.NEW)<br>
+// 启动线程<br>
+requestThread.start()<br>
+}</p>
+<p>它首先根据给定的 Broker 序号信息，从 brokerStateInfo 中找出对应的 ControllerBrokerStateInfo 对象。有了这个对象，也就有了为该目标 Broker 服务的所有配套资源。下一步就是从 ControllerBrokerStateInfo 中拿出 RequestSendThread 对象，再启动它就好了。</p>
+<h2 id="总结">总结</h2>
+<p>今天，我结合 ControllerChannelManager.scala 文件，重点分析了 Controller 向 Broker 发送请求机制的实现原理。</p>
+<p>Controller 主要通过 ControllerChannelManager 类来实现与其他 Broker 之间的请求发送。其中，ControllerChannelManager 类中定义的 RequestSendThread 是主要的线程实现类，用于实际发送请求给集群 Broker。除了 RequestSendThread 之外，ControllerChannelManager 还定义了相应的管理方法，如添加 Broker、移除 Broker 等。通过这些管理方法，Controller 在集群扩缩容时能够快速地响应到这些变化，完成对应 Broker 连接的创建与销毁。</p>
+<p>我们来回顾下这节课的重点。</p>
+<ol>
+<li>Controller 端请求：Controller 发送三类请求给 Broker，分别是 LeaderAndIsrRequest、StopReplicaRequest 和 UpdateMetadataRequest。</li>
+<li>RequestSendThread：该线程负责将请求发送给集群中的相关或所有 Broker。</li>
+<li>请求阻塞队列 +RequestSendThread：Controller 会为集群上所有 Broker 创建对应的请求阻塞队列和 RequestSendThread 线程。</li>
+</ol>
+<p>其实，今天讲的所有东西都只是这节课的第二张图中“消费者”的部分，我们并没有详细了解请求是怎么被放到请求队列中的。接下来，我们就会针对这个问题，深入地去探讨 Controller 单线程的事件处理器是如何实现的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/306287b729d6c4625674fade84122934.png" alt=""></p>
+<h2 id="课后讨论">课后讨论</h2>
+<p>你觉得，为每个 Broker 都创建一个 RequestSendThread 的方案有什么优缺点？</p>
+<p>欢迎你在留言区写下你的思考和答案，跟我交流讨论，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">Kafka核心源码解读</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98%E8%AF%BE/12__atomic%E8%A6%81%E4%BF%9D%E8%AF%81%E5%8E%9F%E5%AD%90%E6%93%8D%E4%BD%9C%E4%B8%80%E5%AE%9A%E8%A6%81%E4%BD%BF%E7%94%A8%E8%BF%99%E5%87%A0%E7%A7%8D%E6%96%B9%E6%B3%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__atomic：要保证原子操作，一定要使用这几种方法</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E7%9D%80%E9%AB%98%E6%89%8B%E5%AD%A6%E5%A4%8D%E7%9B%98/12__double_check%E6%80%8E%E4%B9%88%E6%A3%80%E6%9F%A5%E8%AF%84%E4%BC%B0%E4%B8%80%E6%AC%A1%E5%A4%8D%E7%9B%98%E7%9A%84%E6%95%88%E6%9E%9C/">
+            <span class="next-text nav-default">12__Double_Check：怎么检查评估一次复盘的效果？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

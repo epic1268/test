@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>28面向K8编程：如何通过Operator扩展KuberneteAPI？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是正范。在上一讲，我们学习了如何通过一个 YAML 文件来定义一个 CRD，即扩展 API。这种扩展 API 跟 Kubernetes 内置的其他 API 同等地位，都可以通过 kubectl 或者 REST 接口访问，在使用过程中不会有任何差异。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/28%E9%9D%A2%E5%90%91k8%E7%BC%96%E7%A8%8B%E5%A6%82%E4%BD%95%E9%80%9A%E8%BF%87operator%E6%89%A9%E5%B1%95kuberneteapi/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/28%E9%9D%A2%E5%90%91k8%E7%BC%96%E7%A8%8B%E5%A6%82%E4%BD%95%E9%80%9A%E8%BF%87operator%E6%89%A9%E5%B1%95kuberneteapi/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="28面向K8编程：如何通过Operator扩展KuberneteAPI？">
+  <meta property="og:description" content="你好，我是正范。在上一讲，我们学习了如何通过一个 YAML 文件来定义一个 CRD，即扩展 API。这种扩展 API 跟 Kubernetes 内置的其他 API 同等地位，都可以通过 kubectl 或者 REST 接口访问，在使用过程中不会有任何差异。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes原理剖析与实战应用">
+
+  <meta itemprop="name" content="28面向K8编程：如何通过Operator扩展KuberneteAPI？">
+  <meta itemprop="description" content="你好，我是正范。在上一讲，我们学习了如何通过一个 YAML 文件来定义一个 CRD，即扩展 API。这种扩展 API 跟 Kubernetes 内置的其他 API 同等地位，都可以通过 kubectl 或者 REST 接口访问，在使用过程中不会有任何差异。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="2276">
+  <meta itemprop="keywords" content="Kubernetes原理剖析与实战应用">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="28面向K8编程：如何通过Operator扩展KuberneteAPI？">
+  <meta name="twitter:description" content="你好，我是正范。在上一讲，我们学习了如何通过一个 YAML 文件来定义一个 CRD，即扩展 API。这种扩展 API 跟 Kubernetes 内置的其他 API 同等地位，都可以通过 kubectl 或者 REST 接口访问，在使用过程中不会有任何差异。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">28面向K8编程：如何通过Operator扩展KuberneteAPI？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 2276 字 </span>
+          <span class="more-meta"> 预计阅读 5 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是正范。在上一讲，我们学习了如何通过一个 YAML 文件来定义一个 CRD，即扩展 API。这种扩展 API 跟 Kubernetes 内置的其他 API 同等地位，都可以通过 kubectl 或者 REST 接口访问，在使用过程中不会有任何差异。</p>
+<p>但只是定义一个 CRD 并没有什么作用。虽说 kube-apiserver 会将其数据存放到 etcd 中，并暴露出相应的 REST 接口，然而并不涉及该对象的核心处理逻辑。</p>
+<p>如何对这些 CRD 定义的对象进行一些逻辑处理，需要由用户自己来定义和实现，也就是通过控制器来实现。对此，我们有个专门的名字：Operator。</p>
+<p>什么是 Kubernetes Operator</p>
+<p>你可能对 Operator 这个名字比较陌生。这个名字最早由 CoreOS 在 2016 年提出来，我们来看看他们给出的定义：</p>
+<p>An operator is a method of packaging, deploying and managing a Kubernetes application. A Kubernetes application is an application that is both deployed on Kubernetes and managed using the Kubernetes APIs and kubectl tooling.</p>
+<p>To be able to make the most of Kubernetes, you need a set of cohensive APIs to extend in order to service and manage your applications that run on Kubernetes. You can think of Operators as the runtime that manages this type of application on Kubernetes.</p>
+<p>总结一下，所谓的 Kubernetes Operator 其实就是借助 Kubernetes 的控制器模式，配合一些自定义的 API，完成对某一类应用的操作，比如资源创建、资源删除。</p>
+<p>这里对 Kubernetes 的控制器模式做个简要说明。Kubernetes 通过声明式 API 来定义对象，各个控制器负责实时查看对应对象的状态，确保达到定义的期望状态。这就是 Kubernetes 的控制器模式。</p>
+<p>kube-controller-manager 就是由这样一组控制器组成的。我们以 StatefulSet 为例来简单说明下控制器的具体逻辑。</p>
+<p>假设你声明了一个 StatefulSet，并将其副本数设置为 2。kube-controller-manager 中以 goroutine 方式运行的 StatefulSet 控制器在观察 kube-apiserver 的时候，发现了这个新创建的对象，它会先创建一个 index 为 0 的 Pod ，并实时观察这个 Pod 的状态，待其状态变为 Running 后，再创建 index 为 1 的 Pod。后续该控制器会一直观察并维护这些 Pod 的状态，保证 StatefulSet 的有效副本数始终为 2。</p>
+<p>所以我们在声明完成 CRD 之后，也需要创建一个控制器，即 Operator，来完成对应的控制逻辑。</p>
+<p>了解了 Operator 的概念和控制器模式后，我们来看看 Operator 是如何工作的。</p>
+<p>Kubernetes Operator 是如何工作的</p>
+<p>Operator 工作的时候采用上述的控制器模式，会持续地观察 Kubernetes 中的自定义对象，即 CR（Custom Resource）。我们通过 CRD 来定义一个对象，CR 则是 CRD 实例化的对象。</p>
+<p>Operator 会持续跟踪这些 CR 的变化事件，比如 ADD、UPDATE、DELETE，然后采取一系列操作，使其达到期望的状态。</p>
+<p>那么具体的代码层面，整个逻辑又如何实现呢？</p>
+<p>下面就是 Operator 代码层面的工作流程图：</p>
+<p>如上图所示，上半部分是一个 Informer，它的机制就是不断地 list/watch kube-apiserver 中特定的资源，比如你只关心 Pod，那么就只 list/watch Pod。Informer 主要有两个方法：一个是 ListFunc，一个是 WatchFunc。</p>
+<p>ListFunc 可以把某类资源的所有资源都列出来，当然你可以指定某个命名空间。</p>
+<p>WatchFunc 则会和 apiserver 建立一个长链接，一旦有一个对象更新或者新对象创建，apiserver 就会反向推送回来，告诉 Informer 有一个新的对象创建或者更新等操作。</p>
+<p>当 Informer 接收到了这些操作，就会调用对应的函数（比如 AddFunc、UpdateFunc 和 DeleteFunc），并将其按照 key 值的格式放到一个先入先出的队列中。</p>
+<p>key 值的命名规则就是 “namespace/name”，name 是对应的资源的名字，比如在 default 的 namespace 中创建一个 foo 类型的资源 example-foo，那么它的 key 值就是 “default/example-foo”。</p>
+<p>我们一般会给 Operator 设置多个 Worker，并行地从上面的队列中拿到对象去操作处理。工作完成之后，就把这个 key 丢掉，表示已经处理完成。但如果处理过程中有错误，则可以把这个 key 重新放回到队列中，后续再重新处理。</p>
+<p>看得出来，上述的流程其实还是有些复杂的，尤其是对初学者有一定的门槛。幸好社区提供了一些脚手架，方便我们快速地构建自己的 Operator。</p>
+<p>构建一个自己的 Kubernetes Operator</p>
+<p>目前社区有一些可以用于创建 Kubernetes Operator 的开源项目，例如：Operator SDK、Kubebuilder、KUDO。</p>
+<p>有了这些脚手架，我们就可以快速创建出 Operator 的框架。这里我以 kubebuilder 为例。</p>
+<p>我们可以先通过如下命令安装 kustomize：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">curl -s &#34;https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh&#34; | bash
+</span></span><span class="line"><span class="cl">mv kustomize /usr/local/bin/
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再安装 kubebuilder。你可以选择通过源码安装：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">git clone https://github.com/kubernetes-sigs/kubebuilder
+</span></span><span class="line"><span class="cl">cd kubebuilder
+</span></span><span class="line"><span class="cl">git checkout v2.3.1
+</span></span><span class="line"><span class="cl">make build
+</span></span><span class="line"><span class="cl">cp bin/kubebuilder $GOPATH/bin
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果你本地有些代码拉不下来，可以用 proxy：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">export</span> <span class="n">GOPROXY</span><span class="o">=</span><span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">goproxy</span><span class="o">.</span><span class="n">cn</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>也可以直接下载二进制文件：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">os</span><span class="o">=$</span><span class="p">(</span><span class="n">go</span> <span class="n">env</span> <span class="n">GOOS</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="n">arch</span><span class="o">=$</span><span class="p">(</span><span class="n">go</span> <span class="n">env</span> <span class="n">GOARCH</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="c1"># download kubebuilder and extract it to tmp</span>
+</span></span><span class="line"><span class="cl"><span class="n">curl</span> <span class="o">-</span><span class="n">sL</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">go</span><span class="o">.</span><span class="n">kubebuilder</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">dl</span><span class="o">/</span><span class="mf">2.3</span><span class="o">.</span><span class="mi">1</span><span class="o">/$</span><span class="p">{</span><span class="n">os</span><span class="p">}</span><span class="o">/$</span><span class="p">{</span><span class="n">arch</span><span class="p">}</span> <span class="o">|</span> <span class="n">tar</span> <span class="o">-</span><span class="n">xz</span> <span class="o">-</span><span class="n">C</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span>
+</span></span><span class="line"><span class="cl"><span class="n">sudo</span> <span class="n">mv</span> <span class="o">/</span><span class="n">tmp</span><span class="o">/</span><span class="n">kubebuilder_2</span><span class="o">.</span><span class="mf">3.1</span><span class="n">_</span><span class="o">$</span><span class="p">{</span><span class="n">os</span><span class="p">}</span><span class="n">_</span><span class="o">$</span><span class="p">{</span><span class="n">arch</span><span class="p">}</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">bin</span><span class="o">/</span><span class="n">kubebuilder</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>安装好以后，我们就可以通过 kubebuilder 来创建 Operator 了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">cd $GOPATH/src
+</span></span><span class="line"><span class="cl">mkdir -p github.com/zhangsan/operator-demo
+</span></span><span class="line"><span class="cl">cd github.com/zhangsan/operator-demo
+</span></span><span class="line"><span class="cl">kubebuilder init --domain abc.com --license apache2 --owner &#34;zhangsan&#34;
+</span></span><span class="line"><span class="cl">kubebuilder create api --group foo --version v1 --kind Bar
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>通过上面 kubebuilder 的命令，我们会在当前目录创建一个 Operator 的框架，并声明了一个 Bar 类型的 API。</p>
+<p>你通过 make manifests 即可生成所需要的 yaml 文件，包括 CRD、RBAC等。</p>
+<p>通过如下的命令即可安装 CRD、RBAC等对象：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">make install # 安装CRD
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后我们就可以看到创建的CRD了：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># kubectl get crd
+</span></span><span class="line"><span class="cl">NAME               AGE
+</span></span><span class="line"><span class="cl">bars.foo.abc.com   2m
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再来创建一个 Bar 类型的对象：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl"># kubectl apply -f config/samples/
+</span></span><span class="line"><span class="cl"># kubectl get bar 
+</span></span><span class="line"><span class="cl">NAME         AGE
+</span></span><span class="line"><span class="cl">bar-sample   25s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在本地开发阶段，我们可以通过 make run 命令，在本地运行。运行起来以后，你可以从输出日志中看到我们刚创建的 default 命名空间下的 bar-sample，即 key 为 “default/bar-sample”。</p>
+<p>我们在开发的时候，只需要修改 “api/v1/bar_types.go”和“controllers/bar_controller.go”这两个文件即可。这两个文件中有注释，会告诉你新增的对象定义和具体逻辑写哪里。这里你也可以参考 kubebuilder 的文档。</p>
+<p>你开发完成之后，就可以构建一个镜像出来，方便部署：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">make docker-build docker-push IMG=zhangsan/operator-demo
+</span></span><span class="line"><span class="cl">make deploy
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>写在最后</p>
+<p>到这里，你就完成了对扩展 Kubernetes API 的学习。这一讲的难点不在于 Operator 本身，而是要学会理解它的行为。</p>
+<p>如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p>
+<p>-&ndash; ### 精选评论 ##### **刚： &gt; 光定义一个控制器，算crd吗？</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/">Kubernetes原理剖析与实战应用</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/28%E8%82%A1%E5%B8%82%E7%9A%84%E6%8A%95%E8%B5%84%E7%90%86%E5%BF%B5%E6%8A%95%E8%B5%84%E4%B8%8D%E4%BB%A3%E8%A1%A8%E6%8A%95%E6%9C%BA/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">28股市的投资理念：投资不代表投机</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/28%E8%AE%BE%E8%AE%A1%E6%80%A7%E8%83%BD%E5%AE%88%E5%8D%AB%E7%B3%BB%E7%BB%9F%E5%AE%8C%E5%96%84cicd%E6%B5%81%E7%A8%8B/">
+            <span class="next-text nav-default">28设计性能守卫系统：完善CICD流程</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

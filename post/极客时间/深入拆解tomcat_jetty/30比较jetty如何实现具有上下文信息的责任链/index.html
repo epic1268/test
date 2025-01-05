@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>30比较Jetty如何实现具有上下文信息的责任链 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="29 | 比较：Jetty如何实现具有上下文信息的责任链？
+我们知道 Tomcat 和 Jetty 的核心功能是处理请求，并且请求的处理者不止一个，因此 Tomcat 和 Jetty 都实现了责任链模式，其中 Tomcat 是通过 Pipeline-Valve 来实现的，而 Jetty 是通过 HandlerWrapper 来实现的。HandlerWrapper 中保存了下一个 Handler 的引用，将各 Handler 组成一个链表，像下面这样：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/30%E6%AF%94%E8%BE%83jetty%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%85%B7%E6%9C%89%E4%B8%8A%E4%B8%8B%E6%96%87%E4%BF%A1%E6%81%AF%E7%9A%84%E8%B4%A3%E4%BB%BB%E9%93%BE/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/30%E6%AF%94%E8%BE%83jetty%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E5%85%B7%E6%9C%89%E4%B8%8A%E4%B8%8B%E6%96%87%E4%BF%A1%E6%81%AF%E7%9A%84%E8%B4%A3%E4%BB%BB%E9%93%BE/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="30比较Jetty如何实现具有上下文信息的责任链">
+  <meta property="og:description" content="29 | 比较：Jetty如何实现具有上下文信息的责任链？
+我们知道 Tomcat 和 Jetty 的核心功能是处理请求，并且请求的处理者不止一个，因此 Tomcat 和 Jetty 都实现了责任链模式，其中 Tomcat 是通过 Pipeline-Valve 来实现的，而 Jetty 是通过 HandlerWrapper 来实现的。HandlerWrapper 中保存了下一个 Handler 的引用，将各 Handler 组成一个链表，像下面这样：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入拆解Tomcat_Jetty">
+
+  <meta itemprop="name" content="30比较Jetty如何实现具有上下文信息的责任链">
+  <meta itemprop="description" content="29 | 比较：Jetty如何实现具有上下文信息的责任链？
+我们知道 Tomcat 和 Jetty 的核心功能是处理请求，并且请求的处理者不止一个，因此 Tomcat 和 Jetty 都实现了责任链模式，其中 Tomcat 是通过 Pipeline-Valve 来实现的，而 Jetty 是通过 HandlerWrapper 来实现的。HandlerWrapper 中保存了下一个 Handler 的引用，将各 Handler 组成一个链表，像下面这样：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3696">
+  <meta itemprop="keywords" content="深入拆解Tomcat_Jetty">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="30比较Jetty如何实现具有上下文信息的责任链">
+  <meta name="twitter:description" content="29 | 比较：Jetty如何实现具有上下文信息的责任链？
+我们知道 Tomcat 和 Jetty 的核心功能是处理请求，并且请求的处理者不止一个，因此 Tomcat 和 Jetty 都实现了责任链模式，其中 Tomcat 是通过 Pipeline-Valve 来实现的，而 Jetty 是通过 HandlerWrapper 来实现的。HandlerWrapper 中保存了下一个 Handler 的引用，将各 Handler 组成一个链表，像下面这样：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">30比较Jetty如何实现具有上下文信息的责任链</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3696 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>29 | 比较：Jetty如何实现具有上下文信息的责任链？</p>
+<p>我们知道 Tomcat 和 Jetty 的核心功能是处理请求，并且请求的处理者不止一个，因此 Tomcat 和 Jetty 都实现了责任链模式，其中 Tomcat 是通过 Pipeline-Valve 来实现的，而 Jetty 是通过 HandlerWrapper 来实现的。HandlerWrapper 中保存了下一个 Handler 的引用，将各 Handler 组成一个链表，像下面这样：</p>
+<p>WebAppContext -&gt; SessionHandler -&gt; SecurityHandler -&gt; ServletHandler</p>
+<p>这样链中的 Handler 从头到尾能被依次调用，除此之外，Jetty 还实现了“回溯”的链式调用，那就是从头到尾依次链式调用 Handler 的方法 A，完成后再回到头节点，再进行一次链式调用，只不过这一次调用另一个方法 B。你可能会问，一次链式调用不就够了吗，为什么还要回过头再调一次呢？这是因为一次请求到达时，Jetty 需要先调用各 Handler 的初始化方法，之后再调用各 Handler 的请求处理方法，并且初始化必须在请求处理之前完成。</p>
+<p>而 Jetty 是通过 ScopedHandler 来做到这一点的，那 ScopedHandler 跟 HandlerWrapper 有什么关系呢？ScopedHandler 是 HandlerWrapper 的子类，我们还是通过一张图来回顾一下各种 Handler 的继承关系：</p>
+<p>从图上我们看到，ScopedHandler 是 Jetty 非常核心的一个 Handler，跟 Servlet 规范相关的 Handler，比如 ContextHandler、SessionHandler、ServletHandler、WebappContext 等都直接或间接地继承了 ScopedHandler。</p>
+<p>今天我就分析一下 ScopedHandler 是如何实现“回溯”的链式调用的。</p>
+<p>HandlerWrapper</p>
+<p>为了方便理解，我们先来回顾一下 HandlerWrapper 的源码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class HandlerWrapper extends AbstractHandlerContainer
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">   protected Handler _handler;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   @Override
+</span></span><span class="line"><span class="cl">    public void handle(String target, 
+</span></span><span class="line"><span class="cl">                       Request baseRequest, 
+</span></span><span class="line"><span class="cl">                       HttpServletRequest request, 
+</span></span><span class="line"><span class="cl">                       HttpServletResponse response) 
+</span></span><span class="line"><span class="cl">                       throws IOException, ServletException
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        Handler handler=_handler;
+</span></span><span class="line"><span class="cl">        if (handler!=null)
+</span></span><span class="line"><span class="cl">            handler.handle(target,baseRequest, request, response);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从代码可以看到它持有下一个 Handler 的引用，并且会在 handle 方法里调用下一个 Handler。</p>
+<p>ScopedHandler</p>
+<p>ScopedHandler 的父类是 HandlerWrapper，ScopedHandler 重写了 handle 方法，在 HandlerWrapper 的 handle 方法的基础上引入了 doScope 方法。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final void handle(String target, 
+</span></span><span class="line"><span class="cl">                         Request baseRequest, 
+</span></span><span class="line"><span class="cl">                         HttpServletRequest request,
+</span></span><span class="line"><span class="cl">                         HttpServletResponse response) 
+</span></span><span class="line"><span class="cl">                         throws IOException, ServletException
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    if (isStarted())
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        if (_outerScope==null)
+</span></span><span class="line"><span class="cl">            doScope(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">        else
+</span></span><span class="line"><span class="cl">            doHandle(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面的代码中是根据
+_outerScope
+是否为 null 来判断是使用 doScope 还是 doHandle 方法。那
+_outScope
+又是什么呢？
+_outScope
+是 ScopedHandler 引入的一个辅助变量，此外还有一个
+_nextScope
+变量。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">protected ScopedHandler _outerScope;
+</span></span><span class="line"><span class="cl">protected ScopedHandler _nextScope;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">private static final ThreadLocal&lt;ScopedHandler&gt; __outerScope= new ThreadLocal&lt;ScopedHandler&gt;();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们看到
+__outerScope
+是一个 ThreadLocal 变量，ThreadLocal 表示线程的私有数据，跟特定线程绑定。需要注意的是
+__outerScope
+实际上保存了一个 ScopedHandler。</p>
+<p>下面通过我通过一个例子来说明
+_outScope
+和
+_nextScope
+的含义。我们知道 ScopedHandler 继承自 HandlerWrapper，所以也是可以形成 Handler 链的，Jetty 的源码注释中给出了下面这样一个例子：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ScopedHandler scopedA;
+</span></span><span class="line"><span class="cl">ScopedHandler scopedB;
+</span></span><span class="line"><span class="cl">HandlerWrapper wrapperX;
+</span></span><span class="line"><span class="cl">ScopedHandler scopedC;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">scopedA.setHandler(scopedB);
+</span></span><span class="line"><span class="cl">scopedB.setHandler(wrapperX);
+</span></span><span class="line"><span class="cl">wrapperX.setHandler(scopedC)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>经过上面的设置之后，形成的 Handler 链是这样的：</p>
+<p>上面的过程只是设置了
+_handler
+变量，那
+_outScope
+和
+_nextScope
+需要设置成什么样呢？为了方便你理解，我们先来看最后的效果图：</p>
+<p>从上图我们看到：scopedA 的
+_nextScope=scopedB
+，scopedB 的
+_nextScope=scopedC
+，为什么 scopedB 的
+_nextScope
+不是 WrapperX 呢，因为 WrapperX 不是一个 ScopedHandler。scopedC 的
+_nextScope
+是 null（因为它是链尾，没有下一个节点）。因此我们得出一个结论：
+_nextScope
+指向下一个 Scoped 节点的引用，由于 WrapperX 不是 Scoped 节点，它没有
+_outScope
+和
+_nextScope
+变量。</p>
+<p>注意到 scopedA 的
+_outerScope
+是 null，scopedB 和 scopedC 的
+_outScope
+都是指向 scopedA，即
+_outScope
+指向的是当前 Handler 链的头节点，头节点本身
+_outScope
+为 null。</p>
+<p>弄清楚了
+_outScope
+和
+_nextScope
+的含义，下一个问题就是对于一个 ScopedHandler 对象如何设置这两个值以及在何时设置这两个值。答案是在组件启动的时候，下面是 ScopedHandler 中的 doStart 方法源码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">protected void doStart() throws Exception
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    try
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        // 请注意 _outScope 是一个实例变量，而 __outerScope 是一个全局变量。先读取全局的线程私有变量 __outerScope 到 _outerScope 中
+</span></span><span class="line"><span class="cl"> _outerScope=__outerScope.get();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 如果全局的 __outerScope 还没有被赋值，说明执行 doStart 方法的是头节点
+</span></span><span class="line"><span class="cl">        if (_outerScope==null)
+</span></span><span class="line"><span class="cl">            //handler 链的头节点将自己的引用填充到 __outerScope
+</span></span><span class="line"><span class="cl">            __outerScope.set(this);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 调用父类 HandlerWrapper 的 doStart 方法
+</span></span><span class="line"><span class="cl">        super.doStart();
+</span></span><span class="line"><span class="cl">        // 各 Handler 将自己的 _nextScope 指向下一个 ScopedHandler
+</span></span><span class="line"><span class="cl">        _nextScope= getChildHandlerByClass(ScopedHandler.class);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    finally
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        if (_outerScope==null)
+</span></span><span class="line"><span class="cl">            __outerScope.set(null);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你可能会问，为什么要设计这样一个全局的
+__outerScope
+，这是因为这个变量不能通过方法参数在 Handler 链中进行传递，但是在形成链的过程中又需要用到它。</p>
+<p>你可以想象，当 scopedA 调用 start 方法时，会把自己填充到
+__scopeHandler
+中，接着 scopedA 调用
+super.doStart
+。由于 scopedA 是一个 HandlerWrapper 类型，并且它持有的
+_handler
+引用指向的是 scopedB，所以
+super.doStart
+实际上会调用 scopedB 的 start 方法。</p>
+<p>这个方法里同样会执行 scopedB 的 doStart 方法，不过这次
+__outerScope.get
+方法返回的不是 null 而是 scopedA 的引用，所以 scopedB 的
+_outScope
+被设置为 scopedA。</p>
+<p>接着
+super.dostart
+会进入到 scopedC，也会将 scopedC 的
+_outScope
+指向 scopedA。到了 scopedC 执行 doStart 方法时，它的
+_handler
+属性为 null（因为它是 Handler 链的最后一个），所以它的
+super.doStart
+会直接返回。接着继续执行 scopedC 的 doStart 方法的下一行代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">_nextScope=(ScopedHandler)getChildHandlerByClass(ScopedHandler.class)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于 HandlerWrapper 来说 getChildHandlerByClass 返回的就是其包装的
+_handler
+对象，这里返回的就是 null。所以 scopedC 的
+_nextScope
+为 null，这段方法结束返回后继续执行 scopedB 中的 doStart 中，同样执行这句代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">_nextScope=(ScopedHandler)getChildHandlerByClass(ScopedHandler.class)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>因为 scopedB 的
+_handler
+引用指向的是 scopedC，所以 getChildHandlerByClass 返回的结果就是 scopedC 的引用，即 scopedB 的
+_nextScope
+指向 scopedC。</p>
+<p>同理 scopedA 的
+_nextScope
+会指向 scopedB。scopedA 的 doStart 方法返回之后，其
+_outScope
+为 null。请注意执行到这里只有 scopedA 的
+_outScope
+为 null，所以 doStart 中 finally 部分的逻辑被触发，这个线程的 ThreadLocal 变量又被设置为 null。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">finally
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    if (_outerScope==null)
+</span></span><span class="line"><span class="cl">        __outerScope.set(null);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你可能会问，费这么大劲设置
+_outScope
+和
+_nextScope
+的值到底有什么用？如果你觉得上面的过程比较复杂，可以跳过这个过程，直接通过图来理解
+_outScope
+和
+_nextScope
+的值，而这样设置的目的是用来控制 doScope 方法和 doHandle 方法的调用顺序。</p>
+<p>实际上在 ScopedHandler 中对于 doScope 和 doHandle 方法是没有具体实现的，但是提供了 nextHandle 和 nextScope 两个方法，下面是它们的源码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public void doScope(String target, 
+</span></span><span class="line"><span class="cl">                    Request baseRequest, 
+</span></span><span class="line"><span class="cl">                    HttpServletRequest request, 
+</span></span><span class="line"><span class="cl">                    HttpServletResponse response)
+</span></span><span class="line"><span class="cl">       throws IOException, ServletException
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    nextScope(target,baseRequest,request,response);
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final void nextScope(String target, 
+</span></span><span class="line"><span class="cl">                            Request baseRequest, 
+</span></span><span class="line"><span class="cl">                            HttpServletRequest request,
+</span></span><span class="line"><span class="cl">                            HttpServletResponse response)
+</span></span><span class="line"><span class="cl">                            throws IOException, ServletException
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    if (_nextScope!=null)
+</span></span><span class="line"><span class="cl">        _nextScope.doScope(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">    else if (_outerScope!=null)
+</span></span><span class="line"><span class="cl">        _outerScope.doHandle(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">        doHandle(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public abstract void doHandle(String target, 
+</span></span><span class="line"><span class="cl">                              Request baseRequest, 
+</span></span><span class="line"><span class="cl">                              HttpServletRequest request,
+</span></span><span class="line"><span class="cl">                              HttpServletResponse response)
+</span></span><span class="line"><span class="cl">       throws IOException, ServletException;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public final void nextHandle(String target, 
+</span></span><span class="line"><span class="cl">                             final Request baseRequest,
+</span></span><span class="line"><span class="cl">                             HttpServletRequest request,
+</span></span><span class="line"><span class="cl">                             HttpServletResponse response) 
+</span></span><span class="line"><span class="cl">       throws IOException, ServletException
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    if (_nextScope!=null &amp;&amp; _nextScope==_handler)
+</span></span><span class="line"><span class="cl">        _nextScope.doHandle(target,baseRequest,request, response);
+</span></span><span class="line"><span class="cl">    else if (_handler!=null)
+</span></span><span class="line"><span class="cl">        super.handle(target,baseRequest,request,response);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从 nextHandle 和 nextScope 方法大致上可以猜到 doScope 和 doHandle 的调用流程。我通过一个调用栈来帮助你理解：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">A.handle(...)
+</span></span><span class="line"><span class="cl">    A.doScope(...)
+</span></span><span class="line"><span class="cl">      B.doScope(...)
+</span></span><span class="line"><span class="cl">        C.doScope(...)
+</span></span><span class="line"><span class="cl">          A.doHandle(...)
+</span></span><span class="line"><span class="cl">            B.doHandle(...)
+</span></span><span class="line"><span class="cl">              X.handle(...)
+</span></span><span class="line"><span class="cl">                C.handle(...)
+</span></span><span class="line"><span class="cl">                  C.doHandle(...)  
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>因此通过设置
+_outScope
+和
+_nextScope
+的值，并且在代码中判断这些值并采取相应的动作，目的就是让 ScopedHandler 链上的doScope 方法在 doHandle、handle 方法之前执行。并且不同 ScopedHandler 的 doScope 都是按照它在链上的先后顺序执行的，doHandle 和 handle 方法也是如此。</p>
+<p>这样 ScopedHandler 帮我们把调用框架搭好了，它的子类只需要实现 doScope 和 doHandle 方法。比如在 doScope 方法里做一些初始化工作，在 doHanlde 方法处理请求。</p>
+<p>ContextHandler</p>
+<p>接下来我们来看看 ScopedHandler 的子类 ContextHandler 是如何实现 doScope 和 doHandle 方法的。ContextHandler 可以理解为 Tomcat 中的 Context 组件，对应一个 Web 应用，它的功能是给 Servlet 的执行维护一个上下文环境，并且将请求转发到相应的 Servlet。那什么是 Servlet 执行的上下文？我们通过 ContextHandler 的构造函数来了解一下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">private ContextHandler(Context context, HandlerContainer parent, String contextPath)
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    //_scontext 就是 Servlet 规范中的 ServletContext
+</span></span><span class="line"><span class="cl">    _scontext = context == null?new Context():context;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //Web 应用的初始化参数
+</span></span><span class="line"><span class="cl">    _initParams = new HashMap&lt;String, String&gt;();
+</span></span><span class="line"><span class="cl">    ...
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们看到 ContextHandler 维护了 ServletContext 和 Web 应用的初始化参数。那 ContextHandler 的 doScope 方法做了些什么呢？我们看看它的关键代码：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">public</span> <span class="n">void</span> <span class="n">doScope</span><span class="p">(</span><span class="ne">String</span> <span class="n">target</span><span class="p">,</span> <span class="n">Request</span> <span class="n">baseRequest</span><span class="p">,</span> <span class="n">HttpServletRequest</span> <span class="n">request</span><span class="p">,</span> <span class="n">HttpServletResponse</span> <span class="n">response</span><span class="p">)</span> <span class="n">throws</span> <span class="n">IOException</span><span class="p">,</span> <span class="n">ServletException</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="o">...</span>
+</span></span><span class="line"><span class="cl">    <span class="o">//</span><span class="mf">1.</span> <span class="err">修正请求的</span> <span class="n">URL</span><span class="err">，去掉多余的</span><span class="s1">&#39;/&#39;</span><span class="err">，或者加上</span><span class="s1">&#39;/&#39;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">_compactPath</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="n">target</span> <span class="o">=</span> <span class="n">URIUtil</span><span class="o">.</span><span class="n">compactPath</span><span class="p">(</span><span class="n">target</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">checkContext</span><span class="p">(</span><span class="n">target</span><span class="p">,</span><span class="n">baseRequest</span><span class="p">,</span><span class="n">response</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">        <span class="k">return</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">length</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">_contextPath</span><span class="o">.</span><span class="n">length</span><span class="p">())</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span><span class="n">_contextPath</span><span class="o">.</span><span class="n">length</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">            <span class="n">target</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">substring</span><span class="p">(</span><span class="n">_contextPath</span><span class="o">.</span><span class="n">length</span><span class="p">());</span>
+</span></span><span class="line"><span class="cl">        <span class="n">pathInfo</span> <span class="o">=</span> <span class="n">target</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">_contextPath</span><span class="o">.</span><span class="n">length</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">target</span> <span class="o">=</span> <span class="n">URIUtil</span><span class="o">.</span><span class="n">SLASH</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">pathInfo</span> <span class="o">=</span> <span class="n">URIUtil</span><span class="o">.</span><span class="n">SLASH</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">target</span> <span class="o">=</span> <span class="n">URIUtil</span><span class="o">.</span><span class="n">SLASH</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">pathInfo</span> <span class="o">=</span> <span class="n">null</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="o">//</span><span class="mf">2.</span> <span class="err">设置当前</span> <span class="n">Web</span> <span class="err">应用的类加载器</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">_classLoader</span> <span class="o">!=</span> <span class="n">null</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">  <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">current_thread</span> <span class="o">=</span> <span class="ne">Thread</span><span class="o">.</span><span class="n">currentThread</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">      <span class="n">old_classloader</span> <span class="o">=</span> <span class="n">current_thread</span><span class="o">.</span><span class="n">getContextClassLoader</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">      <span class="n">current_thread</span><span class="o">.</span><span class="n">setContextClassLoader</span><span class="p">(</span><span class="n">_classLoader</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="o">//</span><span class="mf">3.</span> <span class="err">调用</span> <span class="n">nextScope</span>
+</span></span><span class="line"><span class="cl">  <span class="n">nextScope</span><span class="p">(</span><span class="n">target</span><span class="p">,</span><span class="n">baseRequest</span><span class="p">,</span><span class="n">request</span><span class="p">,</span><span class="n">response</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="o">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从代码我们看到在 doScope 方法里主要是做了一些请求的修正、类加载器的设置，并调用 nextScope，请你注意 nextScope 调用是由父类 ScopedHandler 实现的。接着我们来 ContextHandler 的 doHandle 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public void doHandle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">    final DispatcherType dispatch = baseRequest.getDispatcherType();
+</span></span><span class="line"><span class="cl">    final boolean new_context = baseRequest.takeNewContext();
+</span></span><span class="line"><span class="cl">    try
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">         // 请求的初始化工作, 主要是为请求添加 ServletRequestAttributeListener 监听器, 并将 &#34; 开始处理一个新请求 &#34; 这个事件通知 ServletRequestListener
+</span></span><span class="line"><span class="cl">        if (new_context)
+</span></span><span class="line"><span class="cl">            requestInitialized(baseRequest,request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 继续调用下一个 Handler，下一个 Handler 可能是 ServletHandler、SessionHandler ...
+</span></span><span class="line"><span class="cl">        nextHandle(target,baseRequest,request,response);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    finally
+</span></span><span class="line"><span class="cl">    {
+</span></span><span class="line"><span class="cl">        // 同样一个 Servlet 请求处理完毕，也要通知相应的监听器
+</span></span><span class="line"><span class="cl">        if (new_context)
+</span></span><span class="line"><span class="cl">            requestDestroyed(baseRequest,request);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>从上面的代码我们看到 ContextHandler 在 doHandle 方法里分别完成了相应的请求处理工作。</p>
+<p>本期精华</p>
+<p>今天我们分析了 Jetty 中 ScopedHandler 的实现原理，剖析了如何实现链式调用的“回溯”。主要是确定了 doScope 和 doHandle 的调用顺序，doScope 依次调用完以后，再依次调用 doHandle，它的子类比如 ContextHandler 只需要实现 doScope 和 doHandle 方法，而不需要关心它们被调用的顺序。</p>
+<p>这背后的原理是，ScopedHandler 通过递归的方式来设置
+_outScope
+和
+_nextScope
+两个变量，然后通过判断这些值来控制调用的顺序。递归是计算机编程的一个重要的概念，在各种面试题中也经常出现，如果你能读懂 Jetty 中的这部分代码，毫无疑问你已经掌握了递归的精髓。</p>
+<p>另外我们进行层层递归调用中需要用到一些变量，比如 ScopedHandler 中的
+__outerScope
+，它保存了 Handler 链中的头节点，但是它不是递归方法的参数，那参数怎么传递过去呢？一种可能的办法是设置一个全局变量，各 Handler 都能访问到这个变量。但这样会有线程安全的问题，因此 ScopedHandler 通过线程私有数据 ThreadLocal 来保存变量，这样既达到了传递变量的目的，又没有线程安全的问题。</p>
+<p>课后思考</p>
+<p>ScopedHandler 的 doStart 方法，最后一步是将线程私有变量
+__outerScope
+设置成 null，为什么需要这样做呢？</p>
+<p>不知道今天的内容你消化得如何？如果还有疑问，请大胆的在留言区提问，也欢迎你把你的课后思考和心得记录下来，与我和其他同学一起讨论。如果你觉得今天有所收获，欢迎你把它分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3tomcat_jetty/">深入拆解Tomcat_Jetty</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/sql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/3029%E4%B8%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%B2%A1%E6%9C%89%E7%90%86%E6%83%B3%E7%9A%84%E7%B4%A2%E5%BC%95/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">3029丨为什么没有理想的索引</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%A3%E7%A0%81%E7%B2%BE%E8%BF%9B%E4%B9%8B%E8%B7%AF/30%E7%BC%96%E5%86%99%E7%BB%8F%E6%B5%8E%E4%BB%A3%E7%A0%81%E7%9A%84%E6%A3%80%E6%9F%A5%E6%B8%85%E5%8D%95/">
+            <span class="next-text nav-default">30编写经济代码的检查清单</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16__“order_by”是怎么工作的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在你开发应用的时候，一定会经常碰到需要根据指定的字段排序来显示结果的需求。还是以我们前面举例用过的市民表为例，假设你要查询城市是“杭州”的所有人名字，并且按照姓名排序返回前 1000 个人的姓名、年龄。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/16__order_by%E6%98%AF%E6%80%8E%E4%B9%88%E5%B7%A5%E4%BD%9C%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/16__order_by%E6%98%AF%E6%80%8E%E4%B9%88%E5%B7%A5%E4%BD%9C%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16__“order_by”是怎么工作的？">
+  <meta property="og:description" content="在你开发应用的时候，一定会经常碰到需要根据指定的字段排序来显示结果的需求。还是以我们前面举例用过的市民表为例，假设你要查询城市是“杭州”的所有人名字，并且按照姓名排序返回前 1000 个人的姓名、年龄。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="MySQL实战45讲">
+
+  <meta itemprop="name" content="16__“order_by”是怎么工作的？">
+  <meta itemprop="description" content="在你开发应用的时候，一定会经常碰到需要根据指定的字段排序来显示结果的需求。还是以我们前面举例用过的市民表为例，假设你要查询城市是“杭州”的所有人名字，并且按照姓名排序返回前 1000 个人的姓名、年龄。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6188">
+  <meta itemprop="keywords" content="MySQL实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16__“order_by”是怎么工作的？">
+  <meta name="twitter:description" content="在你开发应用的时候，一定会经常碰到需要根据指定的字段排序来显示结果的需求。还是以我们前面举例用过的市民表为例，假设你要查询城市是“杭州”的所有人名字，并且按照姓名排序返回前 1000 个人的姓名、年龄。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16__“order_by”是怎么工作的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6188 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#全字段排序">全字段排序</a></li>
+    <li><a href="#rowid-排序">rowid 排序</a></li>
+    <li><a href="#全字段排序-vs-rowid-排序">全字段排序 VS rowid 排序</a></li>
+    <li><a href="#小结">小结</a></li>
+    <li><a href="#上期问题时间">上期问题时间</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在你开发应用的时候，一定会经常碰到需要根据指定的字段排序来显示结果的需求。还是以我们前面举例用过的市民表为例，假设你要查询城市是“杭州”的所有人名字，并且按照姓名排序返回前 1000 个人的姓名、年龄。</p>
+<p>假设这个表的部分定义是这样的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-mysql" data-lang="mysql"><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="o">`</span><span class="n">t</span><span class="o">`</span><span class="w"> </span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">id</span><span class="o">`</span><span class="w"> </span><span class="kt">int</span><span class="p">(</span><span class="mi">11</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="no">NULL</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">city</span><span class="o">`</span><span class="w"> </span><span class="kt">varchar</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="no">NULL</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">name</span><span class="o">`</span><span class="w"> </span><span class="kt">varchar</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="no">NULL</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">age</span><span class="o">`</span><span class="w"> </span><span class="kt">int</span><span class="p">(</span><span class="mi">11</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="no">NULL</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">addr</span><span class="o">`</span><span class="w"> </span><span class="kt">varchar</span><span class="p">(</span><span class="mi">128</span><span class="p">)</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="no">NULL</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="o">`</span><span class="n">id</span><span class="o">`</span><span class="p">),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">KEY</span><span class="w"> </span><span class="o">`</span><span class="n">city</span><span class="o">`</span><span class="w"> </span><span class="p">(</span><span class="o">`</span><span class="n">city</span><span class="o">`</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">)</span><span class="w"> </span><span class="kp">ENGINE</span><span class="o">=</span><span class="n">InnoDB</span><span class="p">;</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>这时，你的 SQL 语句可以这么写：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select city,name,age from t where city=&#39;杭州&#39; order by name limit 1000  ;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个语句看上去逻辑很清晰，但是你了解它的执行流程吗？今天，我就和你聊聊这个语句是怎么执行的，以及有什么参数会影响执行的行为。</p>
+<h1 id="全字段排序">全字段排序</h1>
+<p>前面我们介绍过索引，所以你现在就很清楚了，为避免全表扫描，我们需要在 city 字段加上索引。</p>
+<p>在 city 字段上创建索引之后，我们用 explain 命令来看看这个语句的执行情况。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/56df97340c17b75e988a5fb25a237e8b.png" alt=""></p>
+<p>图 1 使用 explain 命令查看语句的执行情况</p>
+<p>Extra 这个字段中的“Using filesort”表示的就是需要排序，MySQL 会给每个线程分配一块内存用于排序，称为 sort_buffer。</p>
+<p>为了说明这个 SQL 查询语句的执行过程，我们先来看一下 city 这个索引的示意图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/a6877163d5386a82da7375e9f8c9ba5c.png" alt=""></p>
+<p>图 2 city 字段的索引示意图</p>
+<p>从图中可以看到，满足 city=&lsquo;杭州’条件的行，是从 ID_X 到 ID_(X+N) 的这些记录。</p>
+<p>通常情况下，这个语句执行流程如下所示：</p>
+<ol>
+<li>初始化 sort_buffer，确定放入 name、city、age 这三个字段；</li>
+<li>从索引 city 找到第一个满足 city=&lsquo;杭州’条件的主键 id，也就是图中的 ID_X；</li>
+<li>到主键 id 索引取出整行，取 name、city、age 三个字段的值，存入 sort_buffer 中；</li>
+<li>从索引 city 取下一个记录的主键 id；</li>
+<li>重复步骤 3、4 直到 city 的值不满足查询条件为止，对应的主键 id 也就是图中的 ID_Y；</li>
+<li>对 sort_buffer 中的数据按照字段 name 做快速排序；</li>
+<li>按照排序结果取前 1000 行返回给客户端。</li>
+</ol>
+<p>我们暂且把这个排序过程，称为全字段排序，执行流程的示意图如下所示，下一篇文章中我们还会用到这个排序。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/49b21b27c043d04722563d7b6f86722e.png" alt=""></p>
+<p>图 3 全字段排序</p>
+<p>图中“按 name 排序”这个动作，可能在内存中完成，也可能需要使用外部排序，这取决于排序所需的内存和参数 sort_buffer_size。</p>
+<p>sort_buffer_size，就是 MySQL 为排序开辟的内存（sort_buffer）的大小。如果要排序的数据量小于 sort_buffer_size，排序就在内存中完成。但如果排序数据量太大，内存放不下，则不得不利用磁盘临时文件辅助排序。</p>
+<p>你可以用下面介绍的方法，来确定一个排序语句是否使用了临时文件。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-mysql" data-lang="mysql"><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="cm">/* 打开 optimizer_trace，只对本线程有效 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">SET</span><span class="w"> </span><span class="n">optimizer_trace</span><span class="o">=</span><span class="s1">&#39;enabled=on&#39;</span><span class="p">;</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="cm">/* @a 保存 Innodb_rows_read 的初始值 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">VARIABLE_VALUE</span><span class="w"> </span><span class="k">into</span><span class="w"> </span><span class="o">@</span><span class="n">a</span><span class="w"> </span><span class="k">from</span><span class="w">  </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">session_status</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Innodb_rows_read&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="cm">/* 执行语句 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">city</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="n">age</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">city</span><span class="o">=</span><span class="s1">&#39;杭州&#39;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="k">limit</span><span class="w"> </span><span class="mi">1000</span><span class="p">;</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="cm">/* 查看 OPTIMIZER_TRACE 输出 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="o">`</span><span class="n">information_schema</span><span class="o">`</span><span class="p">.</span><span class="o">`</span><span class="n">OPTIMIZER_TRACE</span><span class="o">`</span><span class="err">\</span><span class="n">G</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="cm">/* @b 保存 Innodb_rows_read 的当前值 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">VARIABLE_VALUE</span><span class="w"> </span><span class="k">into</span><span class="w"> </span><span class="o">@</span><span class="n">b</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">session_status</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Innodb_rows_read&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="cm">/* 计算 Innodb_rows_read 差值 */</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="o">@</span><span class="n">b</span><span class="o">-@</span><span class="n">a</span><span class="p">;</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个方法是通过查看 OPTIMIZER_TRACE 的结果来确认的，你可以从 number_of_tmp_files 中看到是否使用了临时文件。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/36e154cdb3beb70e009fd60e7d3cdb39.png" alt=""></p>
+<p>图 4 全排序的 OPTIMIZER_TRACE 部分结果</p>
+<p>number_of_tmp_files 表示的是，排序过程中使用的临时文件数。你一定奇怪，为什么需要 12 个文件？内存放不下时，就需要使用外部排序，外部排序一般使用归并排序算法。可以这么简单理解，<strong>MySQL 将需要排序的数据分成 12 份，每一份单独排序后存在这些临时文件中。然后把这 12 个有序文件再合并成一个有序的大文件。</strong></p>
+<p>如果 sort_buffer_size 超过了需要排序的数据量的大小，number_of_tmp_files 就是 0，表示排序可以直接在内存中完成。</p>
+<p>否则就需要放在临时文件中排序。sort_buffer_size 越小，需要分成的份数越多，number_of_tmp_files 的值就越大。</p>
+<p>接下来，我再和你解释一下图 4 中其他两个值的意思。</p>
+<p>我们的示例表中有 4000 条满足 city=&lsquo;杭州’的记录，所以你可以看到 examined_rows=4000，表示参与排序的行数是 4000 行。</p>
+<p>sort_mode 里面的 packed_additional_fields 的意思是，排序过程对字符串做了“紧凑”处理。即使 name 字段的定义是 varchar(16)，在排序过程中还是要按照实际长度来分配空间的。</p>
+<p>同时，最后一个查询语句 select @b-@a 的返回结果是 4000，表示整个执行过程只扫描了 4000 行。</p>
+<p>这里需要注意的是，为了避免对结论造成干扰，我把 internal_tmp_disk_storage_engine 设置成 MyISAM。否则，select @b-@a 的结果会显示为 4001。</p>
+<p>这是因为查询 OPTIMIZER_TRACE 这个表时，需要用到临时表，而 internal_tmp_disk_storage_engine 的默认值是 InnoDB。如果使用的是 InnoDB 引擎的话，把数据从临时表取出来的时候，会让 Innodb_rows_read 的值加 1。</p>
+<h1 id="rowid-排序">rowid 排序</h1>
+<p>在上面这个算法过程里面，只对原表的数据读了一遍，剩下的操作都是在 sort_buffer 和临时文件中执行的。但这个算法有一个问题，就是如果查询要返回的字段很多的话，那么 sort_buffer 里面要放的字段数太多，这样内存里能够同时放下的行数很少，要分成很多个临时文件，排序的性能会很差。</p>
+<p>所以如果单行很大，这个方法效率不够好。</p>
+<p>那么，<strong>如果 MySQL 认为排序的单行长度太大会怎么做呢？</strong></p>
+<p>接下来，我来修改一个参数，让 MySQL 采用另外一种算法。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SET max_length_for_sort_data = 16;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>max_length_for_sort_data，是 MySQL 中专门控制用于排序的行数据的长度的一个参数。它的意思是，如果单行的长度超过这个值，MySQL 就认为单行太大，要换一个算法。</p>
+<p>city、name、age 这三个字段的定义总长度是 36，我把 max_length_for_sort_data 设置为 16，我们再来看看计算过程有什么改变。</p>
+<p>新的算法放入 sort_buffer 的字段，只有要排序的列（即 name 字段）和主键 id。</p>
+<p>但这时，排序的结果就因为少了 city 和 age 字段的值，不能直接返回了，整个执行流程就变成如下所示的样子：</p>
+<ol>
+<li>初始化 sort_buffer，确定放入两个字段，即 name 和 id；</li>
+<li>从索引 city 找到第一个满足 city=&lsquo;杭州’条件的主键 id，也就是图中的 ID_X；</li>
+<li>到主键 id 索引取出整行，取 name、id 这两个字段，存入 sort_buffer 中；</li>
+<li>从索引 city 取下一个记录的主键 id；</li>
+<li>重复步骤 3、4 直到不满足 city=&lsquo;杭州’条件为止，也就是图中的 ID_Y；</li>
+<li>对 sort_buffer 中的数据按照字段 name 进行排序；</li>
+<li>遍历排序结果，取前 1000 行，并按照 id 的值回到原表中取出 city、name 和 age 三个字段返回给客户端。</li>
+</ol>
+<p>这个执行流程的示意图如下，我把它称为 rowid 排序。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/115a958bc5111c855d2cd013b178e706.png" alt=""></p>
+<p>图 5 rowid 排序</p>
+<p>对比图 3 的全字段排序流程图你会发现，rowid 排序多访问了一次表 t 的主键索引，就是步骤 7。</p>
+<p>需要说明的是，最后的“结果集”是一个逻辑概念，实际上 MySQL 服务端从排序后的 sort_buffer 中依次取出 id，然后到原表查到 city、name 和 age 这三个字段的结果，不需要在服务端再耗费内存存储结果，是直接返回给客户端的。</p>
+<p>根据这个说明过程和图示，你可以想一下，这个时候执行 select @b-@a，结果会是多少呢？</p>
+<p>现在，我们就来看看结果有什么不同。</p>
+<p>首先，图中的 examined_rows 的值还是 4000，表示用于排序的数据是 4000 行。但是 select @b-@a 这个语句的值变成 5000 了。</p>
+<p>因为这时候除了排序过程外，在排序完成后，还要根据 id 去原表取值。由于语句是 limit 1000，因此会多读 1000 行。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/3b023f03d1cbb9e6c118ad0b915c22a2.png" alt=""></p>
+<p>图 6 rowid 排序的 OPTIMIZER_TRACE 部分输出</p>
+<p>从 OPTIMIZER_TRACE 的结果中，你还能看到另外两个信息也变了。</p>
+<ul>
+<li>sort_mode 变成了 &lt;sort_key, rowid&gt;，表示参与排序的只有 name 和 id 这两个字段。</li>
+<li>number_of_tmp_files 变成 10 了，是因为这时候参与排序的行数虽然仍然是 4000 行，但是每一行都变小了，因此需要排序的总数据量就变小了，需要的临时文件也相应地变少了。</li>
+</ul>
+<h1 id="全字段排序-vs-rowid-排序">全字段排序 VS rowid 排序</h1>
+<p>我们来分析一下，从这两个执行流程里，还能得出什么结论。</p>
+<p>如果 MySQL 实在是担心排序内存太小，会影响排序效率，才会采用 rowid 排序算法，这样排序过程中一次可以排序更多行，但是需要再回到原表去取数据。</p>
+<p>如果 MySQL 认为内存足够大，会优先选择全字段排序，把需要的字段都放到 sort_buffer 中，这样排序后就会直接从内存里面返回查询结果了，不用再回到原表去取数据。</p>
+<p>这也就体现了 MySQL 的一个设计思想：<strong>如果内存够，就要多利用内存，尽量减少磁盘访问。</strong></p>
+<p>对于 InnoDB 表来说，rowid 排序会要求回表多造成磁盘读，因此不会被优先选择。</p>
+<p>这个结论看上去有点废话的感觉，但是你要记住它，下一篇文章我们就会用到。</p>
+<p>看到这里，你就了解了，MySQL 做排序是一个成本比较高的操作。那么你会问，是不是所有的 order by 都需要排序操作呢？如果不排序就能得到正确的结果，那对系统的消耗会小很多，语句的执行时间也会变得更短。</p>
+<p>其实，并不是所有的 order by 语句，都需要排序操作的。从上面分析的执行过程，我们可以看到，MySQL 之所以需要生成临时表，并且在临时表上做排序操作，<strong>其原因是原来的数据都是无序的。</strong></p>
+<p>你可以设想下，如果能够保证从 city 这个索引上取出来的行，天然就是按照 name 递增排序的话，是不是就可以不用再排序了呢？</p>
+<p>确实是这样的。</p>
+<p>所以，我们可以在这个市民表上创建一个 city 和 name 的联合索引，对应的 SQL 语句是：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">alter table t add index city_user(city, name);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>作为与 city 索引的对比，我们来看看这个索引的示意图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/16ce2b017db519e669206c73ed4dda3e.png" alt=""></p>
+<p>图 7 city 和 name 联合索引示意图</p>
+<p>在这个索引里面，我们依然可以用树搜索的方式定位到第一个满足 city=&lsquo;杭州’的记录，并且额外确保了，接下来按顺序取“下一条记录”的遍历过程中，只要 city 的值是杭州，name 的值就一定是有序的。</p>
+<p>这样整个查询过程的流程就变成了：</p>
+<ol>
+<li>从索引 (city,name) 找到第一个满足 city=&lsquo;杭州’条件的主键 id；</li>
+<li>到主键 id 索引取出整行，取 name、city、age 三个字段的值，作为结果集的一部分直接返回；</li>
+<li>从索引 (city,name) 取下一个记录主键 id；</li>
+<li>重复步骤 2、3，直到查到第 1000 条记录，或者是不满足 city=&lsquo;杭州’条件时循环结束。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/06d0ae33f2c9b15358551f0d73062519.png" alt=""></p>
+<p>图 8 引入 (city,name) 联合索引后，查询语句的执行计划</p>
+<p>可以看到，这个查询过程不需要临时表，也不需要排序。接下来，我们用 explain 的结果来印证一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/745808a3c9357b70af6b7a30052c953d.png" alt=""></p>
+<p>图 9 引入 (city,name) 联合索引后，查询语句的执行计划</p>
+<p>从图中可以看到，Extra 字段中没有 Using filesort 了，也就是不需要排序了。而且由于 (city,name) 这个联合索引本身有序，所以这个查询也不用把 4000 行全都读一遍，只要找到满足条件的前 1000 条记录就可以退出了。也就是说，在我们这个例子里，只需要扫描 1000 次。</p>
+<p>既然说到这里了，我们再往前讨论，**这个语句的执行流程有没有可能进一步简化呢？**不知道你还记不记得，我在第 5 篇文章<a href="./69636.md">《深入浅出索引（下）》</a>中，和你介绍的覆盖索引。</p>
+<p>这里我们可以再稍微复习一下。<strong>覆盖索引是指，索引上的信息足够满足查询请求，不需要再回到主键索引上去取数据。</strong></p>
+<p>按照覆盖索引的概念，我们可以再优化一下这个查询语句的执行流程。</p>
+<p>针对这个查询，我们可以创建一个 city、name 和 age 的联合索引，对应的 SQL 语句就是：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">alter table t add index city_user_age(city, name, age);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这时，对于 city 字段的值相同的行来说，还是按照 name 字段的值递增排序的，此时的查询语句也就不再需要排序了。这样整个查询语句的执行流程就变成了：</p>
+<ol>
+<li>从索引 (city,name,age) 找到第一个满足 city=&lsquo;杭州’条件的记录，取出其中的 city、name 和 age 这三个字段的值，作为结果集的一部分直接返回；</li>
+<li>从索引 (city,name,age) 取下一个记录，同样取出这三个字段的值，作为结果集的一部分直接返回；</li>
+<li>重复执行步骤 2，直到查到第 1000 条记录，或者是不满足 city=&lsquo;杭州’条件时循环结束。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/f701d2103cd4fa04b615609bf69cbba5.png" alt=""></p>
+<p>图 10 引入 (city,name,age) 联合索引后，查询语句的执行流程</p>
+<p>然后，我们再来看看 explain 的结果。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/2cffc9239088580deb2dba4c03204fd2.png" alt=""></p>
+<p>图 11 引入 (city,name,age) 联合索引后，查询语句的执行计划</p>
+<p>可以看到，Extra 字段里面多了“Using index”，表示的就是使用了覆盖索引，性能上会快很多。</p>
+<p>当然，这里并不是说要为了每个查询能用上覆盖索引，就要把语句中涉及的字段都建上联合索引，毕竟索引还是有维护代价的。这是一个需要权衡的决定。</p>
+<h1 id="小结">小结</h1>
+<p>今天这篇文章，我和你介绍了 MySQL 里面 order by 语句的几种算法流程。</p>
+<p>在开发系统的时候，你总是不可避免地会使用到 order by 语句。你心里要清楚每个语句的排序逻辑是怎么实现的，还要能够分析出在最坏情况下，每个语句的执行对系统资源的消耗，这样才能做到下笔如有神，不犯低级错误。</p>
+<p>最后，我给你留下一个思考题吧。</p>
+<p>假设你的表里面已经有了 city_name(city, name) 这个联合索引，然后你要查杭州和苏州两个城市中所有的市民的姓名，并且按名字排序，显示前 100 条记录。如果 SQL 查询语句是这么写的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mysql&gt; select * from t where city in (&#39;杭州&#39;,&#34; 苏州 &#34;) order by name limit 100;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>那么，这个语句执行的时候会有排序过程吗，为什么？</p>
+<p>如果业务端代码由你来开发，需要实现一个在数据库端不需要排序的方案，你会怎么实现呢？</p>
+<p>进一步地，如果有分页需求，要显示第 101 页，也就是说语句最后要改成“limit 10000,100”，你的实现方法又会是什么呢？</p>
+<p>你可以把你的思考和观点写在留言区里，我会在下一篇文章的末尾和你讨论这个问题。感谢你的收听，也欢迎你把这篇文章分享给更多的朋友一起阅读。</p>
+<h1 id="上期问题时间">上期问题时间</h1>
+<p>上期的问题是，当 MySQL 去更新一行，但是要修改的值跟原来的值是相同的，这时候 MySQL 会真的去执行一次修改吗？还是看到值相同就直接返回呢？</p>
+<p>这是第一次我们课后问题的三个选项都有同学选的，所以我要和你需要详细说明一下。</p>
+<p>第一个选项是，MySQL 读出数据，发现值与原来相同，不更新，直接返回，执行结束。这里我们可以用一个锁实验来确认。</p>
+<p>假设，当前表 t 里的值是 (1,2)。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/8f7cf81977262833a0ed580a9f3db263.png" alt=""></p>
+<p>图 12 锁验证方式</p>
+<p>session B 的 update 语句被 blocked 了，加锁这个动作是 InnoDB 才能做的，所以排除选项 1。</p>
+<p>第二个选项是，MySQL 调用了 InnoDB 引擎提供的接口，但是引擎发现值与原来相同，不更新，直接返回。有没有这种可能呢？这里我用一个可见性实验来确认。</p>
+<p>假设当前表里的值是 (1,2)。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/c93ad7df36f7d6c56db125ab647ae52e.png" alt=""></p>
+<p>图 13 可见性验证方式</p>
+<p>session A 的第二个 select 语句是一致性读（快照读)，它是不能看见 session B 的更新的。</p>
+<p>现在它返回的是 (1,3)，表示它看见了某个新的版本，这个版本只能是 session A 自己的 update 语句做更新的时候生成。（如果你对这个逻辑有疑惑的话，可以回顾下第 8 篇文章<a href="./70562.md">《事务到底是隔离的还是不隔离的？》</a>中的相关内容）</p>
+<p>所以，我们上期思考题的答案应该是选项 3，即：InnoDB 认真执行了“把这个值修改成 (1,2)&ldquo;这个操作，该加锁的加锁，该更新的更新。</p>
+<p>然后你会说，MySQL 怎么这么笨，就不会更新前判断一下值是不是相同吗？如果判断一下，不就不用浪费 InnoDB 操作，多去更新一次了？</p>
+<p>其实 MySQL 是确认了的。只是在这个语句里面，MySQL 认为读出来的值，只有一个确定的 (id=1), 而要写的是 (a=3)，只从这两个信息是看不出来“不需要修改”的。</p>
+<p>作为验证，你可以看一下下面这个例子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/c92ea81f4ce548a4dc102a32eff2ec47.png" alt=""></p>
+<p>图 14 可见性验证方式 &ndash; 对照</p>
+<p><strong>补充说明：</strong></p>
+<p>上面我们的验证结果都是在 binlog_format=statement 格式下进行的。</p>
+<p>@didiren 补充了一个 case，如果是 binlog_format=row 并且 binlog_row_image=FULL 的时候，由于 MySQL 需要在 binlog 里面记录所有的字段，所以在读数据的时候就会把所有数据都读出来了。</p>
+<p>根据上面说的规则，“既然读了数据，就会判断”，因此在这时候，select * from t where id=1，结果就是“返回 (1,2)”。</p>
+<p>同理，如果是 binlog_row_image=NOBLOB, 会读出除 blob 外的所有字段，在我们这个例子里，结果还是“返回 (1,2)”。</p>
+<p>对应的代码如图 15 所示。这是 MySQL 5.6 版本引入的，在此之前我没有看过。所以，特此说明。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/01adcc76ddc25d277cc360a4d6ea2db2.png" alt=""></p>
+<p>图 15 binlog_row_image=FULL 读字段逻辑</p>
+<p>类似的，@mahonebags 同学提到了 timestamp 字段的问题。结论是：如果表中有 timestamp 字段而且设置了自动更新的话，那么更新“别的字段”的时候，MySQL 会读入所有涉及的字段，这样通过判断，就会发现不需要修改。</p>
+<p>这两个点我会在后面讲更新性能的文章中再展开。</p>
+<p>评论区留言点赞板：</p>
+<blockquote>
+<p>@Gavin、@melon、@阿建 等同学提到了锁验证法；<br>
+@郭江伟 同学提到了两个点，都非常好，有去实际验证。结论是这样的：<br>
+第一，hexdump 看出来没改应该是 WAL 机制生效了，要过一会儿，或者把库 shutdown 看看。<br>
+第二，binlog 没写是 MySQL Server 层知道行的值没变，所以故意不写的，这个是在 row 格式下的策略。你可以把 binlog_format 改成 statement 再验证下。</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/48edcb93fb03e3e52d7e7099be6b5cb3.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/">MySQL实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E9%9D%A2%E8%AF%95%E5%AE%9D%E5%85%B8/16-%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8dp%E4%B8%8E%E5%8D%95%E8%B0%83%E9%98%9F%E5%88%97%E5%AF%BB%E6%89%BE%E6%9C%80%E5%A4%A7%E7%9F%A9%E5%BD%A2/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16 如何利用DP与单调队列寻找最大矩形？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/javascript%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E8%A7%A3%E6%9E%90/16__a_b__a_b%E8%AE%A9%E4%BD%A0%E4%BB%8E%E4%B8%80%E8%A1%8C%E4%BB%A3%E7%A0%81%E7%9C%8B%E5%88%B0%E5%AF%B9%E8%B1%A1%E7%9A%84%E6%9C%AC%E8%B4%A8/">
+            <span class="next-text nav-default">16__[a,_b]_=_{a,_b}：让你从一行代码看到对象的本质</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

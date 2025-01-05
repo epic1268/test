@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>04__理解进程（3）：为什么我在容器中的进程被强制杀死了？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。
+今天我们来讲容器中 init 进程的最后一讲，为什么容器中的进程被强制杀死了。理解了这个问题，能够帮助你更好地管理进程，让容器中的进程可以 graceful shutdown。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/04__%E7%90%86%E8%A7%A3%E8%BF%9B%E7%A8%8B3%E4%B8%BA%E4%BB%80%E4%B9%88%E6%88%91%E5%9C%A8%E5%AE%B9%E5%99%A8%E4%B8%AD%E7%9A%84%E8%BF%9B%E7%A8%8B%E8%A2%AB%E5%BC%BA%E5%88%B6%E6%9D%80%E6%AD%BB%E4%BA%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/04__%E7%90%86%E8%A7%A3%E8%BF%9B%E7%A8%8B3%E4%B8%BA%E4%BB%80%E4%B9%88%E6%88%91%E5%9C%A8%E5%AE%B9%E5%99%A8%E4%B8%AD%E7%9A%84%E8%BF%9B%E7%A8%8B%E8%A2%AB%E5%BC%BA%E5%88%B6%E6%9D%80%E6%AD%BB%E4%BA%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="04__理解进程（3）：为什么我在容器中的进程被强制杀死了？">
+  <meta property="og:description" content="你好，我是程远。
+今天我们来讲容器中 init 进程的最后一讲，为什么容器中的进程被强制杀死了。理解了这个问题，能够帮助你更好地管理进程，让容器中的进程可以 graceful shutdown。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="04__理解进程（3）：为什么我在容器中的进程被强制杀死了？">
+  <meta itemprop="description" content="你好，我是程远。
+今天我们来讲容器中 init 进程的最后一讲，为什么容器中的进程被强制杀死了。理解了这个问题，能够帮助你更好地管理进程，让容器中的进程可以 graceful shutdown。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4519">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="04__理解进程（3）：为什么我在容器中的进程被强制杀死了？">
+  <meta name="twitter:description" content="你好，我是程远。
+今天我们来讲容器中 init 进程的最后一讲，为什么容器中的进程被强制杀死了。理解了这个问题，能够帮助你更好地管理进程，让容器中的进程可以 graceful shutdown。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">04__理解进程（3）：为什么我在容器中的进程被强制杀死了？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4519 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#场景再现">场景再现</a></li>
+      </ul>
+    </li>
+    <li><a href="#ps--ef--grep-c-init-sig">ps -ef | grep c-init-sig</a></li>
+    <li><a href="#strace--p-15909">strace -p 15909</a></li>
+    <li><a href="#strace--p-15959">strace -p 15959</a>
+      <ul>
+        <li><a href="#知识详解信号的两个系统调用">知识详解：信号的两个系统调用</a></li>
+      </ul>
+    </li>
+    <li><a href="#cat-reg_sigkillc">cat reg_sigkill.c</a></li>
+    <li><a href="#reg_sigkill">./reg_sigkill</a>
+      <ul>
+        <li><a href="#解决问题">解决问题</a></li>
+        <li><a href="#重点小结">重点小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。</p>
+<p>今天我们来讲容器中 init 进程的最后一讲，为什么容器中的进程被强制杀死了。理解了这个问题，能够帮助你更好地管理进程，让容器中的进程可以 graceful shutdown。</p>
+<p>我先给你说说，为什么进程管理中做到这点很重要。在实际生产环境中，我们有不少应用在退出的时候需要做一些清理工作，比如清理一些远端的链接，或者是清除一些本地的临时数据。</p>
+<p>这样的清理工作，可以尽可能避免远端或者本地的错误发生，比如减少丢包等问题的出现。而这些退出清理的工作，通常是在 SIGTERM 这个信号用户注册的 handler 里进行的。</p>
+<p>但是，如果我们的进程收到了 SIGKILL，那应用程序就没机会执行这些清理工作了。这就意味着，一旦进程不能 graceful shutdown，就会增加应用的出错率。</p>
+<p>所以接下来，我们来重现一下，进程在容器退出时都发生了什么。</p>
+<h2 id="场景再现">场景再现</h2>
+<p>在容器平台上，你想要停止一个容器，无论是在 Kubernetes 中去删除一个 pod，或者用 Docker 停止一个容器，最后都会用到 Containerd 这个服务。</p>
+<p>而 Containerd 在停止容器的时候，就会向容器的 init 进程发送一个 SIGTERM 信号。</p>
+<p>我们会发现，在 init 进程退出之后，容器内的其他进程也都立刻退出了。不过不同的是，init 进程收到的是 SIGTERM 信号，而其他进程收到的是 SIGKILL 信号。</p>
+<p>在理解进程的第一讲中，我们提到过 SIGKILL 信号是不能被捕获的（catch）的，也就是用户不能注册自己的 handler，而 SIGTERM 信号却允许用户注册自己的 handler，这样的话差别就很大了。</p>
+<p>那么，我们就一起来看看当容器退出的时候，如何才能让容器中的进程都收到 SIGTERM 信号，而不是 SIGKILL 信号。</p>
+<p>延续前面课程中处理问题的思路，我们同样可以运行一个简单的容器，来重现这个问题，用这里的代码执行一下 <code>make image</code> ，然后用 Docker 启动这个容器镜像。</p>
+<p>docker run -d &ndash;name fwd_sig registry/fwd_sig:v1 /c-init-sig</p>
+<p>你会发现，在我们用 <code>docker stop</code> 停止这个容器的时候，如果用 strace 工具来监控，就能看到容器里的 init 进程和另外一个进程收到的信号情况。</p>
+<p>在下面的例子里，进程号为 15909 的就是容器里的 init 进程，而进程号为 15959 的是容器里另外一个进程。</p>
+<p>在命令输出中我们可以看到，<strong>init 进程（15909）收到的是 SIGTERM 信号，而另外一个进程（15959）收到的果然是 SIGKILL 信号。</strong></p>
+<h1 id="ps--ef--grep-c-init-sig">ps -ef | grep c-init-sig</h1>
+<p>root     15857 14391  0 06:23 pts/0    00:00:00 docker run -it registry/fwd_sig:v1 /c-init-sig<br>
+root     15909 15879  0 06:23 pts/0    00:00:00 /c-init-sig<br>
+root     15959 15909  0 06:23 pts/0    00:00:00 /c-init-sig<br>
+root     16046 14607  0 06:23 pts/3    00:00:00 grep &ndash;color=auto c-init-sig</p>
+<h1 id="strace--p-15909">strace -p 15909</h1>
+<p>strace: Process 15909 attached<br>
+restart_syscall(&lt;&hellip; resuming interrupted read &hellip;&gt;) = ? ERESTART_RESTARTBLOCK (Interrupted by signal)<br>
+&mdash; SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=0, si_uid=0} &mdash;<br>
+write(1, &ldquo;received SIGTERM\n&rdquo;, 17)      = 17<br>
+exit_group(0)                           = ?<br>
++++ exited with 0 +++</p>
+<h1 id="strace--p-15959">strace -p 15959</h1>
+<p>strace: Process 15959 attached<br>
+restart_syscall(&lt;&hellip; resuming interrupted read &hellip;&gt;) = ?<br>
++++ killed by SIGKILL +++</p>
+<h2 id="知识详解信号的两个系统调用">知识详解：信号的两个系统调用</h2>
+<p>我们想要理解刚才的例子，就需要搞懂信号背后的两个系统调用，它们分别是 kill() 系统调用和 signal() 系统调用。</p>
+<p>这里呢，我们可以结合前面讲过的信号来理解这两个系统调用。在容器 init 进程的第一讲里，我们介绍过信号的基本概念了，<strong>信号就是 Linux 进程收到的一个通知。</strong></p>
+<p>等你学完如何使用这两个系统调用之后，就会更清楚 Linux 信号是怎么一回事，遇到容器里信号相关的问题，你就能更好地理清思路了。</p>
+<p>我还会再给你举个使用函数的例子，帮助你进一步理解进程是如何实现 graceful shutdown 的。</p>
+<p>进程对信号的处理其实就包括两个问题，<strong>一个是进程如何发送信号，另一个是进程收到信号后如何处理。</strong></p>
+<p>我们在 Linux 中发送信号的系统调用是 kill()，之前很多例子里面我们用的命令 <code>kill</code> ，它内部的实现就是调用了 kill() 这个函数。</p>
+<p>下面是 Linux Programmer’s Manual 里对 kill() 函数的定义。</p>
+<p>这个函数有两个参数，一个是 <code>sig</code>，代表需要发送哪个信号，比如 sig 的值是 15 的话，就是指发送 SIGTERM；另一个参数是 <code>pid</code>，也就是指信号需要发送给哪个进程，比如值是 1 的话，就是指发送给进程号是 1 的进程。</p>
+<p>NAME<br>
+kill - send signal to a process</p>
+<p>SYNOPSIS<br>
+#include &lt;sys/types.h&gt;<br>
+#include &lt;signal.h&gt;</p>
+<pre><code>   int kill(pid_t pid, int sig);
+</code></pre>
+<p>我们知道了发送信号的系统调用之后，再来看另一个系统调用，也就是 signal() 系统调用这个函数，它可以给信号注册 handler。</p>
+<p>下面是 signal() 在 Linux Programmer’s Manual 里的定义，参数 <code>signum</code> 也就是信号的编号，例如数值 15，就是信号 SIGTERM；参数 <code>handler</code> 是一个函数指针参数，用来注册用户的信号 handler。</p>
+<p>NAME<br>
+signal - ANSI C signal handling</p>
+<p>SYNOPSIS<br>
+#include &lt;signal.h&gt;<br>
+typedef void (*sighandler_t)(int);<br>
+sighandler_t signal(int signum, sighandler_t handler);</p>
+<p>在容器 init 进程的第一讲里，**我们学过进程对每种信号的处理，包括三个选择：调用系统缺省行为、捕获、忽略。**而这里的选择，其实就是程序中如何去调用 signal() 这个系统调用。</p>
+<p>第一个选择就是缺省，如果我们在代码中对某个信号，比如 SIGTERM 信号，不做任何 signal() 相关的系统调用，那么在进程运行的时候，如果接收到信号 SIGTERM，进程就会执行内核中 SIGTERM 信号的缺省代码。</p>
+<p>对于 SIGTERM 这个信号来说，它的缺省行为就是进程退出（terminate）。</p>
+<p>内核中对不同的信号有不同的缺省行为，一般会采用退出（terminate），暂停（stop），忽略（ignore）这三种行为中的一种。</p>
+<p>那第二个选择捕获又是什么意思呢？</p>
+<p>捕获指的就是我们在代码中为某个信号，调用 signal() 注册自己的 handler。这样进程在运行的时候，一旦接收到信号，就不会再去执行内核中的缺省代码，而是会执行通过 signal() 注册的 handler。</p>
+<p>比如下面这段代码，我们为 SIGTERM 这个信号注册了一个 handler，在 handler 里只是做了一个打印操作。</p>
+<p>那么这个程序在运行的时候，如果收到 SIGTERM 信号，它就不会退出了，而是只在屏幕上显示出&quot;received SIGTERM&quot;。</p>
+<p>void sig_handler(int signo)<br>
+{<br>
+if (signo == SIGTERM) {<br>
+printf(&ldquo;received SIGTERM\n&rdquo;);<br>
+}<br>
+}</p>
+<p>int main(int argc, char *argv[])</p>
+<p>{<br>
+&hellip;<br>
+signal(SIGTERM, sig_handler);<br>
+&hellip;<br>
+}</p>
+<p>我们再来看看第三个选择，如果要让进程“忽略”一个信号，我们就要通过 signal() 这个系统调用，为这个信号注册一个特殊的 handler，也就是 <code>SIG_IGN</code> 。</p>
+<p>比如下面的这段代码，就是为 SIGTERM 这个信号注册<code>SIG_IGN</code>。</p>
+<p>这样操作的效果，就是在程序运行的时候，如果收到 SIGTERM 信号，程序既不会退出，也不会在屏幕上输出 log，而是什么反应也没有，就像完全没有收到这个信号一样。</p>
+<p>int main(int argc, char *argv[])<br>
+{<br>
+&hellip;<br>
+signal(SIGTERM, SIG_IGN);<br>
+&hellip;<br>
+}</p>
+<p>好了，我们通过讲解 signal() 这个系统调用，帮助你回顾了信号处理的三个选择：缺省行为、捕获和忽略。</p>
+<p>这里我还想要提醒你一点， <strong>SIGKILL 和 SIGSTOP 信号是两个特权信号，它们不可以被捕获和忽略，这个特点也反映在 signal() 调用上。</strong></p>
+<p>我们可以运行下面的这段代码，如果我们用 signal() 为 SIGKILL 注册 handler，那么它就会返回 SIG_ERR，不允许我们做捕获操作。</p>
+<h1 id="cat-reg_sigkillc">cat reg_sigkill.c</h1>
+<p>#include &lt;stdio.h&gt;<br>
+#include &lt;stdlib.h&gt;<br>
+#include &lt;unistd.h&gt;<br>
+#include &lt;errno.h&gt;<br>
+#include &lt;signal.h&gt;</p>
+<p>typedef void (*sighandler_t)(int);</p>
+<p>void sig_handler(int signo)<br>
+{<br>
+if (signo == SIGKILL) {<br>
+printf(&ldquo;received SIGKILL\n&rdquo;);<br>
+exit(0);<br>
+}<br>
+}</p>
+<p>int main(int argc, char *argv[])<br>
+{<br>
+sighandler_t h_ret;</p>
+<pre><code>        h_ret = signal(SIGKILL, sig_handler);  
+        if (h_ret == SIG_ERR) {  
+                    perror(&quot;SIG_ERR&quot;);  
+        }  
+        return 0;  
+</code></pre>
+<p>}</p>
+<h1 id="reg_sigkill">./reg_sigkill</h1>
+<p>SIG_ERR: Invalid argument</p>
+<p>最后，我用下面这段代码来做个小结。</p>
+<p>这段代码里，我们用 signal() 对 SIGTERM 这个信号做了忽略，捕获以及恢复它的缺省行为，并且每一次都用 kill() 系统调用向进程自己发送 SIGTERM 信号，这样做可以确认进程对 SIGTERM 信号的选择。</p>
+<p>#include &lt;stdio.h&gt;<br>
+#include &lt;signal.h&gt;</p>
+<p>typedef void (*sighandler_t)(int);</p>
+<p>void sig_handler(int signo)<br>
+{<br>
+if (signo == SIGTERM) {<br>
+printf(&ldquo;received SIGTERM\n\n&rdquo;);<br>
+// Set SIGTERM handler to default<br>
+signal(SIGTERM, SIG_DFL);<br>
+}<br>
+}</p>
+<p>int main(int argc, char *argv[])<br>
+{<br>
+//Ignore SIGTERM, and send SIGTERM<br>
+// to process itself.</p>
+<pre><code>    signal(SIGTERM, SIG_IGN);  
+    printf(&quot;Ignore SIGTERM\n\n&quot;);  
+    kill(0, SIGTERM);  
+
+    //Catch SIGERM, and send SIGTERM  
+    // to process itself.  
+    signal(SIGTERM, sig_handler);  
+    printf(&quot;Catch SIGTERM\n&quot;);  
+    kill(0, SIGTERM);  
+
+
+    //Default SIGTERM. In sig_handler, it sets  
+    //SIGTERM handler back to default one.  
+    printf(&quot;Default SIGTERM\n&quot;);  
+    kill(0, SIGTERM);  
+
+    return 0;  
+</code></pre>
+<p>}</p>
+<p>我们一起来总结一下刚才讲的两个系统调用：</p>
+<p>先说说 kill() 这个系统调用，它其实很简单，输入两个参数：进程号和信号，就把特定的信号发送给指定的进程了。</p>
+<p>再说说 signal() 这个调用，它决定了进程收到特定的信号如何来处理，SIG_DFL 参数把对应信号恢复为缺省 handler，也可以用自定义的函数作为 handler，或者用 SIG_IGN 参数让进程忽略信号。</p>
+<p>对于 SIGKILL 信号，如果调用 signal() 函数，为它注册自定义的 handler，系统就会拒绝。</p>
+<h2 id="解决问题">解决问题</h2>
+<p>我们在学习了 kill() 和 signal() 这个两个信号相关的系统调用之后，再回到这一讲最初的问题上，为什么在停止一个容器的时候，容器 init 进程收到的 SIGTERM 信号，而容器中其他进程却会收到 SIGKILL 信号呢？</p>
+<p>当 Linux 进程收到 SIGTERM 信号并且使进程退出，这时 Linux 内核对处理进程退出的入口点就是 do_exit() 函数，do_exit() 函数中会释放进程的相关资源，比如内存，文件句柄，信号量等等。</p>
+<p>Linux 内核对处理进程退出的入口点就是 do_exit() 函数，do_exit() 函数中会释放进程的相关资源，比如内存，文件句柄，信号量等等。</p>
+<p>在做完这些工作之后，它会调用一个 exit_notify() 函数，用来通知和这个进程相关的父子进程等。</p>
+<p>对于容器来说，还要考虑 Pid Namespace 里的其他进程。这里调用的就是 zap_pid_ns_processes() 这个函数，而在这个函数中，如果是处于退出状态的 init 进程，它会向 Namespace 中的其他进程都发送一个 SIGKILL 信号。</p>
+<p>整个流程如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/919c1923e68406ec62be8bb089495c1d.png" alt=""></p>
+<p>你还可以看一下，内核代码是这样的。</p>
+<pre><code>/*  
+     * The last thread in the cgroup-init thread group is terminating.  
+     * Find remaining pid_ts in the namespace, signal and wait for them  
+     * to exit.  
+     *  
+     * Note:  This signals each threads in the namespace - even those that  
+     *        belong to the same thread group, To avoid this, we would have  
+     *        to walk the entire tasklist looking a processes in this  
+     *        namespace, but that could be unnecessarily expensive if the  
+     *        pid namespace has just a few processes. Or we need to  
+     *        maintain a tasklist for each pid namespace.  
+     *  
+     */  
+
+    rcu_read_lock();  
+    read_lock(&amp;tasklist_lock);  
+    nr = 2;  
+    idr_for_each_entry_continue(&amp;pid_ns-&gt;idr, pid, nr) {  
+            task = pid_task(pid, PIDTYPE_PID);  
+            if (task &amp;&amp; !__fatal_signal_pending(task))  
+                    group_send_sig_info(SIGKILL, SEND_SIG_PRIV, task, PIDTYPE_MAX);  
+    }
+</code></pre>
+<p>说到这里，我们也就明白为什么容器 init 进程收到的 SIGTERM 信号，而容器中其他进程却会收到 SIGKILL 信号了。</p>
+<p>前面我讲过，SIGKILL 是个特权信号（特权信号是 Linux 为 kernel 和超级用户去删除任意进程所保留的，不能被忽略也不能被捕获）。</p>
+<p>所以进程收到这个信号后，就立刻退出了，没有机会调用一些释放资源的 handler 之后，再做退出动作。</p>
+<p>而 SIGTERM 是可以被捕获的，用户是可以注册自己的 handler 的。因此，容器中的程序在 stop container 的时候，我们更希望进程收到 SIGTERM 信号而不是 SIGKILL 信号。</p>
+<p>那在容器被停止的时候，我们该怎么做，才能让容器中的进程收到 SIGTERM 信号呢？</p>
+<p>你可能已经想到了，就是让容器 init 进程来转发 SIGTERM 信号。的确是这样，比如 Docker Container 里使用的 tini 作为 init 进程，tini 的代码中就会调用 sigtimedwait() 这个函数来查看自己收到的信号，然后调用 kill() 把信号发给子进程。</p>
+<p>我给你举个具体的例子说明，从下面的这段代码中，我们可以看到除了 SIGCHLD 这个信号外，tini 会把其他所有的信号都转发给它的子进程。</p>
+<p>int wait_and_forward_signal(sigset_t const* const parent_sigset_ptr, pid_t const child_pid) {</p>
+<pre><code>    siginfo_t sig;  
+
+    if (sigtimedwait(parent_sigset_ptr, &amp;sig, &amp;ts) == -1) {  
+            switch (errno) {  
+</code></pre>
+<p>…<br>
+}<br>
+} else {<br>
+/* There is a signal to handle here <em>/<br>
+switch (sig.si_signo) {<br>
+case SIGCHLD:<br>
+/</em> Special-cased, as we don&rsquo;t forward SIGCHLD. Instead, we&rsquo;ll<br>
+* fallthrough to reaping processes.<br>
+<em>/<br>
+PRINT_DEBUG(&ldquo;Received SIGCHLD&rdquo;);<br>
+break;<br>
+default:<br>
+PRINT_DEBUG(&ldquo;Passing signal: &lsquo;%s&rsquo;&rdquo;, strsignal(sig.si_signo));<br>
+/</em> Forward anything else */<br>
+if (kill(kill_process_group ? -child_pid : child_pid, sig.si_signo)) {<br>
+if (errno == ESRCH) {<br>
+PRINT_WARNING(&ldquo;Child was dead when forwarding signal&rdquo;);<br>
+} else {<br>
+PRINT_FATAL(&ldquo;Unexpected error when forwarding signal: &lsquo;%s&rsquo;&rdquo;, strerror(errno));</p>
+<pre><code>                                            return 1;  
+                                    }  
+                            }  
+                            break;  
+            }  
+    }  
+    return 0;  
+</code></pre>
+<p>}</p>
+<p>那么我们在这里明确一下，怎么解决停止容器的时候，容器内应用程序被强制杀死的问题呢？</p>
+<p><strong>解决的方法就是在容器的 init 进程中对收到的信号做个转发，发送到容器中的其他子进程，这样容器中的所有进程在停止时，都会收到 SIGTERM，而不是 SIGKILL 信号了。</strong></p>
+<h2 id="重点小结">重点小结</h2>
+<p>这一讲我们要解决的问题是让容器中的进程，在容器停止的时候，有机会 graceful shutdown，而不是收到 SIGKILL 信号而被强制杀死。</p>
+<p>首先我们通过对 kill() 和 signal() 这个两个系统调用的学习，进一步理解了进程是怎样处理 Linux 信号的，重点是信号在接收处理的三个选择：<strong>忽略，捕获和缺省行为</strong>。</p>
+<p>通过代码例子，我们知道 SIGTERM 是可以被忽略和捕获的，但是 SIGKILL 是不可以被忽略和捕获的。</p>
+<p>了解这一点以后，我们就找到了问题的解决方向，也就是我们需要在停止容器时，让容器中的应用收到 SIGTERM，而不是 SIGKILL。</p>
+<p>具体怎么操作呢？我们可以在容器的 init 进程中对收到的信号做个转发，发送到容器中的其他子进程。这样一来，容器中的所有进程在停止容器时，都会收到 SIGTERM，而不是 SIGKILL 信号了。</p>
+<p>我认为，解决 init 进程信号的这类问题其实并不难。</p>
+<p>我们只需要先梳理一下和这个问题相关的几个知识点，再写个小程序，让它跑在容器里，稍微做几个试验。然后，我们再看一下内核和 Docker 的源代码，就可以很快得出结论了。</p>
+<h2 id="思考题">思考题</h2>
+<p>请你回顾一下基本概念中最后的这段代码，你可以想一想，在不做编译运行的情况下，它的输出是什么？</p>
+<p>#include &lt;stdio.h&gt;<br>
+#include &lt;signal.h&gt;</p>
+<p>typedef void (*sighandler_t)(int);</p>
+<p>void sig_handler(int signo)<br>
+{<br>
+if (signo == SIGTERM) {<br>
+printf(&ldquo;received SIGTERM\n\n&rdquo;);<br>
+// Set SIGTERM handler to default<br>
+signal(SIGTERM, SIG_DFL);<br>
+}<br>
+}</p>
+<p>int main(int argc, char *argv[])<br>
+{<br>
+//Ignore SIGTERM, and send SIGTERM<br>
+// to process itself.</p>
+<pre><code>    signal(SIGTERM, SIG_IGN);  
+    printf(&quot;Ignore SIGTERM\n\n&quot;);  
+    kill(0, SIGTERM);  
+
+    //Catch SIGERM, and send SIGTERM  
+    // to process itself.  
+    signal(SIGTERM, sig_handler);  
+    printf(&quot;Catch SIGTERM\n&quot;);  
+    kill(0, SIGTERM);  
+
+
+    //Default SIGTERM. In sig_handler, it sets  
+    //SIGTERM handler back to default one.  
+    printf(&quot;Default SIGTERM\n&quot;);  
+    kill(0, SIGTERM);  
+
+    return 0;  
+</code></pre>
+<p>}</p>
+<p>欢迎留言和我分享你的想法和疑问。如果读完这篇文章有所收获，也欢迎你分享给自己的朋友，共同学习和进步。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/04__%E5%BF%AB%E9%80%9F%E4%B8%8A%E6%89%8B%E5%87%A0%E4%B8%AAlinux%E5%91%BD%E4%BB%A4%E6%AF%8F%E5%AE%B6%E5%85%AC%E5%8F%B8%E9%83%BD%E6%9C%89%E8%87%AA%E5%B7%B1%E7%9A%84%E9%BB%91%E8%AF%9D/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">04__快速上手几个Linux命令：每家公司都有自己的黑话</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E4%B9%8B%E7%BE%8E/04__%E7%90%86%E8%AE%BA%E4%B8%80%E5%BD%93%E8%B0%88%E8%AE%BA%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%E7%9A%84%E6%97%B6%E5%80%99%E6%88%91%E4%BB%AC%E5%88%B0%E5%BA%95%E5%9C%A8%E8%B0%88%E8%AE%BA%E4%BB%80%E4%B9%88/">
+            <span class="next-text nav-default">04__理论一：当谈论面向对象的时候，我们到底在谈论什么？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

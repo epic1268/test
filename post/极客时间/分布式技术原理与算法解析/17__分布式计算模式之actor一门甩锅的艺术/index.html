@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17__分布式计算模式之Actor：一门甩锅的艺术 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是聂鹏程。今天，我来继续带你打卡分布式核心技术。
+我在前两篇文章中，带你一起学习了 MapReduce 和 Stream 计算模式，相信你对批处理和流计算也有了一定的了解。虽然这两种计算模式对数据的处理方式不同，但都是以特定数据类型（分别对应静态数据和动态数据）作为计算维度。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/17__%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%A1%E7%AE%97%E6%A8%A1%E5%BC%8F%E4%B9%8Bactor%E4%B8%80%E9%97%A8%E7%94%A9%E9%94%85%E7%9A%84%E8%89%BA%E6%9C%AF/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/17__%E5%88%86%E5%B8%83%E5%BC%8F%E8%AE%A1%E7%AE%97%E6%A8%A1%E5%BC%8F%E4%B9%8Bactor%E4%B8%80%E9%97%A8%E7%94%A9%E9%94%85%E7%9A%84%E8%89%BA%E6%9C%AF/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17__分布式计算模式之Actor：一门甩锅的艺术">
+  <meta property="og:description" content="你好，我是聂鹏程。今天，我来继续带你打卡分布式核心技术。
+我在前两篇文章中，带你一起学习了 MapReduce 和 Stream 计算模式，相信你对批处理和流计算也有了一定的了解。虽然这两种计算模式对数据的处理方式不同，但都是以特定数据类型（分别对应静态数据和动态数据）作为计算维度。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="分布式技术原理与算法解析">
+
+  <meta itemprop="name" content="17__分布式计算模式之Actor：一门甩锅的艺术">
+  <meta itemprop="description" content="你好，我是聂鹏程。今天，我来继续带你打卡分布式核心技术。
+我在前两篇文章中，带你一起学习了 MapReduce 和 Stream 计算模式，相信你对批处理和流计算也有了一定的了解。虽然这两种计算模式对数据的处理方式不同，但都是以特定数据类型（分别对应静态数据和动态数据）作为计算维度。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4504">
+  <meta itemprop="keywords" content="分布式技术原理与算法解析">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17__分布式计算模式之Actor：一门甩锅的艺术">
+  <meta name="twitter:description" content="你好，我是聂鹏程。今天，我来继续带你打卡分布式核心技术。
+我在前两篇文章中，带你一起学习了 MapReduce 和 Stream 计算模式，相信你对批处理和流计算也有了一定的了解。虽然这两种计算模式对数据的处理方式不同，但都是以特定数据类型（分别对应静态数据和动态数据）作为计算维度。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17__分布式计算模式之Actor：一门甩锅的艺术</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4504 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#什么是-actor">什么是 Actor？</a></li>
+        <li><a href="#actor-计算模式">Actor 计算模式</a>
+          <ul>
+            <li><a href="#actor-工作原理">Actor 工作原理</a></li>
+            <li><a href="#actor-关键特征">Actor 关键特征</a></li>
+          </ul>
+        </li>
+        <li><a href="#actor-模型的应用">Actor 模型的应用</a></li>
+        <li><a href="#知识扩展akka-中-actor-之间的通信可靠性是通过-akka-集群来保证的那么-akka-集群是如何检测节点故障的呢">知识扩展：Akka 中 Actor 之间的通信可靠性是通过 Akka 集群来保证的，那么 Akka 集群是如何检测节点故障的呢？</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是聂鹏程。今天，我来继续带你打卡分布式核心技术。</p>
+<p>我在前两篇文章中，带你一起学习了 MapReduce 和 Stream 计算模式，相信你对批处理和流计算也有了一定的了解。虽然这两种计算模式对数据的处理方式不同，但都是以特定数据类型（分别对应静态数据和动态数据）作为计算维度。</p>
+<p>在接下来两篇文章中，我将从计算过程或处理过程的维度，与你介绍另外两种分布式计算模式，即 Actor 和流水线。分布式计算的本质就是在分布式环境下，多个进程协同完成一件复杂的事情，但每个进程各司其职，完成自己的工作后，再交给其他进程去完成其他工作。当然，对于没有依赖的工作，进程间是可以并行执行的。</p>
+<p>你是不是想说，分布式进程那么多，如果需要开发者自己去维护每个进程之间的数据、状态等信息，这个开发量可不是一般得大，而且特别容易出错。那么，有没有什么办法可以让开发者只关注自己的逻辑呢？</p>
+<p>答案是肯定的，Actor 计算模式就能满足你的需求。也就是说，你可以把数据、状态等都扔给 Actor。这是不是“一门甩锅的艺术”呢？</p>
+<p>接下来，我们就一起打卡分布式计算模式中的 Actor 模式。</p>
+<h2 id="什么是-actor">什么是 Actor？</h2>
+<p>在第 10 篇文章“分布式体系结构之非集中式结构：众生平等”中，我曾提到 Akka 框架基于 Actor 模型，提供了一个用于构建可扩展的、弹性的、快速响应的应用程序的平台。</p>
+<p>其中，Actor 类似于一个“黑盒”对象，封装了自己的状态和行为，使得其他 Actor 无法直接观察到它的状态，调用它的行为。多个 Actor 之间通过消息进行通信，这种消息类似于电子邮箱中的邮件。Actor 接收到消息之后，才会根据消息去执行计算操作。</p>
+<p>那么，**Actor 模型又是什么呢？**Actor 模型，代表一种分布式并行计算模型。这种模型有自己的一套规则，规定了 Actor 的内部计算逻辑，以及多个 Actor 之间的通信规则。在 Actor 模型里，每个 Actor 相当于系统中的一个组件，都是基本的计算单元。</p>
+<p><strong>Actor 模型的计算方式与传统面向对象编程模型（Object-Oriented Programming，OOP）类似</strong>，一个对象接收到一个方法的调用请求（类似于一个消息），从而去执行该方法。</p>
+<p>但是，OOP 因为数据封装在一个对象中，不能被外部访问，当多个外部对象通过方法调用方式，即同步方式进行访问时，会存在死锁、竞争等问题，无法满足分布式系统的高并发性需求。而 Actor 模型通过消息通信，采用的是异步方式，克服了 OOP 的局限性，适用于高并发的分布式系统。</p>
+<p>举一个最简单的例子，假如你现在定义了三个对象 A、B 和 C，对象 C 中有一个函数 Function，现在对象 A 和对象 B 同时调用对象 C 中的 Function，此时对象 C 中的 Function 就成为了我们在第 3 篇文章“分布式互斥：有你没我，有我没你”中提到的共享资源，有可能会存在竞争、死锁等问题。</p>
+<p>而对于 Actor 模式，对象 A、B 和 C 对应着 Actor A、Actor B 和 Actor C，当 Actor A 和 Actor B 需要执行 Actor C 中的 Function 逻辑时，Actor A 和 Actor B 会将消息发送给 Actor C，Actor C 的消息队列存储着 Actor A 和 Actor B 的消息，然后根据消息的先后顺序，执行 Function 即可。</p>
+<p>也就是说，Actor 模式采用了异步模式，并且每个 Actor 封装了自己的数据、方法等，解决了 OOP 存在的死锁、竞争等问题。</p>
+<h2 id="actor-计算模式">Actor 计算模式</h2>
+<p>接下来，我们再一起看看 Actor 计算模式吧。如下图所示，描述了具有 3 个 Actor 的 Actor 模型。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/56eec8968df729091c3c8adbf3cb5163.png" alt=""></p>
+<p>可以看到，<strong>Actor 模型的三要素是状态、行为和消息</strong>，有一个很流行的等式：Actor 模型 =（状态 + 行为）+ 消息。</p>
+<p>接下来，我们一起看看这三要素的具体含义吧。</p>
+<ol>
+<li>状态（State）。Actor 的状态指的是，Actor 组件本身的信息，相当于 OOP 对象中的属性。Actor 的状态会受 Actor 自身行为的影响，且只能被自己修改。</li>
+<li>行为（Behavior）。Actor 的行为指的是，Actor 的计算处理操作，相当于 OOP 对象中的成员函数。Actor 之间不能直接调用其他 Actor 的计算逻辑。Actor 只有收到消息才会触发自身的计算行为。</li>
+<li>消息（Mail）。Actor 的消息以邮件形式在多个 Actor 之间通信传递，每个 Actor 会有一个自己的邮箱（MailBox），用于接收来自其他 Actor 的消息，因此 Actor 模型中的消息也称为邮件。一般情况下，对于邮箱里面的消息，Actor 是按照消息达到的先后顺序（FIFO）进行读取和处理的。</li>
+</ol>
+<p>了解了 Actor 的三要素后，我们再一起看下 Actor 的工作原理吧。</p>
+<h3 id="actor-工作原理">Actor 工作原理</h3>
+<p>为了方便你理解 Actor 的工作原理，我会通过讲述 3 个 Actor 之间基于消息和消息队列的工作流程进行说明。这 3 个 Actor 的工作流程，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/a3b6d6884e63ff977ea05bc001c26b39.png" alt=""></p>
+<ol>
+<li>Actor1 和 Actor3 先后向 Actor2 发送消息，消息被依次放入 Actor2 的 MailBox 队列的队尾 ;</li>
+<li>Actor2 从 MailBox 队列的队首依次取出消息执行相应的操作，由于 Actor1 先把消息发送给 Actor2，因此 Actor2 先处理 Actor1 的消息；</li>
+<li>Actor2 处理完 Actor1 的消息后，更新内部状态，并且向其他 Actor 发送消息，然后处理 Actor3 发送的消息。</li>
+</ol>
+<p>了解了 Actor 之间的消息交互和处理流程，我再以一个具体案例和你详细解读一下 Actor 之间的消息传递过程吧。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/a58fa8723244ab74e4bd0313f5979893.png" alt=""></p>
+<p>我们已经知道，在系统中，不同的组件 / 模块可以视为不同的 Actor。现在有一个执行神经网络的应用，其中有两个组件 A 和 B，分别表示数据处理模块和模型训练模块。假设，我们可以将组件 A 和 B 看作两个 Actor，训练过程中的数据可以通过消息进行传递。如上图所示，完整的消息传输过程为：</p>
+<ol>
+<li>组件 A 创建一个 Actor System，用来创建并管理多个 Actor。</li>
+<li>组件 A 产生 QuoteRequest 消息（即 mail 消息，比如数据处理后的数据），并将其发送给 ActorRef。ActorRef 是 Actor System 创建的组件 B 对应 Actor 的一个代理。</li>
+<li>ActorRef 将消息（经过数据处理后的数据）传输给 Message Dispatcher 模块。Message Dispatcher 类似于快递的中转站，负责接收和转发消息。</li>
+<li>Message Dispatcher 将消息（数据处理后的数据）加入组件 B 的 MailBox 队列的队尾。</li>
+<li>Message Dispatcher 将 MailBox 加入线程。需要注意的是，只有当 MailBox 是线程时，才能处理 MailBox 中的消息。</li>
+<li>组件 B 的 MailBox 将队首消息（数据）取出并删除，队首消息交给组件 B 处理，进行模型训练。</li>
+</ol>
+<h3 id="actor-关键特征">Actor 关键特征</h3>
+<p>通过上面的描述，可以看出 Actor 的通信机制与日常的邮件通信非常类似。因此，我们可以进一步总结出 Actor 模型的一些特点：</p>
+<ol>
+<li>**实现了更高级的抽象。**我在前面提到过，Actor 与 OOP 对象类似，封装了状态和行为。但是，Actor 之间是异步通信的，多个 Actor 可以独立运行且不会被干扰，解决了 OOP 存在的竞争问题。</li>
+<li>**非阻塞性。**在 Actor 模型中，Actor 之间是异步通信的，所以当一个 Actor 发送信息给另外一个 Actor 之后，无需等待响应，发送完信息之后可以在本地继续运行其他任务。也就是说，Actor 模型通过引入消息传递机制，从而避免了阻塞。</li>
+<li><strong>无需使用锁</strong>。Actor 从 MailBox 中一次只能读取一个消息，也就是说，Actor 内部只能同时处理一个消息，是一个天然的互斥锁，所以无需额外对代码加锁。</li>
+<li>**并发度高。**每个 Actor 只需处理本地 MailBox 的消息，因此多个 Actor 可以并行地工作，从而提高整个分布式系统的并行处理能力。</li>
+<li>**易扩展。**每个 Actor 都可以创建多个 Actor，从而减轻单个 Actor 的工作负载。当本地 Actor 处理不过来的时候，可以在远程节点上启动 Actor 然后转发消息过去。</li>
+</ol>
+<p>虽然 Actor 模型有上述的诸多优点，但它并不适用于分布式领域中所有的应用平台或计算框架。因为，Actor 模型还存在如下一些不足之处：</p>
+<ol>
+<li>Actor 提供了模块和封装，但缺少继承和分层，这使得即使多个 Actor 之间有公共逻辑或代码部分，都必须在每个 Actor 中重写这部分代码，也就是说重用性小，业务逻辑的改变会导致整体代码的重写。</li>
+<li>Actor 可以动态创建多个 Actor，使得整个 Actor 模型的行为不断变化，因此在工程中不易实现 Actor 模型。此外，增加 Actor 的同时，也会增加系统开销。</li>
+<li>Actor 模型不适用于对消息处理顺序有严格要求的系统。因为在 Actor 模型中，消息均为异步消息，无法确定每个消息的执行顺序。虽然可以通过阻塞 Actor 去解决顺序问题，但显然，会严重影响 Actor 模型的任务处理效率。</li>
+</ol>
+<p>尽管 Actor 模型在需要同步处理的应用等场景具有局限性，但它在异步场景中应用还是比较广泛的。接下来，我们就一起看看 Actor 目前都应用在哪些地方吧。</p>
+<h2 id="actor-模型的应用">Actor 模型的应用</h2>
+<p>Actor 模型在 1973 年被提出，已广泛应用在多种框架和语言中。可以说，很多框架或语言支持 Actor 编程模型，是为了给开发者提供一个通用的编程框架，让用户可以聚焦到自己的业务逻辑上，而不用像面向对象等编程模型那样需要关心死锁、竞争等问题。</p>
+<p>那么，到底有哪些框架或语言支持 Actor 编程模型呢？将下来，我就和你列举几个典型的框架或语言吧，以方便你参考。</p>
+<ol>
+<li>Erlang/OTP。Erlang 是一种通用的、面向并发的编程语言，使用 Erlang 编写分布式应用比较简单，而 OTP 就是 Erlang 技术栈中的标准库。Actor 模型在 Erlang 语言中得到广泛支持和应用，其他语言的 Actor 逻辑实现在一定程度上都是参照了 Erlang 的模式。实现了 Actor 模型逻辑的 Erlang/OTP，可以用于构建一个开发和运行时环境，从而实现分布式、实时的、高可用性的系统。</li>
+<li>Akka。Akka 是一个为 Java 和 Scala 构建高度并发、分布式和弹性的消息驱动应用程序的工具包。Akka 框架基于 Actor 模型，提供了一个用于构建可扩展的、弹性的、快速响应的应用程序的平台。通过使用 Actors 和 Streams 技术，Akka 为用户提供了多个服务器，使用户更有效地使用服务器资源并构建可扩展的系统。</li>
+<li>Quasar (Java) 。Quasar 是一个开源的 JVM 库，极大地简化了高度并发软件的创建。Quasar 在线程实现时，参考了 Actor 模型，采用异步编程逻辑，从而为 JVM 提供了高性能、轻量级的线程，可以用在 Java 和 Kotlin 编程语言中。</li>
+</ol>
+<h2 id="知识扩展akka-中-actor-之间的通信可靠性是通过-akka-集群来保证的那么-akka-集群是如何检测节点故障的呢">知识扩展：Akka 中 Actor 之间的通信可靠性是通过 Akka 集群来保证的，那么 Akka 集群是如何检测节点故障的呢？</h2>
+<p>在第 10 篇文章“分布式体系结构之非集中式结构：众生平等”中，我与你介绍了 Akka 集群是一个去中心化的架构，比如现在集群中有 n 个节点，这 n 个节点之间的关系是对等的。节点之间采用心跳的方式判断该节点是否故障，但未采用集中式架构中的心跳检测方法。</p>
+<p>Akka 集群中的故障检测方法是，集群中每个节点被 k 个节点通过心跳进行监控，比如 k = 3，节点 1 被节点 2、节点 3 和节点 4 通过心跳监控，当节点 2 发现节点 1 心跳不可达时，就会标记节点 1 为不可达（unreachable），并且将节点 1 为不可达的信息通过 Gossip 传递给集群中的其他节点，这样集群中所有节点均可知道节点 1 不可达。</p>
+<p>其中，k 个节点的选择方式是，将集群中每个节点计算一个哈希值，然后基于哈希值，将所有节点组成一个哈希环（比如，从小到大的顺序），最后根据哈希环，针对每个节点逆时针或顺时针选择 k 个临近节点作为监控节点。</p>
+<h2 id="总结">总结</h2>
+<p>接下来，我们小结一下吧。今天，我与你介绍了分布式计算中，一门甩锅的计算模型，即 Actor 模型。</p>
+<p>首先，我介绍了什么是 Actor 模型以及 Actor 模型的三要素，包括状态、行为和消息。</p>
+<p>其次，我介绍了 Actor 的工作原理，并通过实例介绍了 Actor 之间通过消息及消息队列进行异步通信的流程，以便于你进一步理解 Actor 的工作原理。</p>
+<p>最后，我为你介绍了几个当前支持 Actor 编程模型的框架和语言，以便于你在需要采用 Actor 模型编程时做一个参考。</p>
+<p>最后，我再通过一张思维导图来归纳一下今天的核心知识点吧。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/992bbc9f6d701ba08b3e84bb79119eaf.png" alt=""></p>
+<p>著名的 Erlang 并发编程语言，以及 Akka 这一分布式计算框架都实现了 Actor 模型的计算逻辑。因此，即使你在之前未曾接触过 Actor 模型，学习了这篇文章后，你也可以根据开源的 Erlang 或 Akka 项目，去更深刻地理解 Actor 模型了，加油！</p>
+<h2 id="思考题">思考题</h2>
+<p>Actor 是否可以采用阻塞方式去运行呢，原因是什么呢？</p>
+<p>我是聂鹏程，感谢你的收听，欢迎你在评论区给我留言分享你的观点，也欢迎你把这篇文章分享给更多的朋友一起阅读。我们下期再会！</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/c191f391e2aab7575517a886bbd7a681.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/">分布式技术原理与算法解析</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/17__%E8%B0%83%E5%BA%A6%E4%B8%8B%E6%8A%A2%E5%8D%A0%E5%BC%8F%E8%B0%83%E5%BA%A6%E6%98%AF%E5%A6%82%E4%BD%95%E5%8F%91%E7%94%9F%E7%9A%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">17__调度（下）：抢占式调度是如何发生的？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E7%9D%80%E9%AB%98%E6%89%8B%E5%AD%A6%E5%A4%8D%E7%9B%98/17__%E9%AB%98%E6%95%88%E8%B5%8B%E8%83%BD%E6%80%8E%E4%B9%88%E5%BB%BA%E7%AB%8B%E6%B5%81%E7%A8%8B%E6%89%8D%E8%83%BD%E6%8A%8A%E4%BA%BA%E6%95%88%E6%8F%90%E5%8D%873%E5%80%8D/">
+            <span class="next-text nav-default">17__高效赋能：怎么建立流程才能把人效提升3倍？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

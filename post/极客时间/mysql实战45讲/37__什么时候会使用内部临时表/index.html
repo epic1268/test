@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>37__什么时候会使用内部临时表？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="今天是大年初二，在开始我们今天的学习之前，我要先和你道一声春节快乐！
+在第 16和第 34篇文章中，我分别和你介绍了 sort buffer、内存临时表和 join buffer。这三个数据结构都是用来存放语句执行过程中的中间数据，以辅助 SQL 语句的执行的。其中，我们在排序的时候用到了 sort buffer，在使用 join 语句的时候用到了 join buffer。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/37__%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E4%BD%BF%E7%94%A8%E5%86%85%E9%83%A8%E4%B8%B4%E6%97%B6%E8%A1%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/37__%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%BC%9A%E4%BD%BF%E7%94%A8%E5%86%85%E9%83%A8%E4%B8%B4%E6%97%B6%E8%A1%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="37__什么时候会使用内部临时表？">
+  <meta property="og:description" content="今天是大年初二，在开始我们今天的学习之前，我要先和你道一声春节快乐！
+在第 16和第 34篇文章中，我分别和你介绍了 sort buffer、内存临时表和 join buffer。这三个数据结构都是用来存放语句执行过程中的中间数据，以辅助 SQL 语句的执行的。其中，我们在排序的时候用到了 sort buffer，在使用 join 语句的时候用到了 join buffer。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="MySQL实战45讲">
+
+  <meta itemprop="name" content="37__什么时候会使用内部临时表？">
+  <meta itemprop="description" content="今天是大年初二，在开始我们今天的学习之前，我要先和你道一声春节快乐！
+在第 16和第 34篇文章中，我分别和你介绍了 sort buffer、内存临时表和 join buffer。这三个数据结构都是用来存放语句执行过程中的中间数据，以辅助 SQL 语句的执行的。其中，我们在排序的时候用到了 sort buffer，在使用 join 语句的时候用到了 join buffer。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3994">
+  <meta itemprop="keywords" content="MySQL实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="37__什么时候会使用内部临时表？">
+  <meta name="twitter:description" content="今天是大年初二，在开始我们今天的学习之前，我要先和你道一声春节快乐！
+在第 16和第 34篇文章中，我分别和你介绍了 sort buffer、内存临时表和 join buffer。这三个数据结构都是用来存放语句执行过程中的中间数据，以辅助 SQL 语句的执行的。其中，我们在排序的时候用到了 sort buffer，在使用 join 语句的时候用到了 join buffer。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">37__什么时候会使用内部临时表？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3994 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#union-执行流程">union 执行流程</a></li>
+    <li><a href="#group-by-执行流程">group by 执行流程</a></li>
+    <li><a href="#group-by-优化方法----索引">group by 优化方法 &ndash; 索引</a></li>
+    <li><a href="#group-by-优化方法----直接排序">group by 优化方法 &ndash; 直接排序</a></li>
+    <li><a href="#小结">小结</a></li>
+    <li><a href="#上期问题时间">上期问题时间</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>今天是大年初二，在开始我们今天的学习之前，我要先和你道一声春节快乐！</p>
+<p>在<a href="./73479.md">第 16</a>和<a href="./79700.md">第 34</a>篇文章中，我分别和你介绍了 sort buffer、内存临时表和 join buffer。这三个数据结构都是用来存放语句执行过程中的中间数据，以辅助 SQL 语句的执行的。其中，我们在排序的时候用到了 sort buffer，在使用 join 语句的时候用到了 join buffer。</p>
+<p>然后，你可能会有这样的疑问，MySQL 什么时候会使用内部临时表呢？</p>
+<p>今天这篇文章，我就先给你举两个需要用到内部临时表的例子，来看看内部临时表是怎么工作的。然后，我们再来分析，什么情况下会使用内部临时表。</p>
+<h1 id="union-执行流程">union 执行流程</h1>
+<p>为了便于量化分析，我用下面的表 t1 来举例。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">create table t1(id int primary key, a int, b int, index(a));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">delimiter ;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">create procedure idata()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">begin
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  declare i int;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   set i=1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  while(i&lt;=1000)do
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    insert into t1 values(i, i, i);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    set i=i+1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  end while;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">end;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">delimiter ;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">call idata();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后，我们执行下面这条语句：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">(select 1000 as f) union (select id from t1 order by id desc limit 2);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这条语句用到了 union，它的语义是，取这两个子查询结果的并集。并集的意思就是这两个集合加起来，重复的行只保留一行。</p>
+<p>下图是这个语句的 explain 结果。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/0ab6cb9727a546fa8c623028cbb932f2.png" alt=""></p>
+<p>图 1 union 语句 explain 结果</p>
+<p>可以看到：</p>
+<ul>
+<li>第二行的 key=PRIMARY，说明第二个子句用到了索引 id。</li>
+<li>第三行的 Extra 字段，表示在对子查询的结果集做 union 的时候，使用了临时表 (Using temporary)。</li>
+</ul>
+<p>这个语句的执行流程是这样的：</p>
+<ol>
+<li>创建一个内存临时表，这个临时表只有一个整型字段 f，并且 f 是主键字段。</li>
+<li>执行第一个子查询，得到 1000 这个值，并存入临时表中。</li>
+<li>执行第二个子查询：
+<ul>
+<li>拿到第一行 id=1000，试图插入临时表中。但由于 1000 这个值已经存在于临时表了，违反了唯一性约束，所以插入失败，然后继续执行；</li>
+<li>取到第二行 id=999，插入临时表成功。</li>
+</ul>
+</li>
+<li>从临时表中按行取出数据，返回结果，并删除临时表，结果中包含两行数据分别是 1000 和 999。</li>
+</ol>
+<p>这个过程的流程图如下所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/a0cd3ae557a517ac3ba094a789d5a329.png" alt=""></p>
+<p>图 2 union 执行流程</p>
+<p>可以看到，这里的内存临时表起到了暂存数据的作用，而且计算过程还用上了临时表主键 id 的唯一性约束，实现了 union 的语义。</p>
+<p>顺便提一下，如果把上面这个语句中的 union 改成 union all 的话，就没有了“去重”的语义。这样执行的时候，就依次执行子查询，得到的结果直接作为结果集的一部分，发给客户端。因此也就不需要临时表了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/685974a4f6db56cb5c839cb2f72f5c89.png" alt=""></p>
+<p>图 3 union all 的 explain 结果</p>
+<p>可以看到，第二行的 Extra 字段显示的是 Using index，表示只使用了覆盖索引，没有用临时表了。</p>
+<h1 id="group-by-执行流程">group by 执行流程</h1>
+<p>另外一个常见的使用临时表的例子是 group by，我们来看一下这个语句：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select id%10 as m, count(*) as c from t1 group by m;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个语句的逻辑是把表 t1 里的数据，按照 id%10 进行分组统计，并按照 m 的结果排序后输出。它的 explain 结果如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/9fb550c78d3e315aba267074e1b1569b.png" alt=""></p>
+<p>图 4 group by 的 explain 结果</p>
+<p>在 Extra 字段里面，我们可以看到三个信息：</p>
+<ul>
+<li>Using index，表示这个语句使用了覆盖索引，选择了索引 a，不需要回表；</li>
+<li>Using temporary，表示使用了临时表；</li>
+<li>Using filesort，表示需要排序。</li>
+</ul>
+<p>这个语句的执行流程是这样的：</p>
+<ol>
+<li>创建内存临时表，表里有两个字段 m 和 c，主键是 m；</li>
+<li>扫描表 t1 的索引 a，依次取出叶子节点上的 id 值，计算 id%10 的结果，记为 x；
+<ul>
+<li>如果临时表中没有主键为 x 的行，就插入一个记录 (x,1);</li>
+<li>如果表中有主键为 x 的行，就将 x 这一行的 c 值加 1；</li>
+</ul>
+</li>
+<li>遍历完成后，再根据字段 m 做排序，得到结果集返回给客户端。</li>
+</ol>
+<p>这个流程的执行图如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/ef11efa0c4bdcc94c543d0aea6262513.png" alt=""></p>
+<p>图 5 group by 执行流程</p>
+<p>图中最后一步，对内存临时表的排序，在<a href="./73795.md">第 17 篇文章</a>中已经有过介绍，我把图贴过来，方便你回顾。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/f9411f66d015d6371e6a6eabe92b8265.png" alt=""></p>
+<p>图 6 内存临时表排序流程</p>
+<p>其中，临时表的排序过程就是图 6 中虚线框内的过程。</p>
+<p>接下来，我们再看一下这条语句的执行结果：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/6df29bad0c5b1339db190eb505fdc409.png" alt=""></p>
+<p>图 7 group by 执行结果</p>
+<p>如果你的需求并不需要对结果进行排序，那你可以在 SQL 语句末尾增加 order by null，也就是改成：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select id%10 as m, count(*) as c from t1 group by m order by null;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样就跳过了最后排序的阶段，直接从临时表中取数据返回。返回的结果如图 8 所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/e470abf93d4e95e02570862260d88311.png" alt=""></p>
+<p>图 8 group + order by null 的结果（内存临时表）</p>
+<p>由于表 t1 中的 id 值是从 1 开始的，因此返回的结果集中第一行是 id=1；扫描到 id=10 的时候才插入 m=0 这一行，因此结果集里最后一行才是 m=0。</p>
+<p>这个例子里由于临时表只有 10 行，内存可以放得下，因此全程只使用了内存临时表。但是，内存临时表的大小是有限制的，参数 tmp_table_size 就是控制这个内存大小的，默认是 16M。</p>
+<p>如果我执行下面这个语句序列：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">set tmp_table_size=1024;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select id%100 as m, count(*) as c from t1 group by m order by null limit 10;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>把内存临时表的大小限制为最大 1024 字节，并把语句改成 id % 100，这样返回结果里有 100 行数据。但是，这时的内存临时表大小不够存下这 100 行数据，也就是说，执行过程中会发现内存临时表大小到达了上限（1024 字节）。</p>
+<p>那么，这时候就会把内存临时表转成磁盘临时表，磁盘临时表默认使用的引擎是 InnoDB。这时，返回的结果如图 9 所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/0c0534245cc862c1a931ddfb28c8e810.png" alt=""></p>
+<p>图 9 group + order by null 的结果（磁盘临时表）</p>
+<p>如果这个表 t1 的数据量很大，很可能这个查询需要的磁盘临时表就会占用大量的磁盘空间。</p>
+<h1 id="group-by-优化方法----索引">group by 优化方法 &ndash; 索引</h1>
+<p>可以看到，不论是使用内存临时表还是磁盘临时表，group by 逻辑都需要构造一个带唯一索引的表，执行代价都是比较高的。如果表的数据量比较大，上面这个 group by 语句执行起来就会很慢，我们有什么优化的方法呢？</p>
+<p>要解决 group by 语句的优化问题，你可以先想一下这个问题：执行 group by 语句为什么需要临时表？</p>
+<p>group by 的语义逻辑，是统计不同的值出现的个数。但是，由于每一行的 id%100 的结果是无序的，所以我们就需要有一个临时表，来记录并统计结果。</p>
+<p>那么，如果扫描过程中可以保证出现的数据是有序的，是不是就简单了呢？</p>
+<p>假设，现在有一个类似图 10 的这么一个数据结构，我们来看看 group by 可以怎么做。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/ab281739c7032614927a2541cf8fab50.png" alt=""></p>
+<p>图 10 group by 算法优化 - 有序输入</p>
+<p>可以看到，如果可以确保输入的数据是有序的，那么计算 group by 的时候，就只需要从左到右，顺序扫描，依次累加。也就是下面这个过程：</p>
+<ul>
+<li>当碰到第一个 1 的时候，已经知道累积了 X 个 0，结果集里的第一行就是 (0,X);</li>
+<li>当碰到第一个 2 的时候，已经知道累积了 Y 个 1，结果集里的第二行就是 (1,Y);</li>
+</ul>
+<p>按照这个逻辑执行的话，扫描到整个输入的数据结束，就可以拿到 group by 的结果，不需要临时表，也不需要再额外排序。</p>
+<p>你一定想到了，InnoDB 的索引，就可以满足这个输入有序的条件。</p>
+<p>在 MySQL 5.7 版本支持了 generated column 机制，用来实现列数据的关联更新。你可以用下面的方法创建一个列 z，然后在 z 列上创建一个索引（如果是 MySQL 5.6 及之前的版本，你也可以创建普通列和索引，来解决这个问题）。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">alter table t1 add column z int generated always as(id % 100), add index(z);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样，索引 z 上的数据就是类似图 10 这样有序的了。上面的 group by 语句就可以改成：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select z, count(*) as c from t1 group by z;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>优化后的 group by 语句的 explain 结果，如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/dbdd74ae9e619ab0551d11bf9bd561d8.png" alt=""></p>
+<p>图 11 group by 优化的 explain 结果</p>
+<p>从 Extra 字段可以看到，这个语句的执行不再需要临时表，也不需要排序了。</p>
+<h1 id="group-by-优化方法----直接排序">group by 优化方法 &ndash; 直接排序</h1>
+<p>所以，如果可以通过加索引来完成 group by 逻辑就再好不过了。但是，如果碰上不适合创建索引的场景，我们还是要老老实实做排序的。那么，这时候的 group by 要怎么优化呢？</p>
+<p>如果我们明明知道，一个 group by 语句中需要放到临时表上的数据量特别大，却还是要按照“先放到内存临时表，插入一部分数据后，发现内存临时表不够用了再转成磁盘临时表”，看上去就有点儿傻。</p>
+<p>那么，我们就会想了，MySQL 有没有让我们直接走磁盘临时表的方法呢？</p>
+<p>答案是，有的。</p>
+<p>在 group by 语句中加入 SQL_BIG_RESULT 这个提示（hint），就可以告诉优化器：这个语句涉及的数据量很大，请直接用磁盘临时表。</p>
+<p>MySQL 的优化器一看，磁盘临时表是 B+ 树存储，存储效率不如数组来得高。所以，既然你告诉我数据量很大，那从磁盘空间考虑，还是直接用数组来存吧。</p>
+<p>因此，下面这个语句</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">select SQL_BIG_RESULT id%100 as m, count(*) as c from t1 group by m;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>的执行流程就是这样的：</p>
+<ol>
+<li>初始化 sort_buffer，确定放入一个整型字段，记为 m；</li>
+<li>扫描表 t1 的索引 a，依次取出里面的 id 值，将 id%100 的值存入 sort_buffer 中；</li>
+<li>扫描完成后，对 sort_buffer 的字段 m 做排序（如果 sort_buffer 内存不够用，就会利用磁盘临时文件辅助排序）；</li>
+<li>排序完成后，就得到了一个有序数组。</li>
+</ol>
+<p>根据有序数组，得到数组里面的不同值，以及每个值的出现次数。这一步的逻辑，你已经从前面的图 10 中了解过了。</p>
+<p>下面两张图分别是执行流程图和执行 explain 命令得到的结果。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/af6704c9959bb6af81c0dc2d7206ca1e.png" alt=""></p>
+<p>图 12 使用 SQL_BIG_RESULT 的执行流程图</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/29b37e0486ceadb683c4feecfe9142b3.png" alt=""></p>
+<p>图 13 使用 SQL_BIG_RESULT 的 explain 结果</p>
+<p>从 Extra 字段可以看到，这个语句的执行没有再使用临时表，而是直接用了排序算法。</p>
+<p>基于上面的 union、union all 和 group by 语句的执行过程的分析，我们来回答文章开头的问题：MySQL 什么时候会使用内部临时表？</p>
+<ol>
+<li>如果语句执行过程可以一边读数据，一边直接得到结果，是不需要额外内存的，否则就需要额外的内存，来保存中间结果；</li>
+<li>join_buffer 是无序数组，sort_buffer 是有序数组，临时表是二维表结构；</li>
+<li>如果执行逻辑需要用到二维表特性，就会优先考虑使用临时表。比如我们的例子中，union 需要用到唯一索引约束，group by 还需要用到另外一个字段来存累积计数。</li>
+</ol>
+<h1 id="小结">小结</h1>
+<p>通过今天这篇文章，我重点和你讲了 group by 的几种实现算法，从中可以总结一些使用的指导原则：</p>
+<ol>
+<li>如果对 group by 语句的结果没有排序要求，要在语句后面加 order by null；</li>
+<li>尽量让 group by 过程用上表的索引，确认方法是 explain 结果里没有 Using temporary 和 Using filesort；</li>
+<li>如果 group by 需要统计的数据量不大，尽量只使用内存临时表；也可以通过适当调大 tmp_table_size 参数，来避免用到磁盘临时表；</li>
+<li>如果数据量实在太大，使用 SQL_BIG_RESULT 这个提示，来告诉优化器直接使用排序算法得到 group by 的结果。</li>
+</ol>
+<p>最后，我给你留下一个思考题吧。</p>
+<p>文章中图 8 和图 9 都是 order by null，为什么图 8 的返回结果里面，0 是在结果集的最后一行，而图 9 的结果里面，0 是在结果集的第一行？</p>
+<p>你可以把你的分析写在留言区里，我会在下一篇文章和你讨论这个问题。感谢你的收听，也欢迎你把这篇文章分享给更多的朋友一起阅读。</p>
+<h1 id="上期问题时间">上期问题时间</h1>
+<p>上期的问题是：为什么不能用 rename 修改临时表的改名。</p>
+<p>在实现上，执行 rename table 语句的时候，要求按照“库名 / 表名.frm”的规则去磁盘找文件，但是临时表在磁盘上的 frm 文件是放在 tmpdir 目录下的，并且文件名的规则是“#sql{进程 id}_{线程 id}_ 序列号.frm”，因此会报“找不到文件名”的错误。</p>
+<p>评论区留言点赞板：</p>
+<blockquote>
+<p>@poppy 同学，通过执行语句的报错现象推测了这个实现过程。</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/MySQL%E5%AE%9E%E6%88%9845%E8%AE%B2/48edcb93fb03e3e52d7e7099be6b5cb3.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/mysql%E5%AE%9E%E6%88%9845%E8%AE%B2/">MySQL实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/37__%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E6%A8%A1%E5%9D%97%E7%83%AD%E7%82%B9%E9%97%AE%E9%A2%98%E7%AD%94%E7%96%91/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">37__设计模式模块热点问题答疑</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/37__%E5%AE%9E%E6%88%98%E4%B8%80%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8%E5%9B%BE%E8%A1%A8%E5%BA%93%E7%BB%98%E5%88%B6%E5%B8%B8%E7%94%A8%E6%95%B0%E6%8D%AE%E5%9B%BE%E8%A1%A8/">
+            <span class="next-text nav-default">37__实战（一）：如何使用图表库绘制常用数据图表？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

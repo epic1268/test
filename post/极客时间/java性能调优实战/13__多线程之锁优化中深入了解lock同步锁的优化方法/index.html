@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>13__多线程之锁优化（中）：深入了解Lock同步锁的优化方法 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是刘超。
+今天这讲我们继续来聊聊锁优化。上一讲我重点介绍了在 JVM 层实现的 Synchronized 同步锁的优化方法，除此之外，在 JDK1.5 之后，Java 还提供了 Lock 同步锁。那么它有什么优势呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/13__%E5%A4%9A%E7%BA%BF%E7%A8%8B%E4%B9%8B%E9%94%81%E4%BC%98%E5%8C%96%E4%B8%AD%E6%B7%B1%E5%85%A5%E4%BA%86%E8%A7%A3lock%E5%90%8C%E6%AD%A5%E9%94%81%E7%9A%84%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/13__%E5%A4%9A%E7%BA%BF%E7%A8%8B%E4%B9%8B%E9%94%81%E4%BC%98%E5%8C%96%E4%B8%AD%E6%B7%B1%E5%85%A5%E4%BA%86%E8%A7%A3lock%E5%90%8C%E6%AD%A5%E9%94%81%E7%9A%84%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="13__多线程之锁优化（中）：深入了解Lock同步锁的优化方法">
+  <meta property="og:description" content="你好，我是刘超。
+今天这讲我们继续来聊聊锁优化。上一讲我重点介绍了在 JVM 层实现的 Synchronized 同步锁的优化方法，除此之外，在 JDK1.5 之后，Java 还提供了 Lock 同步锁。那么它有什么优势呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Java性能调优实战">
+
+  <meta itemprop="name" content="13__多线程之锁优化（中）：深入了解Lock同步锁的优化方法">
+  <meta itemprop="description" content="你好，我是刘超。
+今天这讲我们继续来聊聊锁优化。上一讲我重点介绍了在 JVM 层实现的 Synchronized 同步锁的优化方法，除此之外，在 JDK1.5 之后，Java 还提供了 Lock 同步锁。那么它有什么优势呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3277">
+  <meta itemprop="keywords" content="Java性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="13__多线程之锁优化（中）：深入了解Lock同步锁的优化方法">
+  <meta name="twitter:description" content="你好，我是刘超。
+今天这讲我们继续来聊聊锁优化。上一讲我重点介绍了在 JVM 层实现的 Synchronized 同步锁的优化方法，除此之外，在 JDK1.5 之后，Java 还提供了 Lock 同步锁。那么它有什么优势呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">13__多线程之锁优化（中）：深入了解Lock同步锁的优化方法</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3277 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#lock-锁的实现原理">Lock 锁的实现原理</a></li>
+        <li><a href="#锁分离优化-lock-同步锁">锁分离优化 Lock 同步锁</a>
+          <ul>
+            <li><a href="#1-读写锁-reentrantreadwritelock">1. 读写锁 ReentrantReadWriteLock</a></li>
+            <li><a href="#2-读写锁再优化之-stampedlock">2. 读写锁再优化之 StampedLock</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是刘超。</p>
+<p>今天这讲我们继续来聊聊锁优化。上一讲我重点介绍了在 JVM 层实现的 Synchronized 同步锁的优化方法，除此之外，在 JDK1.5 之后，Java 还提供了 Lock 同步锁。那么它有什么优势呢？</p>
+<p>相对于需要 JVM 隐式获取和释放锁的 Synchronized 同步锁，Lock 同步锁（以下简称 Lock 锁）需要的是显示获取和释放锁，这就为获取和释放锁提供了更多的灵活性。Lock 锁的基本操作是通过乐观锁来实现的，但由于 Lock 锁也会在阻塞时被挂起，因此它依然属于悲观锁。我们可以通过一张图来简单对比下两个同步锁，了解下各自的特点：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/d42a31b06e7a6d7420d42a7373a744f4.png" alt=""></p>
+<p>从性能方面上来说，在并发量不高、竞争不激烈的情况下，Synchronized 同步锁由于具有分级锁的优势，性能上与 Lock 锁差不多；但在高负载、高并发的情况下，Synchronized 同步锁由于竞争激烈会升级到重量级锁，性能则没有 Lock 锁稳定。</p>
+<p>我们可以通过一组简单的性能测试，直观地对比下两种锁的性能，结果见下方，代码可以在<a href="./syncLockTest.md">Github</a>上下载查看。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/84f4e4d9858fd6c0b1d8f94ebda9146e.png" alt=""></p>
+<p>通过以上数据，我们可以发现：Lock 锁的性能相对来说更加稳定。那它与上一讲的 Synchronized 同步锁相比，实现原理又是怎样的呢？</p>
+<h2 id="lock-锁的实现原理">Lock 锁的实现原理</h2>
+<p>Lock 锁是基于 Java 实现的锁，Lock 是一个接口类，常用的实现类有 ReentrantLock、ReentrantReadWriteLock（RRW），它们都是依赖 AbstractQueuedSynchronizer（AQS）类实现的。</p>
+<p>AQS 类结构中包含一个基于链表实现的等待队列（CLH 队列），用于存储所有阻塞的线程，AQS 中还有一个 state 变量，该变量对 ReentrantLock 来说表示加锁状态。</p>
+<p>该队列的操作均通过 CAS 操作实现，我们可以通过一张图来看下整个获取锁的流程。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/a76c977bc2f9f7662c5c67a1fdabaad0.png" alt=""></p>
+<h2 id="锁分离优化-lock-同步锁">锁分离优化 Lock 同步锁</h2>
+<p>虽然 Lock 锁的性能稳定，但也并不是所有的场景下都默认使用 ReentrantLock 独占锁来实现线程同步。</p>
+<p>我们知道，对于同一份数据进行读写，如果一个线程在读数据，而另一个线程在写数据，那么读到的数据和最终的数据就会不一致；如果一个线程在写数据，而另一个线程也在写数据，那么线程前后看到的数据也会不一致。这个时候我们可以在读写方法中加入互斥锁，来保证任何时候只能有一个线程进行读或写操作。</p>
+<p>在大部分业务场景中，读业务操作要远远大于写业务操作。而在多线程编程中，读操作并不会修改共享资源的数据，如果多个线程仅仅是读取共享资源，那么这种情况下其实没有必要对资源进行加锁。如果使用互斥锁，反倒会影响业务的并发性能，那么在这种场景下，有没有什么办法可以优化下锁的实现方式呢？</p>
+<h3 id="1-读写锁-reentrantreadwritelock">1. 读写锁 ReentrantReadWriteLock</h3>
+<p>针对这种读多写少的场景，Java 提供了另外一个实现 Lock 接口的读写锁 RRW。我们已知 ReentrantLock 是一个独占锁，同一时间只允许一个线程访问，而 RRW 允许多个读线程同时访问，但不允许写线程和读线程、写线程和写线程同时访问。读写锁内部维护了两个锁，一个是用于读操作的 ReadLock，一个是用于写操作的 WriteLock。</p>
+<p>那读写锁又是如何实现锁分离来保证共享资源的原子性呢？</p>
+<p>RRW 也是基于 AQS 实现的，它的自定义同步器（继承 AQS）需要在同步状态 state 上维护多个读线程和一个写线程的状态，该状态的设计成为实现读写锁的关键。RRW 很好地使用了高低位，来实现一个整型控制两种状态的功能，读写锁将变量切分成了两个部分，高 16 位表示读，低 16 位表示写。</p>
+<p>**一个线程尝试获取写锁时，**会先判断同步状态 state 是否为 0。如果 state 等于 0，说明暂时没有其它线程获取锁；如果 state 不等于 0，则说明有其它线程获取了锁。</p>
+<p>此时再判断同步状态 state 的低 16 位（w）是否为 0，如果 w 为 0，则说明其它线程获取了读锁，此时进入 CLH 队列进行阻塞等待；如果 w 不为 0，则说明其它线程获取了写锁，此时要判断获取了写锁的是不是当前线程，若不是就进入 CLH 队列进行阻塞等待；若是，就应该判断当前线程获取写锁是否超过了最大次数，若超过，抛异常，反之更新同步状态。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/c2a9c654010003ac3edf6735231273ee.png" alt=""></p>
+<p>**一个线程尝试获取读锁时，**同样会先判断同步状态 state 是否为 0。如果 state 等于 0，说明暂时没有其它线程获取锁，此时判断是否需要阻塞，如果需要阻塞，则进入 CLH 队列进行阻塞等待；如果不需要阻塞，则 CAS 更新同步状态为读状态。</p>
+<p>如果 state 不等于 0，会判断同步状态低 16 位，如果存在写锁，则获取读锁失败，进入 CLH 阻塞队列；反之，判断当前线程是否应该被阻塞，如果不应该阻塞则尝试 CAS 同步状态，获取成功更新同步锁为读状态。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/8ef51f10ea2b4618f588cf48716ec6dd.png" alt=""></p>
+<p>下面我们通过一个求平方的例子，来感受下 RRW 的实现，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class TestRTTLock {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	private double x, y;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	// 读锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	private Lock readLock = lock.readLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	// 写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	private Lock writeLock = lock.writeLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	public double read() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		// 获取读锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		readLock.lock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			return Math.sqrt(x * x + y * y);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		} finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			// 释放读锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			readLock.unlock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 	public void move(double deltaX, double deltaY) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		// 获取写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		writeLock.lock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			x += deltaX;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			y += deltaY;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		} finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			// 释放写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			writeLock.unlock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> }
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h3 id="2-读写锁再优化之-stampedlock">2. 读写锁再优化之 StampedLock</h3>
+<p>RRW 被很好地应用在了读大于写的并发场景中，然而 RRW 在性能上还有可提升的空间。在读取很多、写入很少的情况下，RRW 会使写入线程遭遇饥饿（Starvation）问题，也就是说写入线程会因迟迟无法竞争到锁而一直处于等待状态。</p>
+<p>在 JDK1.8 中，Java 提供了 StampedLock 类解决了这个问题。StampedLock 不是基于 AQS 实现的，但实现的原理和 AQS 是一样的，都是基于队列和锁状态实现的。与 RRW 不一样的是，StampedLock 控制锁有三种模式：写、悲观读以及乐观读，并且 StampedLock 在获取锁时会返回一个票据 stamp，获取的 stamp 除了在释放锁时需要校验，在乐观读模式下，stamp 还会作为读取共享资源后的二次校验，后面我会讲解 stamp 的工作原理。</p>
+<p>我们先通过一个官方的例子来了解下 StampedLock 是如何使用的，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class Point {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private double x, y;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    private final StampedLock s1 = new StampedLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     void move(double deltaX, double deltaY) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 获取写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        long stamp = s1.writeLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            x += deltaX;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            y += deltaY;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 释放写锁
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            s1.unlockWrite(stamp);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     double distanceFormOrigin() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 乐观读操作
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        long stamp = s1.tryOptimisticRead();  
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 拷贝变量
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        double currentX = x, currentY = y;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        // 判断读期间是否有写操作
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (!s1.validate(stamp)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            // 升级为悲观读
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            stamp = s1.readLock();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            try {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                currentX = x;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                currentY = y;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } finally {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                s1.unlockRead(stamp);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return Math.sqrt(currentX * currentX + currentY * currentY);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以发现：一个写线程获取写锁的过程中，首先是通过 WriteLock 获取一个票据 stamp，WriteLock 是一个独占锁，同时只有一个线程可以获取该锁，当一个线程获取该锁后，其它请求的线程必须等待，当没有线程持有读锁或者写锁的时候才可以获取到该锁。请求该锁成功后会返回一个 stamp 票据变量，用来表示该锁的版本，当释放该锁的时候，需要 unlockWrite 并传递参数 stamp。</p>
+<p>接下来就是一个读线程获取锁的过程。首先线程会通过乐观锁 tryOptimisticRead 操作获取票据 stamp，如果当前没有线程持有写锁，则返回一个非 0 的 stamp 版本信息。线程获取该 stamp 后，将会拷贝一份共享资源到方法栈，在这之前具体的操作都是基于方法栈的拷贝数据。</p>
+<p>之后方法还需要调用 validate，验证之前调用 tryOptimisticRead 返回的 stamp 在当前是否有其它线程持有了写锁，如果是，那么 validate 会返回 0，升级为悲观锁；否则就可以使用该 stamp 版本的锁对数据进行操作。</p>
+<p>相比于 RRW，StampedLock 获取读锁只是使用与或操作进行检验，不涉及 CAS 操作，即使第一次乐观锁获取失败，也会马上升级至悲观锁，这样就可以避免一直进行 CAS 操作带来的 CPU 占用性能的问题，因此 StampedLock 的效率更高。</p>
+<h2 id="总结">总结</h2>
+<p>不管使用 Synchronized 同步锁还是 Lock 同步锁，只要存在锁竞争就会产生线程阻塞，从而导致线程之间的频繁切换，最终增加性能消耗。因此，如何降低锁竞争，就成为了优化锁的关键。</p>
+<p>在 Synchronized 同步锁中，我们了解了可以通过减小锁粒度、减少锁占用时间来降低锁的竞争。在这一讲中，我们知道可以利用 Lock 锁的灵活性，通过锁分离的方式来降低锁竞争。</p>
+<p>Lock 锁实现了读写锁分离来优化读大于写的场景，从普通的 RRW 实现到读锁和写锁，到 StampedLock 实现了乐观读锁、悲观读锁和写锁，都是为了降低锁的竞争，促使系统的并发性能达到最佳。</p>
+<h2 id="思考题">思考题</h2>
+<p>StampedLock 同 RRW 一样，都适用于读大于写操作的场景，StampedLock 青出于蓝结果却不好说，毕竟 RRW 还在被广泛应用，就说明它还有 StampedLock 无法替代的优势。你知道 StampedLock 没有被广泛应用的原因吗？或者说它还存在哪些缺陷导致没有被广泛应用。</p>
+<p>期待在留言区看到你的见解。也欢迎你点击“请朋友读”，把今天的内容分享给身边的朋友，邀请他一起学习。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/b7c462671ae86891c7f8ac1941814e21.png" alt="unpreview"></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Java性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%86%E8%A7%89%E7%AC%94%E8%AE%B0%E5%85%A5%E9%97%A8%E8%AF%BE/13__%E5%8A%A8%E6%80%81%E5%AE%9E%E8%B7%B5%E5%A6%82%E4%BD%95%E5%81%9A%E8%AF%AD%E9%9F%B3%E4%BF%A1%E6%81%AF%E7%9A%84%E8%A7%86%E8%A7%89%E7%AC%94%E8%AE%B0/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">13__动态实践：如何做语音信息的视觉笔记？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86%E4%B8%8E%E7%AE%97%E6%B3%95%E8%A7%A3%E6%9E%90/13__%E5%88%86%E5%B8%83%E5%BC%8F%E8%B0%83%E5%BA%A6%E6%9E%B6%E6%9E%84%E4%B9%8B%E5%85%B1%E4%BA%AB%E7%8A%B6%E6%80%81%E8%B0%83%E5%BA%A6%E7%89%A9%E8%B4%A8%E6%96%87%E6%98%8E%E7%B2%BE%E7%A5%9E%E6%96%87%E6%98%8E%E5%A4%9A%E6%89%8B%E5%8D%8F%E5%95%86%E6%8A%93/">
+            <span class="next-text nav-default">13__分布式调度架构之共享状态调度：物质文明、精神文明多手协商抓</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

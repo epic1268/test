@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>27__条件变量sync.Cond_（上） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上篇文章中，我们主要说的是互斥锁，今天我和你来聊一聊条件变量（conditional variable）。
+前导内容：条件变量与互斥锁 我们常常会把条件变量这个同步工具拿来与互斥锁一起讨论。实际上，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能发挥作用。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/27__%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8Fsync.cond_%E4%B8%8A/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/27__%E6%9D%A1%E4%BB%B6%E5%8F%98%E9%87%8Fsync.cond_%E4%B8%8A/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="27__条件变量sync.Cond_（上）">
+  <meta property="og:description" content="在上篇文章中，我们主要说的是互斥锁，今天我和你来聊一聊条件变量（conditional variable）。
+前导内容：条件变量与互斥锁 我们常常会把条件变量这个同步工具拿来与互斥锁一起讨论。实际上，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能发挥作用。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go语言核心36讲">
+
+  <meta itemprop="name" content="27__条件变量sync.Cond_（上）">
+  <meta itemprop="description" content="在上篇文章中，我们主要说的是互斥锁，今天我和你来聊一聊条件变量（conditional variable）。
+前导内容：条件变量与互斥锁 我们常常会把条件变量这个同步工具拿来与互斥锁一起讨论。实际上，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能发挥作用。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3899">
+  <meta itemprop="keywords" content="Go语言核心36讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="27__条件变量sync.Cond_（上）">
+  <meta name="twitter:description" content="在上篇文章中，我们主要说的是互斥锁，今天我和你来聊一聊条件变量（conditional variable）。
+前导内容：条件变量与互斥锁 我们常常会把条件变量这个同步工具拿来与互斥锁一起讨论。实际上，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能发挥作用。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">27__条件变量sync.Cond_（上）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3899 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#前导内容条件变量与互斥锁">前导内容：条件变量与互斥锁</a></li>
+        <li><a href="#问题解析">问题解析</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上篇文章中，我们主要说的是互斥锁，今天我和你来聊一聊条件变量（conditional variable）。</p>
+<h2 id="前导内容条件变量与互斥锁">前导内容：条件变量与互斥锁</h2>
+<p>我们常常会把条件变量这个同步工具拿来与互斥锁一起讨论。实际上，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能发挥作用。</p>
+<p>条件变量并不是被用来保护临界区和共享资源的，它是用于协调想要访问共享资源的那些线程的。当共享资源的状态发生变化时，它可以被用来通知被互斥锁阻塞的线程。</p>
+<p>比如说，我们两个人在共同执行一项秘密任务，这需要在不直接联系和见面的前提下进行。我需要向一个信箱里放置情报，你需要从这个信箱中获取情报。这个信箱就相当于一个共享资源，而我们就分别是进行写操作的线程和进行读操作的线程。</p>
+<p>如果我在放置的时候发现信箱里还有未被取走的情报，那就不再放置，而先返回。另一方面，如果你在获取的时候发现信箱里没有情报，那也只能先回去了。这就相当于写的线程或读的线程阻塞的情况。</p>
+<p>虽然我们俩都有信箱的钥匙，但是同一时刻只能有一个人插入钥匙并打开信箱，这就是锁的作用了。更何况咱们俩是不能直接见面的，所以这个信箱本身就可以被视为一个临界区。</p>
+<p>尽管没有协调好，咱们俩仍然要想方设法的完成任务啊。所以，如果信箱里有情报，而你却迟迟未取走，那我就需要每过一段时间带着新情报去检查一次，若发现信箱空了，我就需要及时地把新情报放到里面。</p>
+<p>另一方面，如果信箱里一直没有情报，那你也要每过一段时间去打开看看，一旦有了情报就及时地取走。这么做是可以的，但就是太危险了，很容易被敌人发现。</p>
+<p>后来，我们又想了一个计策，各自雇佣了一个不起眼的小孩儿。如果早上七点有一个戴红色帽子的小孩儿从你家楼下路过，那么就意味着信箱里有了新情报。另一边，如果上午九点有一个戴蓝色帽子的小孩儿从我家楼下路过，那就说明你已经从信箱中取走了情报。</p>
+<p>这样一来，咱们执行任务的隐蔽性高多了，并且效率的提升非常显著。这两个戴不同颜色帽子的小孩儿就相当于条件变量，在共享资源的状态产生变化的时候，起到了通知的作用。</p>
+<p>当然了，我们是在用 Go 语言编写程序，而不是在执行什么秘密任务。因此，条件变量在这里的最大优势就是在效率方面的提升。当共享资源的状态不满足条件的时候，想操作它的线程再也不用循环往复地做检查了，只要等待通知就好了。</p>
+<p>说到这里，想考考你知道怎么使用条件变量吗？所以，<strong>我们今天的问题就是：条件变量怎样与互斥锁配合使用？</strong></p>
+<p><strong>这道题的典型回答是：条件变量的初始化离不开互斥锁，并且它的方法有的也是基于互斥锁的。</strong></p>
+<p>条件变量提供的方法有三个：等待通知（wait）、单发通知（signal）和广播通知（broadcast）。</p>
+<p>我们在利用条件变量等待通知的时候，需要在它基于的那个互斥锁保护下进行。而在进行单发通知或广播通知的时候，却是恰恰相反的，也就是说，需要在对应的互斥锁解锁之后再做这两种操作。</p>
+<h2 id="问题解析">问题解析</h2>
+<p>这个问题看起来很简单，但其实可以基于它，延伸出很多其他的问题。比如，每个方法的使用时机是什么？又比如，每个方法执行的内部流程是怎样的？</p>
+<p>下面，我们一边用代码实现前面那个例子，一边讨论条件变量的使用。</p>
+<p>首先，我们先来创建如下几个变量。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">mailbox</span> <span class="n">uint8</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">lock</span> <span class="n">sync</span><span class="o">.</span><span class="n">RWMutex</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">sendCond</span> <span class="p">:</span><span class="o">=</span> <span class="n">sync</span><span class="o">.</span><span class="n">NewCond</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">recvCond</span> <span class="p">:</span><span class="o">=</span> <span class="n">sync</span><span class="o">.</span><span class="n">NewCond</span><span class="p">(</span><span class="n">lock</span><span class="o">.</span><span class="n">RLocker</span><span class="p">())</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><strong>变量<code>mailbox</code>代表信箱，是<code>uint8</code>类型的。</strong> 若它的值为<code>0</code>则表示信箱中没有情报，而当它的值为<code>1</code>时则说明信箱中有情报。<code>lock</code>是一个类型为<code>sync.RWMutex</code>的变量，是一个读写锁，也可以被视为信箱上的那把锁。</p>
+<p>另外，基于这把锁，我还创建了两个代表条件变量的变量，<strong>名字分别叫<code>sendCond</code>和<code>recvCond</code>。</strong> 它们都是<code>*sync.Cond</code>类型的，同时也都是由<code>sync.NewCond</code>函数来初始化的。</p>
+<p>与<code>sync.Mutex</code>类型和<code>sync.RWMutex</code>类型不同，<code>sync.Cond</code>类型并不是开箱即用的。我们只能利用<code>sync.NewCond</code>函数创建它的指针值。这个函数需要一个<code>sync.Locker</code>类型的参数值。</p>
+<p>还记得吗？我在前面说过，条件变量是基于互斥锁的，它必须有互斥锁的支撑才能够起作用。因此，这里的参数值是不可或缺的，它会参与到条件变量的方法实现当中。</p>
+<p><code>sync.Locker</code>其实是一个接口，在它的声明中只包含了两个方法定义，即：<code>Lock()</code>和<code>Unlock()</code>。<code>sync.Mutex</code>类型和<code>sync.RWMutex</code>类型都拥有<code>Lock</code>方法和<code>Unlock</code>方法，只不过它们都是指针方法。因此，这两个类型的指针类型才是<code>sync.Locker</code>接口的实现类型。</p>
+<p>我在为<code>sendCond</code>变量做初始化的时候，把基于<code>lock</code>变量的指针值传给了<code>sync.NewCond</code>函数。</p>
+<p>原因是，<strong><code>lock</code>变量的<code>Lock</code>方法和<code>Unlock</code>方法分别用于对其中写锁的锁定和解锁，它们与<code>sendCond</code>变量的含义是对应的。</strong><code>sendCond</code>是专门为放置情报而准备的条件变量，向信箱里放置情报，可以被视为对共享资源的写操作。</p>
+<p>相应的，<strong><code>recvCond</code>变量代表的是专门为获取情报而准备的条件变量。</strong> 虽然获取情报也会涉及对信箱状态的改变，但是好在做这件事的人只会有你一个，而且我们也需要借此了解一下，条件变量与读写锁中的读锁的联用方式。所以，在这里，我们暂且把获取情报看做是对共享资源的读操作。</p>
+<p>因此，为了初始化<code>recvCond</code>这个条件变量，我们需要的是<code>lock</code>变量中的读锁，并且还需要是<code>sync.Locker</code>类型的。</p>
+<p>可是，<code>lock</code>变量中用于对读锁进行锁定和解锁的方法却是<code>RLock</code>和<code>RUnlock</code>，它们与<code>sync.Locker</code>接口中定义的方法并不匹配。</p>
+<p>好在<code>sync.RWMutex</code>类型的<code>RLocker</code>方法可以实现这一需求。我们只要在调用<code>sync.NewCond</code>函数时，传入调用表达式<code>lock.RLocker()</code>的结果值，就可以使该函数返回符合要求的条件变量了。</p>
+<p>为什么说通过<code>lock.RLocker()</code>得来的值就是<code>lock</code>变量中的读锁呢？实际上，这个值所拥有的<code>Lock</code>方法和<code>Unlock</code>方法，在其内部会分别调用<code>lock</code>变量的<code>RLock</code>方法和<code>RUnlock</code>方法。也就是说，前两个方法仅仅是后两个方法的代理而已。</p>
+<p>好了，我们现在有四个变量。一个是代表信箱的<code>mailbox</code>，一个是代表信箱上的锁的<code>lock</code>。还有两个是，代表了蓝帽子小孩儿的<code>sendCond</code>，以及代表了红帽子小孩儿的<code>recvCond</code>。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/aab0f097ea5087f70aa565a7e8d3f33e.png" alt=""></p>
+<p>（互斥锁与条件变量）</p>
+<p>我，现在是一个 goroutine（携带的<code>go</code>函数），想要适时地向信箱里放置情报并通知你，应该怎么做呢？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lock.Lock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">for mailbox == 1 {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> sendCond.Wait()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mailbox = 1
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lock.Unlock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">recvCond.Signal()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我肯定需要先调用<code>lock</code>变量的<code>Lock</code>方法。注意，这个<code>Lock</code>方法在这里意味的是：持有信箱上的锁，并且有打开信箱的权利，而不是锁上这个锁。</p>
+<p>然后，我要检查<code>mailbox</code>变量的值是否等于<code>1</code>，也就是说，要看看信箱里是不是还存有情报。如果还有情报，那么我就回家去等蓝帽子小孩儿了。</p>
+<p>这就是那条<code>for</code>语句以及其中的调用表达式<code>sendCond.Wait()</code>所表示的含义了。你可能会问，为什么这里是<code>for</code>语句而不是<code>if</code>语句呢？我在后面会对此进行解释的。</p>
+<p>我们再往后看，如果信箱里没有情报，那么我就把新情报放进去，关上信箱、锁上锁，然后离开。用代码表达出来就是<code>mailbox = 1</code>和<code>lock.Unlock()</code>。</p>
+<p>离开之后我还要做一件事，那就是让红帽子小孩儿准时去你家楼下路过。也就是说，我会及时地通知你“信箱里已经有新情报了”，我们调用<code>recvCond</code>的<code>Signal</code>方法就可以实现这一步骤。</p>
+<p>另一方面，你现在是另一个 goroutine，想要适时地从信箱中获取情报，然后通知我。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lock.RLock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">for mailbox == 0 {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> recvCond.Wait()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">mailbox = 0
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">lock.RUnlock()
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">sendCond.Signal()
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你跟我做的事情在流程上其实基本一致，只不过每一步操作的对象是不同的。你需要调用的是<code>lock</code>变量的<code>RLock</code>方法。因为你要进行的是读操作，并且会使用<code>recvCond</code>变量作为辅助。<code>recvCond</code>与<code>lock</code>变量的读锁是对应的。</p>
+<p>在打开信箱后，你要关注的是信箱里是不是没有情报，也就是检查<code>mailbox</code>变量的值是否等于<code>0</code>。如果它确实等于<code>0</code>，那么你就需要回家去等红帽子小孩儿，也就是调用<code>recvCond</code>的<code>Wait</code>方法。这里使用的依然是<code>for</code>语句。</p>
+<p>如果信箱里有情报，那么你就应该取走情报，关上信箱、锁上锁，然后离开。对应的代码是<code>mailbox = 0</code>和<code>lock.RUnlock()</code>。之后，你还需要让蓝帽子小孩儿准时去我家楼下路过。这样我就知道信箱中的情报已经被你获取了。</p>
+<p>以上这些，就是对咱们俩要执行秘密任务的代码实现。其中的条件变量的用法需要你特别注意。</p>
+<p>再强调一下，只要条件不满足，我就会通过调用<code>sendCond</code>变量的<code>Wait</code>方法，去等待你的通知，只有在收到通知之后我才会再次检查信箱。</p>
+<p>另外，当我需要通知你的时候，我会调用<code>recvCond</code>变量的<code>Signal</code>方法。你使用这两个条件变量的方式正好与我相反。你可能也看出来了，利用条件变量可以实现单向的通知，而双向的通知则需要两个条件变量。这也是条件变量的基本使用规则。</p>
+<p>你可以打开 demo61.go 文件，看到上述例子的全部实现代码。</p>
+<h2 id="总结">总结</h2>
+<p>我们这两期的文章会围绕条件变量的内容展开，条件变量是基于互斥锁的一种同步工具，它必须有互斥锁的支撑才能发挥作用。条件变量可以协调那些想要访问共享资源的线程。当共享资源的状态发生变化时，它可以被用来通知被互斥锁阻塞的线程。我在文章举了一个两人访问信箱的例子，并用代码实现了这个过程。</p>
+<h2 id="思考题">思考题</h2>
+<p><code>*sync.Cond</code>类型的值可以被传递吗？那<code>sync.Cond</code>类型的值呢？</p>
+<p>感谢你的收听，我们下期再见。</p>
+<p><a href="./Golang%5FPuzzlers.md">戳此查看 Go 语言专栏文章配套详细代码。</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/6d035e7ef07f11a615a16b7e601fabe9.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/">Go语言核心36讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%85%A8%E6%A0%88%E5%B7%A5%E7%A8%8B%E5%B8%88%E4%BF%AE%E7%82%BC%E6%8C%87%E5%8D%97/27__%E7%89%B9%E5%88%AB%E6%94%BE%E9%80%81%E8%81%8A%E4%B8%80%E8%81%8A%E4%BB%A3%E7%A0%81%E5%AE%A1%E6%9F%A5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">27__特别放送：聊一聊代码审查</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A040%E8%AE%B2/27__%E4%B8%87%E8%83%BD%E6%A8%A1%E5%9E%8B%E6%A2%AF%E5%BA%A6%E6%8F%90%E5%8D%87%E4%B8%8E%E9%9A%8F%E6%9C%BA%E6%A3%AE%E6%9E%97/">
+            <span class="next-text nav-default">27__万能模型：梯度提升与随机森林</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

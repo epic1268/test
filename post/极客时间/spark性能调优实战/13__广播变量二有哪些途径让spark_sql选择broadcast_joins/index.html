@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>13__广播变量（二）：有哪些途径让Spark_SQL选择Broadcast_Joins？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是吴磊。
+上一讲我们说到，在数据关联场景中，广播变量是克制 Shuffle 的杀手锏，用 Broadcast Joins 取代 Shuffle Joins 可以大幅提升执行性能。但是，很多同学只会使用默认的广播变量，不会去调优。那么，我们该怎么保证 Spark 在运行时优先选择 Broadcast Joins 策略呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/13__%E5%B9%BF%E6%92%AD%E5%8F%98%E9%87%8F%E4%BA%8C%E6%9C%89%E5%93%AA%E4%BA%9B%E9%80%94%E5%BE%84%E8%AE%A9spark_sql%E9%80%89%E6%8B%A9broadcast_joins/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/13__%E5%B9%BF%E6%92%AD%E5%8F%98%E9%87%8F%E4%BA%8C%E6%9C%89%E5%93%AA%E4%BA%9B%E9%80%94%E5%BE%84%E8%AE%A9spark_sql%E9%80%89%E6%8B%A9broadcast_joins/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="13__广播变量（二）：有哪些途径让Spark_SQL选择Broadcast_Joins？">
+  <meta property="og:description" content="你好，我是吴磊。
+上一讲我们说到，在数据关联场景中，广播变量是克制 Shuffle 的杀手锏，用 Broadcast Joins 取代 Shuffle Joins 可以大幅提升执行性能。但是，很多同学只会使用默认的广播变量，不会去调优。那么，我们该怎么保证 Spark 在运行时优先选择 Broadcast Joins 策略呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Spark性能调优实战">
+
+  <meta itemprop="name" content="13__广播变量（二）：有哪些途径让Spark_SQL选择Broadcast_Joins？">
+  <meta itemprop="description" content="你好，我是吴磊。
+上一讲我们说到，在数据关联场景中，广播变量是克制 Shuffle 的杀手锏，用 Broadcast Joins 取代 Shuffle Joins 可以大幅提升执行性能。但是，很多同学只会使用默认的广播变量，不会去调优。那么，我们该怎么保证 Spark 在运行时优先选择 Broadcast Joins 策略呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4210">
+  <meta itemprop="keywords" content="Spark性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="13__广播变量（二）：有哪些途径让Spark_SQL选择Broadcast_Joins？">
+  <meta name="twitter:description" content="你好，我是吴磊。
+上一讲我们说到，在数据关联场景中，广播变量是克制 Shuffle 的杀手锏，用 Broadcast Joins 取代 Shuffle Joins 可以大幅提升执行性能。但是，很多同学只会使用默认的广播变量，不会去调优。那么，我们该怎么保证 Spark 在运行时优先选择 Broadcast Joins 策略呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">13__广播变量（二）：有哪些途径让Spark_SQL选择Broadcast_Joins？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4210 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#利用配置项强制广播">利用配置项强制广播</a></li>
+        <li><a href="#利用-api-强制广播">利用 API 强制广播</a>
+          <ul>
+            <li><a href="#用-join-hints-强制广播">用 Join Hints 强制广播</a></li>
+            <li><a href="#用-broadcast-函数强制广播">用 broadcast 函数强制广播</a></li>
+          </ul>
+        </li>
+        <li><a href="#广播变量不是银弹">广播变量不是银弹</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#每日一练">每日一练</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是吴磊。</p>
+<p>上一讲我们说到，在数据关联场景中，广播变量是克制 Shuffle 的杀手锏，用 Broadcast Joins 取代 Shuffle Joins 可以大幅提升执行性能。但是，很多同学只会使用默认的广播变量，不会去调优。那么，我们该怎么保证 Spark 在运行时优先选择 Broadcast Joins 策略呢？</p>
+<p>今天这一讲，我就围绕着数据关联场景，从配置项和开发 API 两个方面，帮你梳理出两类调优手段，让你能够游刃有余地运用广播变量。</p>
+<h2 id="利用配置项强制广播">利用配置项强制广播</h2>
+<p>我们先来从配置项的角度说一说，有哪些办法可以让 Spark 优先选择 Broadcast Joins。在 Spark SQL 配置项那一讲，我们提到过 spark.sql.autoBroadcastJoinThreshold 这个配置项。它的设置值是存储大小，默认是 10MB。它的含义是，**对于参与 Join 的两张表来说，任意一张表的尺寸小于 10MB，Spark 就在运行时采用 Broadcast Joins 的实现方式去做数据关联。**另外，AQE 在运行时尝试动态调整 Join 策略时，也是基于这个参数来判定过滤后的数据表是否足够小，从而把原本的 Shuffle Joins 调整为 Broadcast Joins。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/71d1f53ea6ba4169a5f742725bf7c7fa.png" alt=""></p>
+<p>为了方便你理解，我来举个例子。在数据仓库中，我们经常会看到两张表：一张是订单事实表，为了方便，我们把它记成 Fact；另一张是用户维度表，记成 Dim。事实表体量很大在 100GB 量级，维度表很小在 1GB 左右。两张表的 Schema 如下所示：</p>
+<p>//订单事实表 Schema<br>
+orderID: Int<br>
+userID: Int<br>
+trxDate: Timestamp<br>
+productId: Int<br>
+price: Float<br>
+volume: Int</p>
+<p>//用户维度表 Schema<br>
+userID: Int<br>
+name: String<br>
+age: Int<br>
+gender: String</p>
+<p>当 Fact 表和 Dim 表基于 userID 做关联的时候，由于两张表的尺寸大小都远超 spark.sql.autoBroadcastJoinThreshold 参数的默认值 10MB，因此 Spark 不得不选择 Shuffle Joins 的实现方式。但如果我们把这个参数的值调整为 2GB，因为 Dim 表的尺寸比 2GB 小，所以，Spark 在运行时会选择把 Dim 表封装到广播变量里，并采用 Broadcast Join 的方式来完成两张表的数据关联。</p>
+<p>显然，对于绝大多数的 Join 场景来说，autoBroadcastJoinThreshold 参数的默认值 10MB 太低了，因为现在企业的数据体量都在 TB，甚至 PB 级别。因此，想要有效地利用 Broadcast Joins，我们需要把参数值调大，一般来说，2GB 左右是个不错的选择。</p>
+<p>现在我们已经知道了，<strong>使用广播阈值配置项让 Spark 优先选择 Broadcast Joins 的关键，就是要确保至少有一张表的存储尺寸小于广播阈值</strong>。</p>
+<p>但是，在设置广播阈值的时候，不少同学都跟我抱怨：“我的数据量明明小于 autoBroadcastJoinThreshold 参数设定的广播阈值，为什么 Spark SQL 在运行时并没有选择 Broadcast Joins 呢？”</p>
+<p>详细了解后我才知道，这些同学所说的数据量，<strong>其实指的是数据表在磁盘上的存储大小</strong>，比如用<code>ls</code>或是<code>du -sh</code>等系统命令查看文件得到的结果。要知道，同一份数据在内存中的存储大小往往会比磁盘中的存储大小膨胀数倍，甚至十数倍。这主要有两方面原因。</p>
+<p>一方面，为了提升存储和访问效率，开发者一般采用 Parquet 或是 ORC 等压缩格式把数据落盘。这些高压缩比的磁盘数据展开到内存之后，数据量往往会翻上数倍。</p>
+<p>另一方面，受限于对象管理机制，在堆内内存中，JVM 往往需要比数据原始尺寸更大的内存空间来存储对象。</p>
+<p>我们来举个例子，字符串“abcd”按理说只需要消耗 4 个字节，但是，JVM 在堆内存储这 4 个字符串总共需要消耗 48 个字节！那在运行时，一份看上去不大的磁盘数据展开到内存，翻上个 4、5 倍并不稀奇。因此，如果你按照磁盘上的存储大小去配置 autoBroadcastJoinThreshold 广播阈值，大概率也会遇到同样的窘境。</p>
+<p><strong>那么问题来了，有什么办法能准确地预估一张表在内存中的存储大小呢？</strong></p>
+<p>首先，我们要避开一个坑。我发现，有很多资料推荐用 Spark 内置的 SizeEstimator 去预估分布式数据集的存储大小。结合多次实战和踩坑经验，咱们必须要指出，<strong>SizeEstimator 的估算结果不准确</strong>。因此，你可以直接跳过这种方法，这也能节省你调优的时间和精力。</p>
+<p>我认为比较靠谱的办法是：<strong>第一步，把要预估大小的数据表缓存到内存，比如直接在 DataFrame 或是 Dataset 上调用 cache 方法；第二步，读取 Spark SQL 执行计划的统计数据</strong>。这是因为，Spark SQL 在运行时，就是靠这些统计数据来制定和调整执行策略的。</p>
+<p>val df: DataFrame = _<br>
+df.cache.count</p>
+<p>val plan = df.queryExecution.logical<br>
+val estimated: BigInt = spark<br>
+.sessionState<br>
+.executePlan(plan)<br>
+.optimizedPlan<br>
+.stats<br>
+.sizeInBytes</p>
+<p>你可能会说：“这种办法虽然精确，但是这么做，实际上已经是在运行时进行调优了。把数据先缓存到内存，再去计算它的存储尺寸，当然更准确了。”没错，采用这种计算方式，调优所需花费的时间和精力确实更多，但在很多情况下，尤其是 Shuffle Joins 的执行效率让你痛不欲生的时候，这样的付出是值得的。</p>
+<h2 id="利用-api-强制广播">利用 API 强制广播</h2>
+<p>既然数据量的预估这么麻烦，有没有什么办法，不需要配置广播阈值，就可以让 Spark SQL 选择 Broadcast Joins？还真有，而且办法还不止一种。</p>
+<p>开发者可以通过 Join Hints 或是 SQL functions 中的 broadcast 函数，来强制 Spark SQL 在运行时采用 Broadcast Joins 的方式做数据关联。下面我就来分别讲一讲它们的含义和作用，以及该如何使用。必须要说明的是，这两种方式是等价的，并无优劣之分，只不过有了多样化的选择之后，你就可以根据自己的偏好和习惯来灵活地进行开发。</p>
+<h3 id="用-join-hints-强制广播">用 Join Hints 强制广播</h3>
+<p>Join Hints 中的 Hints 表示“提示”，它指的是在开发过程中使用特殊的语法，明确告知 Spark SQL 在运行时采用哪种 Join 策略。一旦你启用了 Join Hints，不管你的数据表是不是满足广播阈值，Spark SQL 都会尽可能地尊重你的意愿和选择，使用 Broadcast Joins 去完成数据关联。</p>
+<p>我们来举个例子，假设有两张表，一张表的内存大小在 100GB 量级，另一张小一些，2GB 左右。在广播阈值被设置为 2GB 的情况下，并没有触发 Broadcast Joins，但我们又不想花费时间和精力去精确计算小表的内存占用到底是多大。在这种情况下，我们就可以用 Join Hints 来帮我们做优化，仅仅几句提示就可以帮我们达到目的。</p>
+<p>val table1: DataFrame = spark.read.parquet(path1)<br>
+val table2: DataFrame = spark.read.parquet(path2)<br>
+table1.createOrReplaceTempView(&ldquo;t1&rdquo;)<br>
+table2.createOrReplaceTempView(&ldquo;t2&rdquo;)</p>
+<p>val query: String = “select /*+ broadcast(t2) */ * from t1 inner join t2 on t1.key = t2.key”<br>
+val queryResutls: DataFrame = spark.sql(query)</p>
+<p>你看，在上面的代码示例中，只要在 SQL 结构化查询语句里面加上一句<code>/*+ broadcast(t2) */</code>提示，我们就可以强制 Spark SQL 对小表 t2 进行广播，在运行时选择 Broadcast Joins 的实现方式。提示语句中的关键字，除了使用 broadcast 外，我们还可以用 broadcastjoin 或者 mapjoin，它们实现的效果都一样。</p>
+<p>如果你不喜欢用 SQL 结构化查询语句，尤其不想频繁地在 Spark SQL 上下文中注册数据表，你也可以在 DataFrame 的 DSL 语法中使用 Join Hints。</p>
+<p>table1.join(table2.hint(“broadcast”), Seq(“key”), “inner”)</p>
+<p>在上面的 DSL 语句中，我们只要在 table2 上调用 hint 方法，然后指定 broadcast 关键字，就可以同样达到强制广播表 2 的效果。</p>
+<p>总之，Join Hints 让开发者可以灵活地选择运行时的 Join 策略，对于熟悉业务、了解数据的同学来说，Join Hints 允许开发者把专家经验凌驾于 Spark SQL 的优化引擎之上，更好地服务业务。</p>
+<p>不过，Join Hints 也有个小缺陷。如果关键字拼写错误，Spark SQL 在运行时并不会显示地抛出异常，而是默默地忽略掉拼写错误的 hints，假装它压根不存在。因此，在使用 Join Hints 的时候，需要我们在编译时自行确认 Debug 和纠错。</p>
+<h3 id="用-broadcast-函数强制广播">用 broadcast 函数强制广播</h3>
+<p>如果你不想等到运行时才发现问题，想让编译器帮你检查类似的拼写错误，那么你可以使用强制广播的第二种方式：broadcast 函数。这个函数是类库 org.apache.spark.sql.functions 中的 broadcast 函数。调用方式非常简单，比 Join Hints 还要方便，只需要用 broadcast 函数封装需要广播的数据表即可，如下所示。</p>
+<p>import org.apache.spark.sql.functions.broadcast<br>
+table1.join(broadcast(table2), Seq(“key”), “inner”)</p>
+<p>你可能会问：“既然开发者可以通过 Join Hints 和 broadcast 函数强制 Spark SQL 选择 Broadcast Joins，那我是不是就可以不用理会广播阈值的配置项了？”其实还真不是。我认为，<strong>以广播阈值配置为主，以强制广播为辅</strong>，往往是不错的选择。</p>
+<p>**广播阈值的设置，更多的是把选择权交给 Spark SQL，尤其是在 AQE 的机制下，动态 Join 策略调整需要这样的设置在运行时做出选择。强制广播更多的是开发者以专家经验去指导 Spark SQL 该如何选择运行时策略。**二者相辅相成，并不冲突，开发者灵活地运用就能平衡 Spark SQL 优化策略与专家经验在应用中的比例。</p>
+<h2 id="广播变量不是银弹">广播变量不是银弹</h2>
+<p>不过，虽然我们一直在强调，数据关联场景中广播变量是克制 Shuffle 的杀手锏，但广播变量并不是银弹。</p>
+<p>就像有的同学会说：“开发者有这么多选项，甚至可以强制 Spark 选择 Broadcast Joins，那我们是不是可以把所有 Join 操作都用 Broadcast Joins 来实现？”答案当然是否定的，广播变量不能解决所有的数据关联问题。</p>
+<p>**首先，从性能上来讲，Driver 在创建广播变量的过程中，需要拉取分布式数据集所有的数据分片。**在这个过程中，网络开销和 Driver 内存会成为性能隐患。广播变量尺寸越大，额外引入的性能开销就会越多。更何况，如果广播变量大小超过 8GB，Spark 会直接抛异常中断任务执行。</p>
+<p>**其次，从功能上来讲，并不是所有的 Joins 类型都可以转换为 Broadcast Joins。**一来，Broadcast Joins 不支持全连接（Full Outer Joins）；二来，在所有的数据关联中，我们不能广播基表。或者说，即便开发者强制广播基表，也无济于事。比如说，在左连接（Left Outer Join）中，我们只能广播右表；在右连接（Right Outer Join）中，我们只能广播左表。在下面的代码中，即便我们强制用 broadcast 函数进行广播，Spark SQL 在运行时还是会选择 Shuffle Joins。</p>
+<p>import org.apache.spark.sql.functions.broadcast<br>
+broadcast (table1).join(table2, Seq(“key”), “left”)<br>
+table1.join(broadcast(table2), Seq(“key”), “right”)</p>
+<h2 id="小结">小结</h2>
+<p>这一讲，我们总结了 2 种方法，让 Spark SQL 在运行时能够选择 Broadcast Joins 策略，分别是设置配置项和用 API 强制广播。</p>
+<p>**首先，设置配置项主要是设置 autoBroadcastJoinThreshold 配置项。**开发者通过这个配置项指示 Spark SQL 优化器。只要参与 Join 的两张表中，有一张表的尺寸小于这个参数值，就在运行时采用 Broadcast Joins 的实现方式。</p>
+<p>为了让 Spark SQL 采用 Broadcast Joins，开发者要做的，就是让数据表在内存中的尺寸小于 autoBroadcastJoinThreshold 参数的设定值。</p>
+<p>除此之外，在设置广播阈值的时候，因为磁盘数据展开到内存的时候，存储大小会成倍增加，往往导致 Spark SQL 无法采用 Broadcast Joins 的策略。因此，我们在做数据关联的时候，还要先预估一张表在内存中的存储大小。一种精确的预估方法是先把 DataFrame 缓存，然后读取执行计划的统计数据。</p>
+<p>**其次，用 API 强制广播有两种方法，分别是设置 Join Hints 和用 broadcast 函数。**设置 Join Hints 的方法就是在 SQL 结构化查询语句里面加上一句“/*+ broadcast(某表) */”的提示就可以了，这里的 broadcast 关键字也可以换成 broadcastjoin 或者 mapjoin。另外，你也可以在 DataFrame 的 DSL 语法中使用调用 hint 方法，指定 broadcast 关键字，来达到同样的效果。设置 broadcast 函数的方法非常简单，只要用 broadcast 函数封装需要广播的数据表就可以了。</p>
+<p>总的来说，不管是设置配置项还是用 API 强制广播都有各自的优缺点，所以，<strong>以广播阈值配置为主、强制广播为辅</strong>，往往是一个不错的选择。</p>
+<p>最后，不过，我们也要注意，广播变量不是银弹，它并不能解决所有的数据关联问题，所以在日常的开发工作中，你要注意避免滥用广播。</p>
+<h2 id="每日一练">每日一练</h2>
+<ol>
+<li>除了 broadcast 关键字外，在 Spark 3.0 版本中，Join Hints 还支持哪些关联类型和关键字？</li>
+<li>DataFrame 可以用 sparkContext.broadcast 函数来广播吗？它和 org.apache.spark.sql.functions.broadcast 函数之间的区别是什么？</li>
+</ol>
+<p>期待在留言区看到你的思考和答案，我们下一讲见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Spark性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%91%84%E5%BD%B1%E5%85%A5%E9%97%A8%E8%AF%BE/13__%E5%85%89%E4%B8%8B%E9%97%AA%E5%85%89%E7%81%AF%E6%98%AF%E5%9B%A0%E4%B8%BA%E7%8E%AF%E5%A2%83%E5%A4%AA%E6%9A%97%E6%89%80%E4%BB%A5%E7%85%A7%E4%BA%AE%E5%84%BF%E7%94%A8%E7%9A%84%E4%B9%88/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">13__光（下）：闪光灯是因为环境太暗所以照亮儿用的么？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E5%B9%B6%E5%8F%91%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A140%E9%97%AE/13__%E7%BC%93%E5%AD%98%E7%9A%84%E4%BD%BF%E7%94%A8%E5%A7%BF%E5%8A%BF%E4%B8%80%E5%A6%82%E4%BD%95%E9%80%89%E6%8B%A9%E7%BC%93%E5%AD%98%E7%9A%84%E8%AF%BB%E5%86%99%E7%AD%96%E7%95%A5/">
+            <span class="next-text nav-default">13__缓存的使用姿势（一）：如何选择缓存的读写策略？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

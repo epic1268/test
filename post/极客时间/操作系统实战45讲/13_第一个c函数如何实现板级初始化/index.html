@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>13_第一个C函数：如何实现板级初始化？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是 LMOS。
+前面三节课，我们为调用 Cosmos 的**第一个 C 函数 hal_start 做了大量工作。**这节课我们要让操作系统 Cosmos 里的第一个 C 函数真正跑起来啦，也就是说，我们会真正进入到我们的内核中。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/13_%E7%AC%AC%E4%B8%80%E4%B8%AAc%E5%87%BD%E6%95%B0%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%9D%BF%E7%BA%A7%E5%88%9D%E5%A7%8B%E5%8C%96/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/13_%E7%AC%AC%E4%B8%80%E4%B8%AAc%E5%87%BD%E6%95%B0%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%9D%BF%E7%BA%A7%E5%88%9D%E5%A7%8B%E5%8C%96/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="13_第一个C函数：如何实现板级初始化？">
+  <meta property="og:description" content="你好，我是 LMOS。
+前面三节课，我们为调用 Cosmos 的**第一个 C 函数 hal_start 做了大量工作。**这节课我们要让操作系统 Cosmos 里的第一个 C 函数真正跑起来啦，也就是说，我们会真正进入到我们的内核中。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="操作系统实战45讲">
+
+  <meta itemprop="name" content="13_第一个C函数：如何实现板级初始化？">
+  <meta itemprop="description" content="你好，我是 LMOS。
+前面三节课，我们为调用 Cosmos 的**第一个 C 函数 hal_start 做了大量工作。**这节课我们要让操作系统 Cosmos 里的第一个 C 函数真正跑起来啦，也就是说，我们会真正进入到我们的内核中。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="8462">
+  <meta itemprop="keywords" content="操作系统实战45讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="13_第一个C函数：如何实现板级初始化？">
+  <meta name="twitter:description" content="你好，我是 LMOS。
+前面三节课，我们为调用 Cosmos 的**第一个 C 函数 hal_start 做了大量工作。**这节课我们要让操作系统 Cosmos 里的第一个 C 函数真正跑起来啦，也就是说，我们会真正进入到我们的内核中。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">13_第一个C函数：如何实现板级初始化？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 8462 字 </span>
+          <span class="more-meta"> 预计阅读 17 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#第一个-c-函数">第一个 C 函数</a>
+          <ul>
+            <li><a href="#hal-层初始化">hal 层初始化</a></li>
+            <li><a href="#进入内核层">进入内核层</a></li>
+          </ul>
+        </li>
+        <li><a href="#重点回顾">重点回顾</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是 LMOS。</p>
+<p>前面三节课，我们为调用 Cosmos 的**第一个 C 函数 hal_start 做了大量工作。**这节课我们要让操作系统 Cosmos 里的第一个 C 函数真正跑起来啦，也就是说，我们会真正进入到我们的内核中。</p>
+<p>今天我们会继续在这个 hal_start 函数里，首先执行板级初始化，其实就是 hal 层（硬件抽象层，下同）初始化，其中执行了平台初始化，hal 层的内存初始化，中断初始化，最后进入到内核层的初始化。</p>
+<p>这节课的配套代码，你可以从这里下载。</p>
+<h2 id="第一个-c-函数">第一个 C 函数</h2>
+<p>任何软件工程，第一个函数总是简单的，因为它是总调用者，像是一个管理者，坐在那里发号施令，自己却是啥活也不干。</p>
+<p>由于这是第一个 C 函数，也是初始化函数，我们还是要为它单独建立一个文件，以显示对它的尊重，依然在 Cosmos/hal/x86/ 下建立一个 hal_start.c 文件。写上这样一个函数。</p>
+<p>void hal_start()<br>
+{<br>
+//第一步：初始化 hal 层<br>
+//第二步：初始化内核层<br>
+for(;;);<br>
+return;<br>
+}</p>
+<p>根据前面的设计，Cosmos 是有 hal 层和内核层之分，所以在上述代码中，要分两步走。第一步是初始化 hal 层；第二步，初始化内核层。只是这两步的函数我们还没有写。</p>
+<p>然而最后的死循环却有点奇怪，其实它的目的很简单，就是避免这个函数返回，因为这个返回了就无处可去，避免走回头路。</p>
+<h3 id="hal-层初始化">hal 层初始化</h3>
+<p>为了分离硬件的特性，我们设计了 hal 层，把硬件相关的操作集中在这个层，并向上提供接口，目的是让内核上层不用关注硬件相关的细节，也能方便以后移植和扩展。(关于 hal 层的设计，可以回顾第 3 节课)</p>
+<p>也许今天我们是在 x86 平台上写 Cosmos，明天就要在 ARM 平台上开发 Cosmos，那时我们就可以写个 ARM 平台的 hal 层，来替换 Cosmos 中的 x86 平台的 hal 层。</p>
+<p>下面我们在 Cosmos/hal/x86/ 下建立一个 halinit.c 文件，写出 hal 层的初始化函数。</p>
+<p>void init_hal()<br>
+{<br>
+//初始化平台<br>
+//初始化内存<br>
+//初始化中断<br>
+return;<br>
+}</p>
+<p>这个函数也是一个调用者，没怎么干活。不过根据代码的注释能看出，它调用的函数多一点，但主要是完成初始化平台、初始化内存、初始化中断的功能函数。</p>
+<h4 id="初始化平台">初始化平台</h4>
+<p>我们先来写好平台初始化函数，因为它需要最先被调用。</p>
+<p>这个函数主要负责完成两个任务，一是<strong>把二级引导器建立的机器信息结构复制到 hal 层中的一个全局变量中</strong>，方便内核中的其它代码使用里面的信息，之后二级引导器建立的数据所占用的内存都会被释放。二是要<strong>初始化图形显示驱动</strong>，内核在运行过程要在屏幕上输出信息。</p>
+<p>下面我们在 Cosmos/hal/x86/ 下建立一个 halplatform.c 文件，写上如下代码。</p>
+<p>void machbstart_t_init(machbstart_t *initp)<br>
+{<br>
+//清零<br>
+memset(initp, 0, sizeof(machbstart_t));<br>
+return;<br>
+}</p>
+<p>void init_machbstart()<br>
+{<br>
+machbstart_t *kmbsp = &amp;kmachbsp;<br>
+machbstart_t *smbsp = MBSPADR;//物理地址 1MB 处<br>
+machbstart_t_init(kmbsp);<br>
+//复制，要把地址转换成虚拟地址<br>
+memcopy((void *)phyadr_to_viradr((adr_t)smbsp), (void *)kmbsp, sizeof(machbstart_t));<br>
+return;<br>
+}<br>
+//平台初始化函数<br>
+void init_halplaltform()<br>
+{<br>
+//复制机器信息结构<br>
+init_machbstart();<br>
+//初始化图形显示驱动<br>
+init_bdvideo();<br>
+return;<br>
+}</p>
+<p>这个代码中别的地方很好理解，就是 kmachbsp 你可能会有点奇怪，它是个结构体变量，结构体类型是 machbstart_t，这个结构和二级引导器所使用的一模一样。</p>
+<p>同时，它还是一个 hal 层的全局变量，我们想专门有个文件定义所有 hal 层的全局变量，于是我们在 Cosmos/hal/x86/ 下建立一个 halglobal.c 文件，写上如下代码。</p>
+<p>//全局变量定义变量放在 data 段<br>
+#define HAL_DEFGLOB_VARIABLE(vartype,varname) \<br>
+EXTERN  <strong>attribute</strong>((section(&quot;.data&quot;))) vartype varname</p>
+<p>HAL_DEFGLOB_VARIABLE(machbstart_t,kmachbsp);</p>
+<p>前面的 EXTERN，在 halglobal.c 文件中定义为空，而在其它文件中定义为 extern，告诉编译器这是外部文件的变量，避免发生错误。</p>
+<p>下面，我们在 Cosmos/hal/x86/ 下的 bdvideo.c 文件中，写好 init_bdvideo 函数。</p>
+<p>void init_bdvideo()<br>
+{<br>
+dftgraph_t *kghp = &amp;kdftgh;<br>
+//初始化图形数据结构，里面放有图形模式，分辨率，图形驱动函数指针<br>
+init_dftgraph();<br>
+//初始 bga 图形显卡的函数指针<br>
+init_bga();<br>
+//初始 vbe 图形显卡的函数指针<br>
+init_vbe();<br>
+//清空屏幕 为黑色<br>
+fill_graph(kghp, BGRA(0, 0, 0));<br>
+//显示背景图片<br>
+set_charsdxwflush(0, 0);<br>
+hal_background();<br>
+return;<br>
+}</p>
+<p>init_defgraph() 函数初始了 dftgraph_t 结构体类型的变量 kdftgh，我们在 halglobal.c 文件中定义这个变量，结构类型我们这样来定义。</p>
+<p>typedef struct s_DFTGRAPH<br>
+{<br>
+u64_t gh_mode;         //图形模式<br>
+u64_t gh_x;            //水平像素点<br>
+u64_t gh_y;            //垂直像素点<br>
+u64_t gh_framphyadr;   //显存物理地址<br>
+u64_t gh_fvrmphyadr;   //显存虚拟地址<br>
+u64_t gh_fvrmsz;       //显存大小<br>
+u64_t gh_onepixbits;   //一个像素字占用的数据位数<br>
+u64_t gh_onepixbyte;<br>
+u64_t gh_vbemodenr;    //vbe 模式号<br>
+u64_t gh_bank;         //显存的 bank 数<br>
+u64_t gh_curdipbnk;    //当前 bank<br>
+u64_t gh_nextbnk;      //下一个 bank<br>
+u64_t gh_banksz;       //bank 大小<br>
+u64_t gh_fontadr;      //字库地址<br>
+u64_t gh_fontsz;       //字库大小<br>
+u64_t gh_fnthight;     //字体高度<br>
+u64_t gh_nxtcharsx;    //下一字符显示的 x 坐标<br>
+u64_t gh_nxtcharsy;    //下一字符显示的 y 坐标<br>
+u64_t gh_linesz;       //字符行高<br>
+pixl_t gh_deffontpx;   //默认字体大小<br>
+u64_t gh_chardxw;<br>
+u64_t gh_flush;<br>
+u64_t gh_framnr;<br>
+u64_t gh_fshdata;      //刷新相关的<br>
+dftghops_t gh_opfun;   //图形驱动操作函数指针结构体<br>
+}dftgraph_t;<br>
+typedef struct s_DFTGHOPS<br>
+{<br>
+//读写显存数据<br>
+size_t (<em>dgo_read)(void</em> ghpdev,void* outp,size_t rdsz);<br>
+size_t (<em>dgo_write)(void</em> ghpdev,void* inp,size_t wesz);<br>
+sint_t (<em>dgo_ioctrl)(void</em> ghpdev,void* outp,uint_t iocode);<br>
+//刷新<br>
+void   (<em>dgo_flush)(void</em> ghpdev);<br>
+sint_t (<em>dgo_set_bank)(void</em> ghpdev, sint_t bnr);<br>
+//读写像素<br>
+pixl_t (<em>dgo_readpix)(void</em> ghpdev,uint_t x,uint_t y);<br>
+void   (<em>dgo_writepix)(void</em> ghpdev,pixl_t pix,uint_t x,uint_t y);<br>
+//直接读写像素<br>
+pixl_t (<em>dgo_dxreadpix)(void</em> ghpdev,uint_t x,uint_t y);<br>
+void   (<em>dgo_dxwritepix)(void</em> ghpdev,pixl_t pix,uint_t x,uint_t y);<br>
+//设置 x，y 坐标和偏移<br>
+sint_t (<em>dgo_set_xy)(void</em> ghpdev,uint_t x,uint_t y);<br>
+sint_t (<em>dgo_set_vwh)(void</em> ghpdev,uint_t vwt,uint_t vhi);<br>
+sint_t (<em>dgo_set_xyoffset)(void</em> ghpdev,uint_t xoff,uint_t yoff);<br>
+//获取 x，y 坐标和偏移<br>
+sint_t (<em>dgo_get_xy)(void</em> ghpdev,uint_t* rx,uint_t* ry);<br>
+sint_t (<em>dgo_get_vwh)(void</em> ghpdev,uint_t* rvwt,uint_t* rvhi);<br>
+sint_t (<em>dgo_get_xyoffset)(void</em> ghpdev,uint_t* rxoff,uint_t* ryoff);<br>
+}dftghops_t;<br>
+//刷新显存<br>
+void flush_videoram(dftgraph_t *kghp)<br>
+{<br>
+kghp-&gt;gh_opfun.dgo_flush(kghp);<br>
+return;<br>
+}</p>
+<p>不难发现，我们正是把这些实际的图形驱动函数的地址填入了这个结构体中，然后通过这个结构体，我们就可以调用到相应的函数了。</p>
+<p>因为写这些函数都是体力活，我已经帮你搞定了，你直接使用就可以。上面的 flush_videoram 函数已经证明了这一想法。</p>
+<p>来，我们测试一下，看看结果，我们图形驱动程序初始化会显示背景图片——background.bmp，这是在打包映像文件时包含进去的，你自己可以随时替换，只要是满足 <strong>1024*768，24 位的位图文件</strong>就行了。</p>
+<p>下面我们要把这些函数调用起来：</p>
+<p>//在 halinit.c 文件中<br>
+void init_hal()<br>
+{<br>
+init_halplaltform();<br>
+return;<br>
+}<br>
+//在 hal_start.c 文件中<br>
+void hal_start()<br>
+{<br>
+init_hal();//初始化 hal 层，其中会调用初始化平台函数，在那里会调用初始化图形驱动<br>
+for(;;);<br>
+return;<br>
+}</p>
+<p>接下来，让我们一起 make vboxtest，应该很有成就感。一幅风景图呈现在我们面前，上面有 Cosmos 的版本、编译时间、CPU 工作模式，内存大小等数据。这相当一个我们 Cosmos 的水印信息。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/964c32a3155be29b82f70fb9227f692d.png" alt=""></p>
+<p>图形驱动测试</p>
+<h4 id="初始化内存">初始化内存</h4>
+<p>首先，我们在 Cosmos/hal/x86/ 下建立一个 halmm.c 文件，用于初始化内存，为了后面的内存管理器作好准备。</p>
+<p>hal 层的内存初始化比较容易，只要向内存管理器提供内存空间布局信息就可以。</p>
+<p>你可能在想，不对啊，明明我们在二级引导器中已经获取了内存布局信息，是的，<strong>但 Cosmos 的内存管理器需要保存更多的信息，最好是顺序的内存布局信息，这样可以增加额外的功能属性，同时降低代码的复杂度。</strong></p>
+<p>不难发现，BIOS 提供的结构无法满足前面这些要求。不过我们也有办法解决，只要以 BIOS 提供的结构为基础，设计一套新的数据结构就搞定了。这个结构可以这样设计。</p>
+<p>#define PMR_T_OSAPUSERRAM 1<br>
+#define PMR_T_RESERVRAM 2<br>
+#define PMR_T_HWUSERRAM 8<br>
+#define PMR_T_ARACONRAM 0xf<br>
+#define PMR_T_BUGRAM 0xff<br>
+#define PMR_F_X86_32 (1&laquo;0)<br>
+#define PMR_F_X86_64 (1&laquo;1)<br>
+#define PMR_F_ARM_32 (1&laquo;2)<br>
+#define PMR_F_ARM_64 (1&laquo;3)<br>
+#define PMR_F_HAL_MASK 0xff</p>
+<p>typedef struct s_PHYMMARGE<br>
+{<br>
+spinlock_t pmr_lock;//保护这个结构是自旋锁<br>
+u32_t pmr_type;     //内存地址空间类型<br>
+u32_t pmr_stype;<br>
+u32_t pmr_dtype;    //内存地址空间的子类型，见上面的宏<br>
+u32_t pmr_flgs;     //结构的标志与状态<br>
+u32_t pmr_stus;<br>
+u64_t pmr_saddr;    //内存空间的开始地址<br>
+u64_t pmr_lsize;    //内存空间的大小<br>
+u64_t pmr_end;      //内存空间的结束地址<br>
+u64_t pmr_rrvmsaddr;//内存保留空间的开始地址<br>
+u64_t pmr_rrvmend;  //内存保留空间的结束地址<br>
+void* pmr_prip;     //结构的私有数据指针，以后扩展所用<br>
+void* pmr_extp;     //结构的扩展数据指针，以后扩展所用<br>
+}phymmarge_t;</p>
+<p>有些情况下内核要另起炉灶，不想把所有的内存空间都交给内存管理器去管理，所以要保留一部分内存空间，这就是上面结构中那两个 pmr_rrvmsaddr、pmr_rrvmend 字段的作用。</p>
+<p>有了数据结构，我们还要写代码来操作它：</p>
+<p>u64_t initpmrge_core(e820map_t *e8sp, u64_t e8nr, phymmarge_t *pmargesp)<br>
+{<br>
+u64_t retnr = 0;<br>
+for (u64_t i = 0; i &lt; e8nr; i++)<br>
+{<br>
+//根据一个 e820map_t 结构建立一个 phymmarge_t 结构<br>
+if (init_one_pmrge(&amp;e8sp[i], &amp;pmargesp[i]) == FALSE)<br>
+{<br>
+return retnr;<br>
+}<br>
+retnr++;<br>
+}<br>
+return retnr;<br>
+}<br>
+void init_phymmarge()<br>
+{<br>
+machbstart_t *mbsp = &amp;kmachbsp;<br>
+phymmarge_t *pmarge_adr = NULL;<br>
+u64_t pmrgesz = 0;<br>
+//根据 machbstart_t 机器信息结构计算获得 phymmarge_t 结构的开始地址和大小<br>
+ret_phymmarge_adrandsz(mbsp, &amp;pmarge_adr, &amp;pmrgesz);<br>
+u64_t tmppmrphyadr = mbsp-&gt;mb_nextwtpadr;<br>
+e820map_t *e8p = (e820map_t *)((adr_t)(mbsp-&gt;mb_e820padr));<br>
+//建立 phymmarge_t 结构<br>
+u64_t ipmgnr = initpmrge_core(e8p, mbsp-&gt;mb_e820nr, pmarge_adr);<br>
+//把 phymmarge_t 结构的地址大小个数保存 machbstart_t 机器信息结构中<br>
+mbsp-&gt;mb_e820expadr = tmppmrphyadr;<br>
+mbsp-&gt;mb_e820exnr = ipmgnr;<br>
+mbsp-&gt;mb_e820exsz = ipmgnr * sizeof(phymmarge_t);<br>
+mbsp-&gt;mb_nextwtpadr = PAGE_ALIGN(mbsp-&gt;mb_e820expadr + mbsp-&gt;mb_e820exsz);<br>
+//phymmarge_t 结构中地址空间从低到高进行排序，我已经帮你写好了<br>
+phymmarge_sort(pmarge_adr, ipmgnr);<br>
+return;<br>
+}</p>
+<p>结合上面的代码，你会发现这是根据 e820map_t 结构数组，建立了一个 phymmarge_t 结构数组，init_one_pmrge 函数正是把 e820map_t 结构中的信息复制到 phymmarge_t 结构中来。理解了这个原理，即使不看我的，你自己也会写。</p>
+<p>下面我们把这些函数，用一个总管函数调动起来，这个总管函数叫什么名字好呢？当然是 init_halmm，如下所示。</p>
+<p>void init_halmm()<br>
+{<br>
+init_phymmarge();<br>
+//init_memmgr();<br>
+return;<br>
+}</p>
+<p>这里 init_halmm 函数中还调用了 init_memmgr 函数，这个正是这我们内存管理器初始化函数，我会在内存管理的那节课展开讲。而 init_halmm 函数将要被 init_hal 函数调用。</p>
+<h4 id="初始化中断">初始化中断</h4>
+<p>什么是中断呢？为了帮你快速理解，我们先来看两种情景：</p>
+<ol>
+<li>你在开车时，突然汽车引擎坏了，你需要修复它才能继续驾驶汽车……</li>
+<li>你在外旅游，你女朋友突然来电话了，你可以选择接电话或者不接电话，当然不接电话的后果很严重（笑）……</li>
+</ol>
+<p>在以上两种情景中，虽然不十分恰当，但都是在做一件事时，因为一些原因而要切换到另一件事上。其实计算机中的 CPU 也是一样，在做一件事时，因为一些原因要转而做另一件事，于是中断产生了……</p>
+<p>根据原因的类型不同，中断被分为两类。</p>
+<p>异常，这是同步的，原因是错误和故障，就像汽车引擎坏了。不修复错误就不能继续运行，所以这时，CPU 会跳到这种错误的处理代码那里开始运行，运行完了会返回。</p>
+<p>为啥说它是同步的呢？这是因为如果不修改程序中的错误，下次运行程序到这里同样会发生异常。</p>
+<p>中断，这是异步的，我们通常说的中断就是这种类型，它是因为外部事件而产生的，就好像旅游时女朋友来电话了。通常设备需要 CPU 关注时，会给 CPU 发送一个中断信号，所以这时 CPU 会跳到处理这种事件的代码那里开始运行，运行完了会返回。</p>
+<p>由于不确定何种设备何时发出这种中断信号，所以它是异步的。</p>
+<p>在 x86 CPU 上，最多支持 256 个中断，还记得前面所说的中断表和中断门描述符吗，这意味着我们要准备 256 个中断门描述符和 256 个中断处理程序的入口。</p>
+<p>下面我们来定义它，如下所示：</p>
+<p>typedef struct s_GATE<br>
+{<br>
+u16_t   offset_low;     /* 偏移 <em>/<br>
+u16_t   selector;       /</em> 段选择子 <em>/<br>
+u8_t    dcount;         /</em> 该字段只在调用门描述符中有效。如果在利用调用门调用子程序时引起特权级的转换和堆栈的改变，需要将外层堆栈中的参数复制到内层堆栈。该双字计数字段就是用于说明这种情况发生时，要复制的双字参数的数量。<em>/<br>
+u8_t    attr;           /</em> P(1) DPL(2) DT(1) TYPE(4) <em>/<br>
+u16_t   offset_high;    /</em> 偏移的高位段 */<br>
+u32_t   offset_high_h;<br>
+u32_t   offset_resv;<br>
+}<strong>attribute</strong>((packed)) gate_t;<br>
+//定义中断表<br>
+HAL_DEFGLOB_VARIABLE(gate_t,x64_idt)[IDTMAX];</p>
+<p>说到这里你会发现，中断表其实是个 gate_t 结构的数组，由 CPU 的 IDTR 寄存器指向，IDTMAX 为 256。</p>
+<p>但是光有数组还不行，还要设置其中的数据，下面我们就来设计这个函数，建立一个文件 halsgdidt.c，在其中写一个函数，代码如下。</p>
+<p>//vector 向量也是中断号<br>
+//desc_type 中断门类型，中断门，陷阱门<br>
+//handler 中断处理程序的入口地址<br>
+//privilege 中断门的权限级别<br>
+void set_idt_desc(u8_t vector, u8_t desc_type, inthandler_t handler, u8_t privilege)<br>
+{<br>
+gate_t *p_gate = &amp;x64_idt[vector];<br>
+u64_t base = (u64_t)handler;<br>
+p_gate-&gt;offset_low = base &amp; 0xFFFF;<br>
+p_gate-&gt;selector = SELECTOR_KERNEL_CS;<br>
+p_gate-&gt;dcount = 0;<br>
+p_gate-&gt;attr = (u8_t)(desc_type | (privilege &laquo; 5));<br>
+p_gate-&gt;offset_high = (u16_t)((base &raquo; 16) &amp; 0xFFFF);<br>
+p_gate-&gt;offset_high_h = (u32_t)((base &raquo; 32) &amp; 0xffffffff);<br>
+p_gate-&gt;offset_resv = 0;<br>
+return;<br>
+}</p>
+<p>上面的代码，正是按照要求，把这些数据填入中断门描述符中的。有了中断门之后，还差中断处理程序，中断处理程序只负责这三件事：</p>
+<p>1. 保护 CPU 寄存器，即中断发生时的程序运行的上下文。</p>
+<p>2. 调用中断处理程序，这个程序可以是修复异常的，可以是设备驱动程序中对设备响应的程序。</p>
+<p>3. 恢复 CPU 寄存器，即恢复中断时程序运行的上下文，使程序继续运行。</p>
+<p>以上这些操作又要用汇编代码才可以编写，我觉得这是内核中最重要的部分，所以我们建立一个文件，并用 kernel.asm 命名。</p>
+<p>我们先来写好完成以上三个功能的汇编宏代码，避免写 256 遍同样的代码，代码如下所示。</p>
+<p>//保存中断后的寄存器<br>
+%macro  SAVEALL  0<br>
+push rax<br>
+push rbx<br>
+push rcx<br>
+push rdx<br>
+push rbp<br>
+push rsi<br>
+push rdi<br>
+push r8<br>
+push r9<br>
+push r10<br>
+push r11<br>
+push r12<br>
+push r13<br>
+push r14<br>
+push r15<br>
+xor r14,r14<br>
+mov r14w,ds<br>
+push r14<br>
+mov r14w,es<br>
+push r14<br>
+mov r14w,fs<br>
+push r14<br>
+mov r14w,gs<br>
+push r14<br>
+%endmacro<br>
+//恢复中断后寄存器<br>
+%macro  RESTOREALL  0<br>
+pop r14<br>
+mov gs,r14w<br>
+pop r14<br>
+mov fs,r14w<br>
+pop r14<br>
+mov es,r14w<br>
+pop r14<br>
+mov ds,r14w<br>
+pop r15<br>
+pop r14<br>
+pop r13<br>
+pop r12<br>
+pop r11<br>
+pop r10<br>
+pop r9<br>
+pop r8<br>
+pop rdi<br>
+pop rsi<br>
+pop rbp<br>
+pop rdx<br>
+pop rcx<br>
+pop rbx<br>
+pop rax<br>
+iretq<br>
+%endmacro<br>
+//保存异常下的寄存器<br>
+%macro  SAVEALLFAULT 0<br>
+push rax<br>
+push rbx<br>
+push rcx<br>
+push rdx<br>
+push rbp<br>
+push rsi<br>
+push rdi<br>
+push r8<br>
+push r9<br>
+push r10<br>
+push r11<br>
+push r12<br>
+push r13<br>
+push r14<br>
+push r15<br>
+xor r14,r14<br>
+mov r14w,ds<br>
+push r14<br>
+mov r14w,es<br>
+push r14<br>
+mov r14w,fs<br>
+push r14<br>
+mov r14w,gs<br>
+push r14<br>
+%endmacro<br>
+//恢复异常下寄存器<br>
+%macro  RESTOREALLFAULT  0<br>
+pop r14<br>
+mov gs,r14w<br>
+pop r14<br>
+mov fs,r14w<br>
+pop r14<br>
+mov es,r14w<br>
+pop r14<br>
+mov ds,r14w<br>
+pop r15<br>
+pop r14<br>
+pop r13<br>
+pop r12<br>
+pop r11<br>
+pop r10<br>
+pop r9<br>
+pop r8<br>
+pop rdi<br>
+pop rsi<br>
+pop rbp<br>
+pop rdx<br>
+pop rcx<br>
+pop rbx<br>
+pop rax<br>
+add rsp,8<br>
+iretq<br>
+%endmacro<br>
+//没有错误码 CPU 异常<br>
+%macro  SRFTFAULT 1<br>
+push    _NOERRO_CODE<br>
+SAVEALLFAULT<br>
+mov r14w,0x10<br>
+mov ds,r14w<br>
+mov es,r14w<br>
+mov fs,r14w<br>
+mov gs,r14w<br>
+mov   rdi,%1 ;rdi, rsi<br>
+mov   rsi,rsp<br>
+call   hal_fault_allocator<br>
+RESTOREALLFAULT<br>
+%endmacro<br>
+//CPU 异常<br>
+%macro  SRFTFAULT_ECODE 1<br>
+SAVEALLFAULT<br>
+mov r14w,0x10<br>
+mov ds,r14w<br>
+mov es,r14w<br>
+mov fs,r14w<br>
+mov gs,r14w<br>
+mov   rdi,%1<br>
+mov   rsi,rsp<br>
+call   hal_fault_allocator<br>
+RESTOREALLFAULT<br>
+%endmacro<br>
+//硬件中断<br>
+%macro  HARWINT  1<br>
+SAVEALL<br>
+mov r14w,0x10<br>
+mov ds,r14w<br>
+mov es,r14w<br>
+mov fs,r14w<br>
+mov gs,r14w<br>
+mov  rdi, %1<br>
+mov   rsi,rsp<br>
+call    hal_intpt_allocator<br>
+RESTOREALL<br>
+%endmacro</p>
+<p>别看前面的代码这么长，其实<strong>最重要的只有两个指令：push、pop</strong>，这两个正是用来压入寄存器和弹出寄存器的，正好可以用来保存和恢复 CPU 所有的通用寄存器。</p>
+<p>有的 CPU 异常，CPU 自动把异常码压入到栈中，而有的 CPU 异常没有异常码，<strong>为了统一，我们对没有异常码的手动压入一个常数，维持栈的平衡。</strong></p>
+<p>有了中断异常处理的宏，我们还要它们变成中断异常的处理程序入口点函数。汇编函数其实就是一个标号加一段汇编代码，C 编译器把 C 语言函数编译成汇编代码后，也是标号加汇编代码，函数名就是标号。</p>
+<p>下面我们在 kernel.asm 中写好它们：</p>
+<p>//除法错误异常 比如除 0<br>
+exc_divide_error:<br>
+SRFTFAULT 0<br>
+//单步执行异常<br>
+exc_single_step_exception:<br>
+SRFTFAULT 1<br>
+exc_nmi:<br>
+SRFTFAULT 2<br>
+//调试断点异常<br>
+exc_breakpoint_exception:<br>
+SRFTFAULT 3<br>
+//溢出异常<br>
+exc_overflow:<br>
+SRFTFAULT 4<br>
+//段不存在异常<br>
+exc_segment_not_present:<br>
+SRFTFAULT_ECODE 11<br>
+//栈异常<br>
+exc_stack_exception:<br>
+SRFTFAULT_ECODE 12<br>
+//通用异常<br>
+exc_general_protection:<br>
+SRFTFAULT_ECODE 13<br>
+//缺页异常<br>
+exc_page_fault:<br>
+SRFTFAULT_ECODE 14<br>
+hxi_exc_general_intpfault:<br>
+SRFTFAULT 256<br>
+//硬件 1～7 号中断<br>
+hxi_hwint00:<br>
+HARWINT  (INT_VECTOR_IRQ0+0)<br>
+hxi_hwint01:<br>
+HARWINT  (INT_VECTOR_IRQ0+1)<br>
+hxi_hwint02:<br>
+HARWINT  (INT_VECTOR_IRQ0+2)<br>
+hxi_hwint03:<br>
+HARWINT  (INT_VECTOR_IRQ0+3)<br>
+hxi_hwint04:<br>
+HARWINT  (INT_VECTOR_IRQ0+4)<br>
+hxi_hwint05:<br>
+HARWINT  (INT_VECTOR_IRQ0+5)<br>
+hxi_hwint06:<br>
+HARWINT  (INT_VECTOR_IRQ0+6)<br>
+hxi_hwint07:<br>
+HARWINT  (INT_VECTOR_IRQ0+7)</p>
+<p>为了突出重点，这里没有全部展示代码，你只用搞清原理就行了。那有了中断处理程序的入口地址，下面我们就可以在 halsgdidt.c 文件写出函数设置中断门描述符了，代码如下。</p>
+<p>void init_idt_descriptor()<br>
+{<br>
+//一开始把所有中断的处理程序设置为保留的通用处理程序<br>
+for (u16_t intindx = 0; intindx &lt;= 255; intindx++)<br>
+{<br>
+set_idt_desc((u8_t)intindx, DA_386IGate, hxi_exc_general_intpfault, PRIVILEGE_KRNL);<br>
+}<br>
+set_idt_desc(INT_VECTOR_DIVIDE, DA_386IGate, exc_divide_error, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_DEBUG, DA_386IGate, exc_single_step_exception, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_NMI, DA_386IGate, exc_nmi, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_BREAKPOINT, DA_386IGate, exc_breakpoint_exception, PRIVILEGE_USER);<br>
+set_idt_desc(INT_VECTOR_OVERFLOW, DA_386IGate, exc_overflow, PRIVILEGE_USER);<br>
+//篇幅所限，未全部展示<br>
+set_idt_desc(INT_VECTOR_PAGE_FAULT, DA_386IGate, exc_page_fault, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_IRQ0 + 0, DA_386IGate, hxi_hwint00, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_IRQ0 + 1, DA_386IGate, hxi_hwint01, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_IRQ0 + 2, DA_386IGate, hxi_hwint02, PRIVILEGE_KRNL);<br>
+set_idt_desc(INT_VECTOR_IRQ0 + 3, DA_386IGate, hxi_hwint03, PRIVILEGE_KRNL);<br>
+//篇幅所限，未全部展示<br>
+return;<br>
+}</p>
+<p>上面的代码已经很明显了，一开始把所有中断的处理程序设置为保留的通用处理程序，避免未知中断异常发生了 CPU 无处可去，然后对已知的中断和异常进一步设置，这会覆盖之前的通用处理程序，这样就可以确保万无一失。</p>
+<p>下面我们把这些代码整理一下，安装到具体的调用路径上，让上层调用者调用到就好了。</p>
+<p>我们依然在 halintupt.c 文件中写上 init_halintupt() 函数：</p>
+<p>void init_halintupt()<br>
+{<br>
+init_idt_descriptor();<br>
+init_intfltdsc();<br>
+return;<br>
+}</p>
+<p>到此为止，CPU 体系层面的中断就初始化完成了。你会发现，我们在 init_halintupt() 函数中还调用了 <strong>init_intfltdsc() 函数</strong>，这个函数是干什么的呢？请往下看。</p>
+<p>我们先来设计一下 Cosmos 的中断处理框架，后面我们把中断和异常统称为中断，因为它们的处理方式相同。</p>
+<p>前面我们只是解决了中断的 CPU 相关部分，而 CPU 只是响应中断，但是并不能解决产生中断的问题。</p>
+<p>比如缺页中断来了，我们要解决内存地址映射关系，程序才可以继续运行。再比如硬盘中断来了，我们要读取硬盘的数据，要处理这问题，就要写好相应的处理函数。</p>
+<p>因为有些处理是内核所提供的，而有些处理函数是设备驱动提供的，想让它们和中断关联起来，就要好好设计<strong>中断处理框架</strong>了。</p>
+<p>下面我们来画幅图，描述中断框架的设计：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/77dfd16a2d1ddb6f85c62832a0079e06.png" alt=""></p>
+<p>中断框架设计图</p>
+<p>可以看到，中断、异常分发器的左侧的东西我们已经处理完成，下面需要写好中断、异常分发器和中断异常描述符。</p>
+<p>我们先来搞定中断异常描述，结合框架图，中断异常描述也是个表，它在 C 语言中就是个结构数组，让我们一起来写好这个数组：</p>
+<p>typedef struct s_INTFLTDSC{   <br>
+spinlock_t  i_lock;   <br>
+u32_t       i_flg;   <br>
+u32_t       i_stus;   <br>
+uint_t      i_prity;        //中断优先级   <br>
+uint_t      i_irqnr;        //中断号   <br>
+uint_t      i_deep;         //中断嵌套深度   <br>
+u64_t       i_indx;         //中断计数   <br>
+list_h_t    i_serlist;      //也可以使用中断回调函数的方式<br>
+uint_t      i_sernr;        //中断回调函数个数  <br>
+list_h_t    i_serthrdlst;   //中断线程链表头   <br>
+uint_t      i_serthrdnr;    //中断线程个数   <br>
+void*       i_onethread;    //只有一个中断线程时直接用指针   <br>
+void*       i_rbtreeroot;   //如果中断线程太多则按优先级组成红黑树<br>
+list_h_t    i_serfisrlst;     <br>
+uint_t      i_serfisrnr;      <br>
+void*       i_msgmpool;     //可能的中断消息池   <br>
+void*       i_privp;   <br>
+void*       i_extp;<br>
+}intfltdsc_t;</p>
+<p>上面结构中，记录了中断了优先级。因为有些中断可以稍后执行，而有的中断需要紧急执行，所以要设计一个优先级。其中还有中断号，中断计数等统计信息。</p>
+<p>中断可以由线程的方式执行，也可以是一个回调函数，该函数的地址放另一个结构体中，这个结构体我已经帮你写好了，如下所示。</p>
+<p>typedef drvstus_t (<em>intflthandle_t)(uint_t ift_nr,void</em> device,void* sframe); //中断处理函数的指针类型<br>
+typedef struct s_INTSERDSC{   <br>
+list_h_t    s_list;        //在中断异常描述符中的链表<br>
+list_h_t    s_indevlst;    //在设备描述描述符中的链表<br>
+u32_t       s_flg;       <br>
+intfltdsc_t* s_intfltp;    //指向中断异常描述符<br>
+void*       s_device;      //指向设备描述符<br>
+uint_t      s_indx;   <br>
+intflthandle_t s_handle;   //中断处理的回调函数指针<br>
+}intserdsc_t;</p>
+<p>如果内核或者设备驱动程序要安装一个中断处理函数，就要先申请一个 intserdsc_t 结构体，然后把中断函数的地址写入其中，最后把这个结构挂载到对应的 intfltdsc_t 结构中的 i_serfisrlst 链表中。</p>
+<p>你可能要问了，为什么不能直接把中断处理函数放在 intfltdsc_t 结构中呢，还要多此一举搞个 intserdsc_t 结构体呢？</p>
+<p>这是因为我们的计算机中可能有很多设备，每个设备都可能产生中断，但是中断控制器的中断信号线是有限的。你可以这样理解：中断控制器最多只能产生几十号中断号，而设备不止几十个，所以会有多个设备共享一根中断信号线。</p>
+<p>这就导致一个中断发生后，无法确定是哪个设备产生的中断，所以我们干脆让设备驱动程序来决定，因为它是最了解设备的。</p>
+<p>这里我们让这个 intfltdsc_t 结构上的所有中断处理函数都依次执行，查看是不是自己的设备产生了中断，如果是就处理，不是则略过。</p>
+<p>好，明白了这两个结构之后，我们就要开始初始化了。首先是在 halglobal.c 文件定义 intfltdsc_t 结构。</p>
+<p>//定义 intfltdsc_t 结构数组大小为 256<br>
+HAL_DEFGLOB_VARIABLE(intfltdsc_t,machintflt)[IDTMAX];</p>
+<p>下面我们再来实现中断、异常分发器函数，如下所示。</p>
+<p>//中断处理函数<br>
+void hal_do_hwint(uint_t intnumb, void *krnlsframp)<br>
+{   <br>
+intfltdsc_t *ifdscp = NULL;   <br>
+cpuflg_t cpuflg;<br>
+//根据中断号获取中断异常描述符地址   <br>
+ifdscp = hal_retn_intfltdsc(intnumb);<br>
+//对断异常描述符加锁并中断   <br>
+hal_spinlock_saveflg_cli(&amp;ifdscp-&gt;i_lock, &amp;cpuflg);   <br>
+ifdscp-&gt;i_indx++;   <br>
+ifdscp-&gt;i_deep++;<br>
+//运行中断处理的回调函数<br>
+hal_run_intflthandle(intnumb, krnlsframp);   <br>
+ifdscp-&gt;i_deep&ndash;;<br>
+//解锁并恢复中断状态   <br>
+hal_spinunlock_restflg_sti(&amp;ifdscp-&gt;i_lock, &amp;cpuflg);   <br>
+return;<br>
+}<br>
+//异常分发器<br>
+void hal_fault_allocator(uint_t faultnumb, void *krnlsframp)<br>
+{<br>
+//我们的异常处理回调函数也是放在中断异常描述符中的<br>
+hal_do_hwint(faultnumb, krnlsframp);<br>
+return;<br>
+}<br>
+//中断分发器<br>
+void hal_hwint_allocator(uint_t intnumb, void *krnlsframp)<br>
+{<br>
+hal_do_hwint(intnumb, krnlsframp);<br>
+return;<br>
+}</p>
+<p>前面的代码确实是按照我们的中断框架设计实现的，下面我们去实现 hal_run_intflthandle 函数，它负责调用中断处理的回调函数。</p>
+<p>void hal_run_intflthandle(uint_t ifdnr, void *sframe)<br>
+{   <br>
+intserdsc_t *isdscp;   <br>
+list_h_t *lst;<br>
+//根据中断号获取中断异常描述符地址   <br>
+intfltdsc_t *ifdscp = hal_retn_intfltdsc(ifdnr);<br>
+//遍历 i_serlist 链表   <br>
+list_for_each(lst, &amp;ifdscp-&gt;i_serlist)   <br>
+{  <br>
+//获取 i_serlist 链表上对象即 intserdsc_t 结构<br>
+isdscp = list_entry(lst, intserdsc_t, s_list); <br>
+//调用中断处理回调函数     <br>
+isdscp-&gt;s_handle(ifdnr, isdscp-&gt;s_device, sframe);   <br>
+}<br>
+return;<br>
+}</p>
+<p>上述代码已经很清楚了，循环遍历 intfltdsc_t 结构中，i_serlist 链表上所有挂载的 intserdsc_t 结构，然后调用 intserdsc_t 结构中的中断处理的回调函数。</p>
+<p>我们 Cosmos 链表借用了 Linux 所用的链表，代码我已经帮你写好了，放在了 list.h 和 list_t.h 文件中，请自行查看。</p>
+<h4 id="初始化中断控制器">初始化中断控制器</h4>
+<p>我们把 CPU 端的中断搞定了以后，还有设备端的中断，这个可以交给设备驱动程序，但是 CPU 和设备之间的中断控制器，还需要我们出面解决。</p>
+<p>多个设备的中断信号线都会连接到中断控制器上，中断控制器可以决定启用或者屏蔽哪些设备的中断，还可以决定设备中断之间的优先线，所以它才叫中断控制器。</p>
+<p>x86 平台上的中断控制器有多种，最开始是 8259A，然后是 IOAPIC，最新的是 MSI-X。为了简单的说明原理，我们选择了 8259A 中断控制器。</p>
+<p>8259A 在任何 x86 平台上都可以使用，x86 平台使用了两片 8259A 芯片，以级联的方式存在。它拥有 15 个中断源（即可以有 15 个中断信号接入）。让我们看看 8259A 在系统上的框架图：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/3ab6bb33c9b556e9c448b6155338dd55.png" alt=""></p>
+<p>8259A 在系统上的框架图</p>
+<p>上面直接和 CPU 连接的是主 8259A，下面的是从 8259A，每一个 8259A 芯片都有两个 I/O 端口，我们可以通过它们对 8259A 进行编程。主 8259A 的端口地址是 0x20，0x21；从 8259A 的端口地址是 0xA0，0xA1。</p>
+<p>下面我们来做代码初始化，我们程序员可以向 8259A 写两种命令字：ICW 和 OCW；ICW 这种命令字用来实现 8259a 芯片的初始化。而 OCW 这种命令用来向 8259A 发布命令，以对其进行控制。OCW 可以在 8259A 被初始化之后的任何时候被使用。</p>
+<p>我已经把代码定好了，放在了 8259.c 文件中，如下所示：</p>
+<p>void init_i8259()<br>
+{<br>
+//初始化主从 8259a<br>
+out_u8_p(ZIOPT, ICW1);   <br>
+out_u8_p(SIOPT, ICW1);   <br>
+out_u8_p(ZIOPT1, ZICW2);   <br>
+out_u8_p(SIOPT1, SICW2);   <br>
+out_u8_p(ZIOPT1, ZICW3);   <br>
+out_u8_p(SIOPT1, SICW3);   <br>
+out_u8_p(ZIOPT1, ICW4);   <br>
+out_u8_p(SIOPT1, ICW4);<br>
+//屏蔽全部中断源<br>
+out_u8_p(ZIOPT1, 0xff);   <br>
+out_u8_p(SIOPT1, 0xff);       <br>
+return;<br>
+}</p>
+<p>如果你要了解 8259A 的细节，就是上述代码中为什么要写入这些数据，你可以自己在 Intel 官方网站上搜索 8259A 的数据手册，自行查看。</p>
+<p>这里你只要在 init_halintupt() 函数的最后，调用这个函数就行。你有没有想过，既然我们是研究操作系统不是要写硬件驱动，为什么要在初始化中断控制器后，屏蔽所有的中断源呢？因为我们 Cosmos 在初始化阶段还不能处理中断。</p>
+<p>到此，我们的 Cosmos 的 hal 层初始化就结束了。关于内存管理器的初始化，我会在内存管理模块讲解，你先有个印象就行。</p>
+<h3 id="进入内核层">进入内核层</h3>
+<p>hal 层的初始化已经完成，按照前面的设计，我们的 Cosmos 还有内核层，我们下面就要进入到内核层，建立一个文件，写上一个函数，作为本课程的结尾。</p>
+<p>但是这个函数是个<strong>空函数</strong>，目前什么也不做，它是为 Cosmos 内核层初始化而存在的，但是由于课程只进行到这里，所以我只是写个空函数，为后面的课程做好准备。</p>
+<p>由于内核层是从 hal 层进入的，必须在 hal_start() 函数中被调用，所以在此完成这个函数——init_krl()。</p>
+<p>void init_krl()<br>
+{<br>
+//禁止函数返回   <br>
+die(0);   <br>
+return;<br>
+}</p>
+<p>下面我们在 hal_start() 函数中调用它就行了，如下所示</p>
+<p>void hal_start()<br>
+{  <br>
+//初始化 Cosmos 的 hal 层<br>
+init_hal();<br>
+//初始化 Cosmos 的内核层   <br>
+init_krl();   <br>
+return;<br>
+}</p>
+<p>从上面的代码中，不难发现 Cosmos 的 hal 层初始化完成后，就自动进入了 Cosmos 内核层的初始化。至此本课程已经结束。</p>
+<h2 id="重点回顾">重点回顾</h2>
+<p>写一个 C 函数是容易的，但是写操作系统的第一个 C 函数并不容易，好在我们一路坚持，没有放弃，才取得了这个阶段性的胜利。但温故而知新，对学过的东西要学而时习之，下面我们来回顾一下本课程的重点。</p>
+<p>1.Cosmos 的第一个 C 函数产生了，它十分简单但极其有意义，它的出现标志着 C 语言的运行环境已经完善。从此我们可以用 C 语言高效地开发操作系统了，由爬行时代进入了跑步前行的状态，可喜可贺。</p>
+<p>2. 第一个 C 函数，干的第一件重要工作就是**调用 hal 层的初始化函数。**这个初始化函数首先初始化了平台，初始化了机器信息结构供内核的其它代码使用，还初始化了我们图形显示驱动、显示了背景图片；其次是初始化了内存管理相关的数据结构；接着初始了中断，中断处理框架是两层，所以最为复杂；最后初始化了中断控制器。</p>
+<p>3. 当 hal 层初始化完成了，我们就进入了内核层，由于到了课程的尾声，我们先暂停在这里。</p>
+<p>在这节课里我帮你写了很多代码，那些代码非常简单和枯燥，但是必须要有它们才可以。综合我们前面讲过的知识，我相信你有能力看懂它们。</p>
+<h2 id="思考题">思考题</h2>
+<p>请你梳理一下，Cosmos hal 层的函数调用关系。</p>
+<p>欢迎你在留言区跟我交流互动，也欢迎把这节课转发给你的朋友和同事。</p>
+<p>好，我是 LMOS，咱们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%9845%E8%AE%B2/">操作系统实战45讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A4%A7%E8%A7%84%E6%A8%A1%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86%E5%AE%9E%E6%88%98/13_%E5%BC%B9%E6%80%A7%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E9%9B%86spark%E5%A4%A7%E5%8E%A6%E7%9A%84%E5%9C%B0%E5%9F%BA%E4%B8%8A/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">13_弹性分布式数据集：Spark大厦的地基（上）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%9F%BA%E7%A1%80%E8%AF%BE/13_%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0__%E4%B8%89%E4%B8%AA%E8%87%AD%E7%9A%AE%E5%8C%A0%E8%B5%9B%E8%BF%87%E8%AF%B8%E8%91%9B%E4%BA%AE%E9%9B%86%E6%88%90%E5%AD%A6%E4%B9%A0/">
+            <span class="next-text nav-default">13_机器学习__三个臭皮匠，赛过诸葛亮：集成学习</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

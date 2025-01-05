@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>4443丨如何使用Redis搭建玩家排行榜 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="43丨如何使用Redis搭建玩家排行榜？
+上一篇文章中，我们使用 Redis 模拟了多用户抢票的问题，这里再回顾一下原理。我们通过使用 WATCH&#43;MULTI 的方式实现乐观锁机制，对 ticket_count 这个键进行监视，当这个键发生变化的时候事务就会被打断，重新请求，这样做的好处就是可以保证事务对键进行操作的原子性，当然我们也可以使用 Redis 的 incr 和 decr 来实现键的原子性递增或递减。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/sql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/4443%E4%B8%A8%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8redis%E6%90%AD%E5%BB%BA%E7%8E%A9%E5%AE%B6%E6%8E%92%E8%A1%8C%E6%A6%9C/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/sql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/4443%E4%B8%A8%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8redis%E6%90%AD%E5%BB%BA%E7%8E%A9%E5%AE%B6%E6%8E%92%E8%A1%8C%E6%A6%9C/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="4443丨如何使用Redis搭建玩家排行榜">
+  <meta property="og:description" content="43丨如何使用Redis搭建玩家排行榜？
+上一篇文章中，我们使用 Redis 模拟了多用户抢票的问题，这里再回顾一下原理。我们通过使用 WATCH&#43;MULTI 的方式实现乐观锁机制，对 ticket_count 这个键进行监视，当这个键发生变化的时候事务就会被打断，重新请求，这样做的好处就是可以保证事务对键进行操作的原子性，当然我们也可以使用 Redis 的 incr 和 decr 来实现键的原子性递增或递减。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="SQL必知必会">
+
+  <meta itemprop="name" content="4443丨如何使用Redis搭建玩家排行榜">
+  <meta itemprop="description" content="43丨如何使用Redis搭建玩家排行榜？
+上一篇文章中，我们使用 Redis 模拟了多用户抢票的问题，这里再回顾一下原理。我们通过使用 WATCH&#43;MULTI 的方式实现乐观锁机制，对 ticket_count 这个键进行监视，当这个键发生变化的时候事务就会被打断，重新请求，这样做的好处就是可以保证事务对键进行操作的原子性，当然我们也可以使用 Redis 的 incr 和 decr 来实现键的原子性递增或递减。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4486">
+  <meta itemprop="keywords" content="SQL必知必会">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="4443丨如何使用Redis搭建玩家排行榜">
+  <meta name="twitter:description" content="43丨如何使用Redis搭建玩家排行榜？
+上一篇文章中，我们使用 Redis 模拟了多用户抢票的问题，这里再回顾一下原理。我们通过使用 WATCH&#43;MULTI 的方式实现乐观锁机制，对 ticket_count 这个键进行监视，当这个键发生变化的时候事务就会被打断，重新请求，这样做的好处就是可以保证事务对键进行操作的原子性，当然我们也可以使用 Redis 的 incr 和 decr 来实现键的原子性递增或递减。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">4443丨如何使用Redis搭建玩家排行榜</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4486 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>43丨如何使用Redis搭建玩家排行榜？</p>
+<p>上一篇文章中，我们使用 Redis 模拟了多用户抢票的问题，这里再回顾一下原理。我们通过使用 WATCH+MULTI 的方式实现乐观锁机制，对 ticket_count 这个键进行监视，当这个键发生变化的时候事务就会被打断，重新请求，这样做的好处就是可以保证事务对键进行操作的原子性，当然我们也可以使用 Redis 的 incr 和 decr 来实现键的原子性递增或递减。</p>
+<p>今天我们用 Redis 搭建一个玩家的排行榜，假设一个服务器存储了 10 万名玩家的数据，我们想给这个区（这台服务器）上的玩家做个全区的排名，该如何用 Redis 实现呢？</p>
+<p>不妨一起来思考下面几个问题：</p>
+<p>MySQL 是如何实现玩家排行榜的？有哪些难题需要解决？</p>
+<p>如何用 Redis 模拟 10 万名玩家数据？Redis 里的 Lua 又是什么？</p>
+<p>Redis 如何搭建玩家排行榜？和 MySQL 相比有什么优势？</p>
+<p>使用 MySQL 搭建玩家排行榜</p>
+<p>我们如果用 MySQL 搭建玩家排行榜的话，首先需要生成 10 万名玩家的数据，这里我们使用之前学习过的存储过程来模拟。</p>
+<p>为了简化，玩家排行榜主要包括 3 个字段：user_id、score、和 create_time，它们分别代表玩家的用户 ID、玩家的积分和玩家的创建时间。</p>
+<p>王者荣耀英雄等级说明</p>
+<p>这里我们可以模拟王者荣耀的英雄等级，具体等级标准如下：</p>
+<p>如果想要英雄要达到最强王者的段位，那么之前需要积累 112 颗（9+12+16+25+25+25）星星，而达到最强王者之后还可以继续积累无上限的星星。在随机数模拟上，我们也分成两个阶段，第一个阶段模拟英雄的段位，我们使用随机数来模拟 score（数值范围是 1-112 之间），当 score=112 的时候，再模拟最强王者等级中的星星个数。如果我们只用一个随机数进行模拟，会出现最强王者的比例变大的情况，显然不符合实际情况。</p>
+<p>使用存储过程模拟 10 万名玩家数据</p>
+<p>这里我们使用存储过程，具体代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-mysql" data-lang="mysql"><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">CREATE</span><span class="w"> </span><span class="n">DEFINER</span><span class="o">=`</span><span class="n">root</span><span class="o">`@`</span><span class="n">localhost</span><span class="o">`</span><span class="w"> </span><span class="k">PROCEDURE</span><span class="w"> </span><span class="o">`</span><span class="n">insert_many_user_scores</span><span class="o">`</span><span class="p">(</span><span class="k">IN</span><span class="w"> </span><span class="n">START</span><span class="w"> </span><span class="kt">INT</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">max_num</span><span class="w"> </span><span class="kt">INT</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">BEGIN</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">DECLARE</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="kt">INT</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 模拟玩家英雄的星星数
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">DECLARE</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="kt">INT</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">DECLARE</span><span class="w"> </span><span class="n">score2</span><span class="w"> </span><span class="kt">INT</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 初始注册时间
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">DECLARE</span><span class="w"> </span><span class="n">date_start</span><span class="w"> </span><span class="kt">DATETIME</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="p">(</span><span class="s1">&#39;2017-01-01 00:00:00&#39;</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 每个玩家的注册时间
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">DECLARE</span><span class="w"> </span><span class="n">date_temp</span><span class="w"> </span><span class="kt">DATETIME</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">SET</span><span class="w"> </span><span class="n">date_temp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">date_start</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">SET</span><span class="w"> </span><span class="n">autocommit</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">REPEAT</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">SET</span><span class="w"> </span><span class="n">i</span><span class="o">=</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kt">SET</span><span class="w"> </span><span class="n">date_temp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">date_add</span><span class="p">(</span><span class="n">date_temp</span><span class="p">,</span><span class="w"> </span><span class="k">interval</span><span class="w"> </span><span class="nf">RAND</span><span class="p">()</span><span class="o">*</span><span class="mi">60</span><span class="w"> </span><span class="n">second</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 1-112 随机数
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="kt">SET</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">CEIL</span><span class="p">(</span><span class="nf">RAND</span><span class="p">()</span><span class="o">*</span><span class="mi">112</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 如果达到了王者，继续模拟王者的星星数
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">IF</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">112</span><span class="w"> </span><span class="k">THEN</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">           </span><span class="kt">SET</span><span class="w"> </span><span class="n">score2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">FLOOR</span><span class="p">(</span><span class="nf">RAND</span><span class="p">()</span><span class="o">*</span><span class="mi">100</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">           </span><span class="kt">SET</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">score2</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">END</span><span class="w"> </span><span class="k">IF</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">-- 插入新玩家
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="nf">user_score</span><span class="p">(</span><span class="n">user_id</span><span class="p">,</span><span class="w"> </span><span class="n">score</span><span class="p">,</span><span class="w"> </span><span class="n">create_time</span><span class="p">)</span><span class="w"> </span><span class="k">VALUES</span><span class="p">((</span><span class="n">START</span><span class="o">+</span><span class="n">i</span><span class="p">),</span><span class="w"> </span><span class="n">score</span><span class="p">,</span><span class="w"> </span><span class="n">date_temp</span><span class="p">);</span><span class="w"> 
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">UNTIL</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">max_num</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">END</span><span class="w"> </span><span class="k">REPEAT</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">COMMIT</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="n">END</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后我们使用
+call insert_many_user_scores(10000,100000);
+模拟生成 10 万名玩家的得分数据。注意在 insert 之前，需要先设置
+autocommit=0
+，也就是关闭了自动提交，然后在批量插入结束之后再手动进行 COMMIT，这样做的好处是可以进行批量提交，提升插入效率。你可以看到整体的用时为 5.2 秒。</p>
+<p>如上代码所示，我用 score 来模拟第一阶段的星星数，如果 score 达到了 112 再来模拟 score2 的分数，这里我限定最强王者阶段的星星个数上限为 100。同时我们还模拟了用户注册的时间，这是因为排行榜可以有两种表示方式，第二种方式需要用到这个时间。</p>
+<p>第一种表示方式为并列排行榜，也就是分数相同的情况下，允许排名并列，如下所示：</p>
+<p>第二种为严格排行榜。当分数相同的时候，会按照第二条件来进行排序，比如按照注册时间的长短，注册时间越长的排名越靠前。这样的话，上面那个排行榜就会变成如下所示的严格排行榜。</p>
+<p>你能看到当 10013 和 10015 得分相同的时候，如果按照注册时间来进行排名的话，会将 10013 排到 10015 前面。</p>
+<p>上面的数据仅仅为示意，下面我们用实际的 10 万条数据做一个严格排行榜（你可以点击下载地址下载这 10 万条数据， 也可以自己使用上面的存储过程来进行模拟）首先使用 SQL 语句进行查询：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SELECT (@rownum := @rownum + 1) AS user_rank, user_id, score, create_time
+</span></span><span class="line"><span class="cl">FROM user_score, (SELECT @rownum := 0) b
+</span></span><span class="line"><span class="cl">ORDER BY score DESC, create_time ASC
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>运行结果如下（10 万条数据，用时 0.17s）：</p>
+<p>这里有几点需要说明。</p>
+<p>MySQL 不像 Oracle 一样自带 rownum 统计行编号的功能，所以这里我们需要自己来实现 rownum 功能，也就是设置 MySQL 的变量
+@rownum
+，初始化为
+@rownum :=0
+，然后每次 SELECT 一条数据的时候都自动加 1。</p>
+<p>通过开发程序（比如 Python、PHP 和 Java 等）统计排名会更方便，这里同样需要初始化一个变量，比如
+rownum=0
+，然后每次 fetch 一条数据的时候都将该变量加 1，作为记录的排名。同时，开发程序也可以很方便地实现并列排名，因为程序可以进行上下文的统计，当两名玩家得分相同时，排名相同，否则排名会顺序加 1。</p>
+<p>如果想要通过 SQL 来实现，可以写成下面这样：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SELECT user_id, score,
+</span></span><span class="line"><span class="cl">    IFNULL((SELECT COUNT(*) FROM user_score WHERE score &gt; t.score), 0) + 1 AS user_rank  
+</span></span><span class="line"><span class="cl">FROM user_score t
+</span></span><span class="line"><span class="cl">ORDER BY user_rank ASC
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这样做的原理是查找比当前分数大的数据行数，然后加 1，但是这样执行效率会很低，相当于需要对每个玩家都统计一遍排名。</p>
+<p>Lua 是什么，如何在 Redis 中使用</p>
+<p>知道如何用 MySQL 模拟数据后，我们再来看下如何在 Redis 中完成这一步。事实上，Redis 本身不提供存储过程的功能，不过在 2.6 版本之后集成了 Lua 语言，可以很方便地实现类似存储过程的函数调用方式。</p>
+<p>Lua 是一个小巧的脚本语言，采用标准 C 语言编写，一个完整的 Lua 解析器大小只有 200K。我们之前讲到过采用标准 C 语言编写的好处就在于执行效率高，依懒性低，同时兼容性好，稳定性高。这些特性同样 Lua 也有，它可以嵌入到各种应用程序中，提供灵活的扩展和定制功能。</p>
+<p>如何在 Redis 中使用 Lua</p>
+<p>在 Redis 中使用 Lua 脚本的命令格式如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">EVAL script numkeys key [key ...] arg [arg ...]
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我来说明下这些命令中各个参数代表的含义。</p>
+<p>script，代表的是 Lua 的脚本内容。</p>
+<p>numkeys，代表后续参数 key 的个数。</p>
+<p>key 就是我们要操作的键，可以是多个键。我们在 Lua 脚本中可以直接使用这些 key，直接通过
+KEYS[1]
+、
+KEYS[2]
+来获取，默认下标是从 1 开始。</p>
+<p>arg，表示传入到 Lua 脚本中的参数，就像调用函数传入的参数一样。在 Lua 脚本中我们可以通过
+ARGV[1]
+、
+ARGV[2]
+来进行获取，同样默认下标从 1 开始。</p>
+<p>下面我们通过 2 个例子来体会下，比如我们使用 eval
+&ldquo;return {ARGV[1], ARGV[2]}&rdquo; 0 cy 123
+，代表的是传入的 key 的个数为 0，后面有两个 arg，分别为 cy 和 123。在 Lua 脚本中，我们直接返回这两个参数
+ARGV[1]
+,
+ARGV[2]
+，执行结果如下：</p>
+<p>比如我们要用这一条语句：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">eval &#34;math.randomseed(ARGV[1]); local temp = math.random(1,112); redis.call(&#39;SET&#39;, KEYS[1], temp); return &#39;ok&#39;;&#34; 1 score 30
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这条语句代表的意思是，我们传入 KEY 的个数为 1，参数是 score，arg 参数为 30。在 Lua 脚本中使用
+ARGV[1]
+，也就是 30 作为随机数的种子，然后创建本地变量 temp 等于 1 到 112 之间的随机数，再使用 SET 方法对 KEY，也就是用刚才创建的随机数对 score 这个字段进行赋值，结果如下：</p>
+<p>然后我们在 Redis 中使用
+GET score
+对刚才设置的随机数进行读取，结果为 34。</p>
+<p>另外我们还可以在命令中调用 Lua 脚本，使用的命令格式：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">redis-cli --eval lua_file key1 key2 , arg1 arg2 arg3
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>使用 redis-cli 的命令格式不需要输入 key 的个数，在 key 和 arg 参数之间采用了逗号进行分割，注意逗号前后都需要有空格。同时在 eval 后面可以带一个 lua 文件（以.lua 结尾）。</p>
+<p>使用 Lua 创建 10 万名玩家数据</p>
+<p>如果我们想要通过 Lua 脚本创建 10 万名玩家的数据，文件名为
+insert_user_scores.lua
+，代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">-- 设置时间种子
+</span></span><span class="line"><span class="cl">math.randomseed(ARGV[1]) 
+</span></span><span class="line"><span class="cl">-- 设置初始的生成时间
+</span></span><span class="line"><span class="cl">local create_time = 1567769563 - 3600*24*365*2.0 
+</span></span><span class="line"><span class="cl">local num = ARGV[2]
+</span></span><span class="line"><span class="cl">local user_id = ARGV[3]
+</span></span><span class="line"><span class="cl">for i=1, num do
+</span></span><span class="line"><span class="cl">  -- 生成 1 到 60 之间的随机数
+</span></span><span class="line"><span class="cl">  local interval = math.random(1, 60) 
+</span></span><span class="line"><span class="cl">  -- 产生 1 到 112 之间的随机数
+</span></span><span class="line"><span class="cl">  local temp = math.random(1, 112) 
+</span></span><span class="line"><span class="cl">  if (temp == 112) then
+</span></span><span class="line"><span class="cl">        -- 产生 0 到 100 之间的随机数
+</span></span><span class="line"><span class="cl">        temp = temp + math.random(0, 100) 
+</span></span><span class="line"><span class="cl">  end
+</span></span><span class="line"><span class="cl">  create_time = create_time + interval
+</span></span><span class="line"><span class="cl">  temp = temp + create_time / 10000000000
+</span></span><span class="line"><span class="cl">  redis.call(&#39;ZADD&#39;, KEYS[1], temp, user_id+i-1)
+</span></span><span class="line"><span class="cl">end
+</span></span><span class="line"><span class="cl">return &#39;Generation Completed&#39;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上面这段代码可以实现严格排行榜的排名，具体方式是将 score 进行了改造，score 为浮点数。整数部分为得分，小数部分为时间差。</p>
+<p>在调用的时候，我们通过
+ARGV[1]
+获取时间种子的参数，传入的
+KEYS[1]
+为
+user_score
+，也就是创建有序集合
+user_score
+。然后通过 num 来设置生成玩家的数量，通过
+user_id
+获取初始的
+user_id
+。最后调用如下命令完成玩家数据的创建：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">redis-cli -h localhost -p 6379 --eval insert_user_scores.lua user_score , 30 100000 10000
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>使用 Redis 实现玩家排行榜</p>
+<p>我们通过 Lua 脚本模拟完成 10 万名玩家数据，并将其存储在了 Redis 的有序集合
+user_score
+中，下面我们就来使用 Redis 来统计玩家排行榜的数据。</p>
+<p>首先我们需要思考的是，一个典型的游戏排行榜都包括哪些功能呢？</p>
+<p>统计全部玩家的排行榜</p>
+<p>按名次查询排名前 N 名的玩家</p>
+<p>查询某个玩家的分数</p>
+<p>查询某个玩家的排名</p>
+<p>对玩家的分数和排名进行更新</p>
+<p>查询指定玩家前后 M 名的玩家</p>
+<p>增加或移除某个玩家，并对排名进行更新</p>
+<p>在 Redis 中实现上面的功能非常简单，只需要使用 Redis 我们提供的方法即可，针对上面的排行榜功能需求，我们分别来看下 Redis 是如何实现的。</p>
+<p>统计全部玩家的排行榜</p>
+<p>在 Redis 里，统计全部玩家的排行榜的命令格式为
+ZREVRANGE 排行榜名称 起始位置 结束为止 [WITHSCORES]
+。</p>
+<p>我们使用这行命令即可：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ZREVRANGE user_score 0 -1 WITHSCORES
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们对玩家排行榜
+user_score
+进行统计，其中 -1 代表的是全部的玩家数据，
+WITHSCORES
+代表的是输出排名的同时也输出分数。</p>
+<p>按名次查询排名前 N 名的玩家</p>
+<p>同样我们可以使用
+ZREVRANGE
+完成前 N 名玩家的排名，比如我们想要统计前 10 名玩家，可以使用：
+ZREVRANGE user_score 0 9
+。</p>
+<p>查询某个玩家的分数</p>
+<p>命令格式为
+ZSCORE 排行榜名称 玩家标识
+。</p>
+<p>时间复杂度为
+O(1)
+。</p>
+<p>如果我们想要查询玩家 10001 的分数可以使用：
+ZSCORE user_score 10001
+。</p>
+<p>查询某个玩家的排名</p>
+<p>命令格式为
+ZREVRANK 排行榜名称 玩家标识
+。</p>
+<p>时间复杂度为
+O(log(N))
+。</p>
+<p>如果我们想要查询玩家 10001 的排名可以使用：
+ZREVRANK user_score 10001
+。</p>
+<p>对玩家的分数进行更新，同时排名进行更新</p>
+<p>如果我们想要对玩家的分数进行增减，命令格式为
+ZINCRBY 排行榜名称 分数变化 玩家标识
+。</p>
+<p>时间复杂度为
+O(log(N))
+。</p>
+<p>比如我们想对玩家 10001 的分数减 1，可以使用：
+ZINCRBY user_score -1 10001
+。</p>
+<p>然后我们再来查看下玩家 10001 的排名，使用：
+ZREVRANK user_score 10001
+。</p>
+<p>你能看到排名由 17153 降到了 18036 名。</p>
+<p>查询指定玩家前后 M 名的玩家</p>
+<p>比如我们想要查询玩家 10001 前后 5 名玩家都是谁，当前已知玩家 10001 的排名是 18036，那么可以使用：
+ZREVRANGE user_score 18031 18041
+。</p>
+<p>这样就可以得到玩家 10001 前后 5 名玩家的信息。</p>
+<p>增加或删除某个玩家，并对排名进行更新</p>
+<p>如果我们想要删除某个玩家，命令格式为
+ZREM 排行榜名称 玩家标识
+。</p>
+<p>时间复杂度为
+O(log(N))
+。</p>
+<p>比如我们想要删除玩家 10001，可以使用：
+ZREM user_score 10001
+。</p>
+<p>这样我们再来查询下排名在 18031 到 18041 的玩家是谁，使用：
+ZREVRANGE user_score 18031 18041
+。</p>
+<p>你能看到玩家 10001 的信息被删除，同时后面的玩家排名都向前移了一位。</p>
+<p>如果我们想要增加某个玩家的数据，命令格式为
+ZADD 排行榜名称 分数 玩家标识
+。</p>
+<p>时间复杂度为
+O(log(N))
+。</p>
+<p>这里，我们把玩家 10001 的信息再增加回来，使用：
+ZADD user_score 93.1504697596 10001
+。</p>
+<p>然后我们再来看下排名在 18031 到 18041 的玩家是谁，使用：
+ZREVRANGE user_score 18031 18041
+。</p>
+<p>你能看到插入了玩家 10001 的数据之后，排名又回来了。</p>
+<p>总结</p>
+<p>今天我们使用 MySQL 和 Redis 搭建了排行榜，根据相同分数的处理方式，我们可以把排行榜分成并列排行榜和严格排行榜。虽然 MySQL 和 Redis 都可以搭建排行榜，但两者还是有区别的。MySQL 擅长存储数据，而对于数据的运算来说则效率不高，比如统计排行榜的排名，通常还是需要使用后端语言（比如 Python、PHP、Java 等）再进行统计。而 Redis 本身提供了丰富的排行榜统计功能，不论是增加、删除玩家，还是对某个玩家的分数进行调整，Redis 都可以对排行榜实时更新，对于游戏的实时排名来说，这还是很重要的。</p>
+<p>在 Redis 中还集成了 Lua 脚本语言，通过 Lua 我们可以更加灵活地扩展 Redis 的功能，同时在 Redis 中使用 Lua 语言，还可以对 Lua 脚本进行复用，减少网络开销，编写代码也更具有模块化。此外 Redis 在调用 Lua 脚本的时候，会将它作为一个整体，也就是说中间如果有其他的 Redis 命令是不会被插入进去的，也保证了 Lua 脚本执行过程中不会被其他命令所干扰。</p>
+<p>我们今天使用 Redis 对 10 万名玩家的数据进行了排行榜的统计，相比于用 RDBMS 实现排行榜来说，使用 Redis 进行统计都有哪些优势呢？</p>
+<p>我们使用了 Lua 脚本模拟了 10 万名玩家的数据，其中玩家的分数 score 分成了两个部分，整数部分为实际的得分，小数部分为注册时间。例子中给出的严格排行榜是在分数相同的情况下，按照注册时间的长短进行的排名，注册时间长的排名靠前。如果我们将规则进行调整，同样是在分数相同的情况下，如果注册时间长的排名靠后，又该如何编写代码呢？</p>
+<p>欢迎你在评论区写下你的思考，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/sql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/">SQL必知必会</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A8%8B%E5%BA%8F%E5%91%98%E8%BF%9B%E9%98%B6%E6%94%BB%E7%95%A5/44_%E5%AE%8C%E6%88%90%E4%BD%9C%E5%93%81%E7%90%86%E6%83%B3%E4%B8%8E%E7%8E%B0%E5%AE%9E/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">44_完成作品：理想与现实</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%9845%E8%AE%B2/4443%E4%B8%A8%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E4%B8%8B%E5%A6%82%E4%BD%95%E7%94%A8keras%E6%90%AD%E5%BB%BA%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E7%BD%91%E7%BB%9C%E5%81%9A%E6%89%8B%E5%86%99%E6%95%B0%E5%AD%97%E8%AF%86%E5%88%AB/">
+            <span class="next-text nav-default">4443丨深度学习（下）：如何用Keras搭建深度学习网络做手写数字识别？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

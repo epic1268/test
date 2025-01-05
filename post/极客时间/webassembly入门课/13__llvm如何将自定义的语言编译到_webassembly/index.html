@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>13__LLVM：如何将自定义的语言编译到_WebAssembly？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是于航。
+应用 Wasm 的常见方式有几种类型，一种方式是通过 Web 浏览器提供的 JavaScript API 与 Web API，来在 Web 应用中调用从 Wasm 模块中导出的函数。通过这种方式，我们可以充分利用 Wasm 的安全、高效及可移植性等优势。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/13__llvm%E5%A6%82%E4%BD%95%E5%B0%86%E8%87%AA%E5%AE%9A%E4%B9%89%E7%9A%84%E8%AF%AD%E8%A8%80%E7%BC%96%E8%AF%91%E5%88%B0_webassembly/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/13__llvm%E5%A6%82%E4%BD%95%E5%B0%86%E8%87%AA%E5%AE%9A%E4%B9%89%E7%9A%84%E8%AF%AD%E8%A8%80%E7%BC%96%E8%AF%91%E5%88%B0_webassembly/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="13__LLVM：如何将自定义的语言编译到_WebAssembly？">
+  <meta property="og:description" content="你好，我是于航。
+应用 Wasm 的常见方式有几种类型，一种方式是通过 Web 浏览器提供的 JavaScript API 与 Web API，来在 Web 应用中调用从 Wasm 模块中导出的函数。通过这种方式，我们可以充分利用 Wasm 的安全、高效及可移植性等优势。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="WebAssembly入门课">
+
+  <meta itemprop="name" content="13__LLVM：如何将自定义的语言编译到_WebAssembly？">
+  <meta itemprop="description" content="你好，我是于航。
+应用 Wasm 的常见方式有几种类型，一种方式是通过 Web 浏览器提供的 JavaScript API 与 Web API，来在 Web 应用中调用从 Wasm 模块中导出的函数。通过这种方式，我们可以充分利用 Wasm 的安全、高效及可移植性等优势。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3743">
+  <meta itemprop="keywords" content="WebAssembly入门课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="13__LLVM：如何将自定义的语言编译到_WebAssembly？">
+  <meta name="twitter:description" content="你好，我是于航。
+应用 Wasm 的常见方式有几种类型，一种方式是通过 Web 浏览器提供的 JavaScript API 与 Web API，来在 Web 应用中调用从 Wasm 模块中导出的函数。通过这种方式，我们可以充分利用 Wasm 的安全、高效及可移植性等优势。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">13__LLVM：如何将自定义的语言编译到_WebAssembly？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3743 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#传统编译器链路">传统编译器链路</a></li>
+        <li><a href="#llvm">LLVM</a>
+          <ul>
+            <li><a href="#llvm-ir">LLVM-IR</a></li>
+            <li><a href="#命令行基于-llvm-生成-wasm-字节码">命令行：基于 LLVM 生成 Wasm 字节码</a></li>
+            <li><a href="#组件库wasm-编译器后端">组件库：Wasm 编译器后端</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考"><strong>课后思考</strong></a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是于航。</p>
+<p>应用 Wasm 的常见方式有几种类型，一种方式是通过 Web 浏览器提供的 JavaScript API 与 Web API，来在 Web 应用中调用从 Wasm 模块中导出的函数。通过这种方式，我们可以充分利用 Wasm 的安全、高效及可移植性等优势。</p>
+<p>另一种方式是通过 WASI 抽象系统调用接口，以便在 out-of-web 应用中使用 Wasm。这种使用方式与 Web 端大同小异，不过区别是可以借助底层运行时的能力，使得我们构建出的 Wasm 应用可以在 Web 浏览器外的 Native 环境中与操作系统打交道，并同样享受着 Wasm 本身所带来的安全、高效及可移植性。</p>
+<p>而今天我们要介绍的另外一个 Wasm 的应用场景，则相对有些特殊。在大多数时候，我们都是将由诸如 C/C++ 以及 Rust 等语言编写的源代码，编译至 Wasm 字节码格式来使用。假设此时我们想要设计开发一款自定义的静态编程语言，那么怎样才能够方便快捷地为它的编译器添加一个能力，可以让编译器支持将 Wasm 作为编译目标呢？</p>
+<p>关于这个问题，我们要先从传统的编译器链路开始说起。</p>
+<h2 id="传统编译器链路">传统编译器链路</h2>
+<p>对于传统的静态语言编译器来说，通常会采用较为流行的“三段式”链路结构。如下图所示，三段式结构分别对应着整个编译器链路中三个最为重要的组成部分：编译器前端（Compiler Frontend）、中间代码优化器（Optimizer），以及编译器后端（Compiler Backend）。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/WebAssembly%E5%85%A5%E9%97%A8%E8%AF%BE/921a14f2fedac98834abb87be8c2a8ca.png" alt=""></p>
+<p>其中，“编译器前端”主要用于对输入的源代码进行诸如：词法、语法及语义分析，并生成其对应的 AST 抽象语法树，然后再根据 AST 来生成编译器内部的中间代码表示形式（IR）。</p>
+<p>“中间代码优化器”则主要用于对这些 IR 代码进行一定的优化，以减小最后生成的二进制文件大小，并同时提高二进制代码的执行效率。</p>
+<p>最后的“编译器后端”则负责进行与本地架构平台相关的代码生成工作，主要会根据优化后的 IR 代码来进行寄存器分配和调优之类的工作，并生成对应的机器码，存储在构建出的二进制可执行文件中。当然，流程的细节根据具体编程语言实现可能有所不同。</p>
+<p>这种分段式编译器链路的优势在于，当我们想要为其添加多种源语言或目标编译平台的支持时，我们只需要重新编写其中的一个“分段”，便可以很轻松地复用整个编译链路中的其他部分。你可以形象地通过下图来感受这种关系。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/WebAssembly%E5%85%A5%E9%97%A8%E8%AF%BE/43ed1124ef912401515f354814ee88e4.png" alt=""></p>
+<p>比如当我们需要为编译器添加对另外一种源语言的支持时，我们只需要编写整个链路中的“编译器前端”部分即可。</p>
+<p>但是满足这种“链路可分离”要求的一个前提，需要整个链路中用于对接各个阶段的“中间产物（IR）”，其存在形式必须是确定且不变的。编译器前端“输送”给中间优化器的 IR 代码格式，必须对所有为各种源语言设计的编译器前端保持一致。同理，从中间优化器输入到编译器后端的“中间产物”也是如此。</p>
+<p>然而一个现实的情况是，实际上在 LLVM 出现之前，在各类编程语言的编译器链路中，并没有采用完全统一的中间产物表示形式（包括 IR、AST 等在内）。因此如果想要对编译器链路中的某一部分进行重用，这个过程仍然会十分困难。</p>
+<p>这就造成了每当人们需要重新设计一款编程语言时，需要将整个编译器的编译链路重新编写。但实际上编译器针对不同编程语言变化的部分，可能就只有编译器前端而已。</p>
+<p>编译器链路的分段模式还有另外的一个好处，它可以让编译器开发者的分工更加明确。比如擅长编译器前端的开发者，便可以更加专注地来实现编译器的前端逻辑，为编译器提供针对新源语言的前端，而不用去考虑优化以及编译器后端的逻辑（对于这部分功能可以直接复用已有的编译器链路）。这对于需要投入到商业化运作中的编译器来说，十分有利。</p>
+<h2 id="llvm">LLVM</h2>
+<p>LLVM 的全称为“Low Level Virtual Machine”，翻译成中文即“低层次虚拟机”。最初的 LLVM 是 Chris Lattner 和 Vikram Adve 两人于 2000 年 12 月研发的一套综合性的软件工具链。在这套工具链中，包含了众多可用于开发者使用的相关组件，这些组件包括语言编译器、链接器、调试器等操作系统底层基础构建工具。</p>
+<p>LLVM 在开发初期，被定位为一套具有良好接口定义的可重用组件库。这意味着，我们可以在所开发的第三方应用程序中，使用由 LLVM 提供的众多成熟高效的编译链路解决方案。大到“中间代码优化器”，小到代码生成器中的一个“SelectionDAG 图生成组件”。这些方案以“组件化”的形式被管理在整套 LLVM 工具集中，可用于支持整个编译链路中各个阶段遇到的各种问题。</p>
+<p>除此之外，LLVM 还提供了众多可以直接使用的命令行工具。通过这些工具（如 llvm-as、llc、llvm-dis 等等），我们也可以快速地对经由 LLVM 组件生成的中间表示产物，进行一定的变换和处理，这极大地方便了我们的应用开发和调试流程。</p>
+<h3 id="llvm-ir">LLVM-IR</h3>
+<p>在整个 LLVM 工具链体系中，最重要的组成部分，便是其统一的，用于表示编译器中间状态的代码格式 —— LLVM-IR。在一个基于 LLVM 实现的编译器链路中，位于链路中间的优化器将会使用 LLVM-IR 来作为统一的输入与输出中间代码格式。</p>
+<p>在整个 LLVM 项目中，扮演着重要角色的 LLVM-IR 被定义成为一类具有明确语义的轻量级、低层次的类汇编语言，其具有足够强的表现力和较好的可扩展性。通过更加贴近底层硬件的语义表达方式，它可以将高级语言的语法清晰地映射到其自身。不仅如此，通过语义中提供的明确变量类型信息，优化器还可以对 LLVM-IR 代码进行更进一步的深度优化。</p>
+<p>因此，通过将 LLVM-IR 作为连接编译器链路各个组成部分的重要中间代码格式，开发者便可以以此为纽带，来利用整个 LLVM 工具集中的任何组件。唯一的要求是所接入的源语言需要被转换为 LLVM-IR 的格式（编译器前端）。同样，对任何新目标平台的支持，也都需要从 LLVM-IR 格式开始，再转换成具体的某种机器码（编译器后端）。</p>
+<p>在 LLVM-IR 的基础上，我们上面所讲的分段式编译链路可以被描绘成下图的形式。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/WebAssembly%E5%85%A5%E9%97%A8%E8%AF%BE/7a85ed549315fd8e7e0f89252574243e.png" alt=""></p>
+<h3 id="命令行基于-llvm-生成-wasm-字节码">命令行：基于 LLVM 生成 Wasm 字节码</h3>
+<p>既然基于 LLVM-IR，我们可以方便快捷地为整个编译链路添加新的前端源语言，或者是后端目标平台。因此 Wasm 也同样可以作为一种目标平台，被实现在 LLVM 中（Wasm 作为一种 V-ISA，其实本身与 I386、X86-64 等架构平台没有太大的区别）。</p>
+<p>无独有偶的是，在 LLVM 中，已经存在了可用于 Wasm 目标平台的编译器后端。接下来，我们将尝试把一段 C/C++ 代码通过 LLVM 转换为 Wasm 字节码。</p>
+<p>这里为了能够完成整个编译流程，我们将使用到 LLVM 工具集中的一个 CLI 命令行工具 —— llc，以及用于将 C/C++ 源代码编译为 LLVM-IR 中间代码的编译器 Clang。Clang 是一个业界知名的，基于 LLVM 构建的编译器，可用于编译 C/C++ 以及 Objective-C 等语言代码。</p>
+<p>首先，我们给出如下这段 C/C++ 代码。</p>
+<p>// add.cc<br>
+extern &ldquo;C&rdquo; {<br>
+int add (int a, int b) {<br>
+return a + b;<br>
+}<br>
+}</p>
+<p>接下来，我们通过下面这个命令，将上面的代码编译为 LLVM-IR 中间代码对应的文本格式。</p>
+<p>clang -S -emit-llvm add.cc</p>
+<p>其中我们通过指定“-S”与“-emit-llvm”两个参数，使 Clang 在编译源代码时生成对应的 LLVM-IR 文本格式。命令执行完毕后，我们可以得到一个名为“add.ll”的文件。通过文本编辑器打开这个文件，你可以看到如下截图所示的 LLVM-IR 内容。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/WebAssembly%E5%85%A5%E9%97%A8%E8%AF%BE/aefb7b4df7ef56e4a7d5f11443a54d13.png" alt=""></p>
+<p>关于 LLVM-IR 的具体内容，你对它有一个大致的概念即可。接下来，我们继续使用“llc”工具，来将上面这部分 LLVM-IR 中间代码转换为对应的 Wasm 字节码。</p>
+<p>“llc”是 LLVM 的静态编译器，它可以将输入的 LLVM-IR 代码编译到平台相关的机器码。我们可以通过命令“llc &ndash;version”来查看它所支持的编译目标平台。如下图所示，我们可以看到其支持名为“wasm32”与“wasm64”两种 Wasm 的目标平台，这里我们使用第一个“wasm32”。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/WebAssembly%E5%85%A5%E9%97%A8%E8%AF%BE/04a2b3f79b862bdbc75a1668ca00b6c6.png" alt=""></p>
+<p>通过如下命令行，我们便可以将上述生成的 LLVM-IR 代码编译为最终的 Wasm 字节码。</p>
+<p>llc add.ll -filetype=obj -mtriple=wasm32 -o add.wasm</p>
+<h3 id="组件库wasm-编译器后端">组件库：Wasm 编译器后端</h3>
+<p>在上面这个小实践环节中，我们通过使用 LLVM 工具链提供的命令行工具，将基于 C/C++ 代码编写的函数“add”编译成了对应的 Wasm 字节码格式。</p>
+<p>那相对的，既然 LLVM 中存在着命令行工具可以进行类似的转换，那么在代码层面，便也存在着相应的组件库，能够实现从 LLVM-IR 到 Wasm 字节码的转换过程。</p>
+<p>在实际的编码过程中，你可以通过“llvm::TargetRegistry::lookupTarget”这个 API 来设置和使用 Wasm 对应的目标编译器后端，以编译中间的 LLVM-IR 格式代码。关于这部分内容，你可以参考 LLVM 的官方文档来查阅更多的细节信息。</p>
+<h2 id="总结">总结</h2>
+<p>好了，讲到这，今天的内容也就基本结束了。最后我来给你总结一下。</p>
+<p>在本节课中，我们主要介绍了传统“三段式”编译器链路的一些特点，即分段式的结构更易于编译链路中对各重要组件的复用。同时，“三段式”也能够让编译链路的扩展变得更加轻松。LLVM 的出现，使分段式编译链路的优点被发挥利用到最大。</p>
+<p>LLVM 是一套综合性的软件工具链。内部提供了一系列基于 LLVM-IR、可用于构建编译相关系统工具的各类组件，比如代码优化器、生成器等等。不仅如此，LLVM 还为我们提供了诸如“llc”等命令行工具，可用于方便地对 LLVM-IR 等格式进行转换和编译。</p>
+<p>最后，LLVM 也同样整合了可用于编译 LLVM-IR 到 Wasm 字节码的编译器后端，因此这对于我们来说，只要能够将我们自定义的编程语言代码编译到 LLVM-IR，那么我们就可以直接利用 LLVM 已有的 Wasm 后端，来将这些 IR 编译到 Wasm 字节码格式。不仅如此，我们还能够直接复用 LLVM 已有的优化器组件，来优化我们的生成代码，进而简化整个编译器的开发工作。</p>
+<h2 id="课后思考"><strong>课后思考</strong></h2>
+<p>最后，我们来做一个思考题吧。</p>
+<p>你知道在上面“llc”的帮助信息中，所支持平台“wasm32”与“wasm64”两者有什么区别吗？</p>
+<p>今天的课程就结束了，希望可以帮助到你，也希望你在下方的留言区和我参与讨论，同时欢迎你把这节课分享给你的朋友或者同事，一起交流一下。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/">WebAssembly入门课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/13__java%E7%94%9F%E4%BA%A7%E8%80%85%E6%98%AF%E5%A6%82%E4%BD%95%E7%AE%A1%E7%90%86tcp%E8%BF%9E%E6%8E%A5%E7%9A%84/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">13__Java生产者是如何管理TCP连接的？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/13__mysql%E4%B8%BB%E4%BB%8E%E6%95%B0%E6%8D%AE%E5%BA%93%E5%90%8C%E6%AD%A5%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E7%9A%84/">
+            <span class="next-text nav-default">13__MySQL主从数据库同步是如何实现的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

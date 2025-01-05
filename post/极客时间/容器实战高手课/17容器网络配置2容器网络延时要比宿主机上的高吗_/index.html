@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>17｜容器网络配置（2）：容器网络延时要比宿主机上的高吗_ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是程远。
+在上一讲里，我们学习了在容器中的网络接口配置，重点讲解的是 veth 的接口配置方式，这也是绝大部分容器用的缺省的网络配置方式。
+不过呢，从 veth 的这种网络接口配置上看，一个数据包要从容器里发送到宿主机外，需要先从容器里的 eth0 (veth_container) 把包发送到宿主机上 veth_host，然后再在宿主机上通过 nat 或者路由的方式，经过宿主机上的 eth0 向外发送。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/17%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E9%85%8D%E7%BD%AE2%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E5%BB%B6%E6%97%B6%E8%A6%81%E6%AF%94%E5%AE%BF%E4%B8%BB%E6%9C%BA%E4%B8%8A%E7%9A%84%E9%AB%98%E5%90%97_/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/17%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E9%85%8D%E7%BD%AE2%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E5%BB%B6%E6%97%B6%E8%A6%81%E6%AF%94%E5%AE%BF%E4%B8%BB%E6%9C%BA%E4%B8%8A%E7%9A%84%E9%AB%98%E5%90%97_/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="17｜容器网络配置（2）：容器网络延时要比宿主机上的高吗_">
+  <meta property="og:description" content="你好，我是程远。
+在上一讲里，我们学习了在容器中的网络接口配置，重点讲解的是 veth 的接口配置方式，这也是绝大部分容器用的缺省的网络配置方式。
+不过呢，从 veth 的这种网络接口配置上看，一个数据包要从容器里发送到宿主机外，需要先从容器里的 eth0 (veth_container) 把包发送到宿主机上 veth_host，然后再在宿主机上通过 nat 或者路由的方式，经过宿主机上的 eth0 向外发送。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="容器实战高手课">
+
+  <meta itemprop="name" content="17｜容器网络配置（2）：容器网络延时要比宿主机上的高吗_">
+  <meta itemprop="description" content="你好，我是程远。
+在上一讲里，我们学习了在容器中的网络接口配置，重点讲解的是 veth 的接口配置方式，这也是绝大部分容器用的缺省的网络配置方式。
+不过呢，从 veth 的这种网络接口配置上看，一个数据包要从容器里发送到宿主机外，需要先从容器里的 eth0 (veth_container) 把包发送到宿主机上 veth_host，然后再在宿主机上通过 nat 或者路由的方式，经过宿主机上的 eth0 向外发送。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4000">
+  <meta itemprop="keywords" content="容器实战高手课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="17｜容器网络配置（2）：容器网络延时要比宿主机上的高吗_">
+  <meta name="twitter:description" content="你好，我是程远。
+在上一讲里，我们学习了在容器中的网络接口配置，重点讲解的是 veth 的接口配置方式，这也是绝大部分容器用的缺省的网络配置方式。
+不过呢，从 veth 的这种网络接口配置上看，一个数据包要从容器里发送到宿主机外，需要先从容器里的 eth0 (veth_container) 把包发送到宿主机上 veth_host，然后再在宿主机上通过 nat 或者路由的方式，经过宿主机上的 eth0 向外发送。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">17｜容器网络配置（2）：容器网络延时要比宿主机上的高吗_</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4000 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题重现">问题重现</a></li>
+      </ul>
+    </li>
+    <li><a href="#netperf--h-1921680194--t-tcp_rr">./netperf -H 192.168.0.194 -t TCP_RR</a></li>
+    <li><a href="#netperf--h-1921680194--t-tcp_rr-1">./netperf -H 192.168.0.194 -t TCP_RR</a></li>
+    <li><a href="#netperf--h-1921680194--t-tcp_rr-2">./netperf -H 192.168.0.194 -t TCP_RR</a>
+      <ul>
+        <li><a href="#分析问题">分析问题</a></li>
+        <li><a href="#解决问题">解决问题</a></li>
+        <li><a href="#重点小结">重点小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是程远。</p>
+<p>在上一讲里，我们学习了在容器中的网络接口配置，重点讲解的是 veth 的接口配置方式，这也是绝大部分容器用的缺省的网络配置方式。</p>
+<p>不过呢，从 veth 的这种网络接口配置上看，一个数据包要从容器里发送到宿主机外，需要先从容器里的 eth0 (veth_container) 把包发送到宿主机上 veth_host，然后再在宿主机上通过 nat 或者路由的方式，经过宿主机上的 eth0 向外发送。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/219f774010ba68f3a9180f84c4d42a25.png" alt=""></p>
+<p>这种容器向外发送数据包的路径，相比宿主机上直接向外发送数据包的路径，很明显要多了一次接口层的发送和接收。尽管 veth 是虚拟网络接口，在软件上还是会增加一些开销。</p>
+<p>如果我们的应用程序对网络性能有很高的要求，特别是之前运行在物理机器上，现在迁移到容器上的，如果网络配置采用 veth 方式，就会出现网络延时增加的现象。</p>
+<p>那今天我们就来聊一聊，容器网络接口对于容器中应用程序网络延时有怎样的影响，还有这个问题应该怎么解决。</p>
+<h2 id="问题重现">问题重现</h2>
+<p>对于这种 veth 接口配置导致网络延时增加的现象，我们可以通过运行netperf（Netperf 是一个衡量网络性能的工具，它可以提供单向吞吐量和端到端延迟的测试）来模拟一下。</p>
+<p>这里我们需要两台虚拟机或者物理机，这两台机器需要同处于一个二层的网络中。</p>
+<p>具体的配置示意图如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/785bdc55d6bc1fb589311caf46bac81f.png" alt=""></p>
+<p>首先，我们需要在第一台机器上启动一个 veth 接口的容器，容器的启动和宿主机上的配置你可以参考一下这里的脚本。在第二台机器上，我们只要启动一个 netserver 就可以了。</p>
+<p>然后呢，我们分别在容器里和宿主机上运行与 netserver 交互的 netperf，再比较一下它们延时的差异。</p>
+<p>我们可以运行 netperf 的 TCP_RR 测试用例，TCP_RR 是 netperf 里专门用来测试网络延时的，缺省每次运行 10 秒钟。运行以后，我们还要计算平均每秒钟 TCP request/response 的次数，这个次数越高，就说明延时越小。</p>
+<p>接下来，我们先在第一台机器的宿主机上直接运行 netperf 的 TCP_RR 测试用例 3 轮，得到的值分别是 2504.92，2410.14 和 2422.81，计算一下可以得到三轮 Transactions 平均值是 2446/s。</p>
+<h1 id="netperf--h-1921680194--t-tcp_rr">./netperf -H 192.168.0.194 -t TCP_RR</h1>
+<p>MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2504.92<br>
+16384  131072</p>
+<h1 id="netperf--h-1921680194--t-tcp_rr-1">./netperf -H 192.168.0.194 -t TCP_RR</h1>
+<p>MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2410.14<br>
+16384  131072</p>
+<h1 id="netperf--h-1921680194--t-tcp_rr-2">./netperf -H 192.168.0.194 -t TCP_RR</h1>
+<p>MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2422.81<br>
+16384  131072</p>
+<p>同样，我们再在容器中运行一下 netperf 的 TCP_RR，也一样运行三轮，计算一下这三次的平均值，得到的值是 2141。</p>
+<p>那么我们拿这次容器环境中的平均值和宿主机上得到的值 2446 做比较，会发现 Transactions 下降了大概 12.5%，也就是网络的延时超过了 10%。</p>
+<p>[root@4150e2a842b5 /]# ./netperf -H 192.168.0.194 -t TCP_RR<br>
+MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2104.68<br>
+16384  131072</p>
+<p>[root@4150e2a842b5 /]# ./netperf -H 192.168.0.194 -t TCP_RR<br>
+MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2146.34<br>
+16384  131072</p>
+<p>[root@4150e2a842b5 /]# ./netperf -H 192.168.0.194 -t TCP_RR<br>
+MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 192.168.0.194 () port 0 AF_INET : first burst 0<br>
+Local /Remote<br>
+Socket Size   Request  Resp.   Elapsed  Trans.<br>
+Send   Recv   Size     Size    Time     Rate<br>
+bytes  Bytes  bytes    bytes   secs.    per sec</p>
+<p>16384  131072 1        1       10.00    2173.79<br>
+16384  131072</p>
+<h2 id="分析问题">分析问题</h2>
+<p>刚才我们已经得到了测试的数值，我们发现 veth 方式的确带来了很高的网络延时。那现在我们先来分析一下，为什么 veth 会带来这么大的网络延时，然后再看看有什么方法可以降低容器里的网络延时。</p>
+<p>我们先回顾一下容器里 veth 接口的配置，还是拿我们上一讲里容器 veth 的图作为例子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/03863cd49dad179c08c05765a419462c.png" alt=""></p>
+<p>上一讲中我提到过，veth 的虚拟网络接口一般都是成对出现，就像上面图里的 veth_container 和 veth_host 一样。</p>
+<p>在每次网络传输的过程中，数据包都需要通过 veth_container 这个接口向外发送，而且必须保证 veth_host 先接收到这个数据包。</p>
+<p>虽然 veth 是一个虚拟的网络接口，但是在接收数据包的操作上，这个虚拟接口和真实的网路接口并没有太大的区别。这里除了没有硬件中断的处理，其他操作都差不多，特别是软中断（softirq）的处理部分其实就和真实的网络接口是一样的。</p>
+<p>我们可以通过阅读 Linux 内核里的 veth 的驱动代码（drivers/net/veth.c）确认一下。</p>
+<p>veth 发送数据的函数是 veth_xmit()，它里面的主要操作就是找到 veth peer 设备，然后触发 peer 设备去接收数据包。</p>
+<p>比如 veth_container 这个接口调用了 veth_xmit() 来发送数据包，最后就是触发了它的 peer 设备 veth_host 去调用 netif_rx() 来接收数据包。主要的代码我列在下面了：</p>
+<p>static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device <em>dev)<br>
+{<br>
+…<br>
+/</em> 拿到 veth peer 设备的 net_device <em>/<br>
+rcv = rcu_dereference(priv-&gt;peer);<br>
+…<br>
+/</em> 将数据送到 veth peer 设备 */<br>
+if (likely(veth_forward_skb(rcv, skb, rq, rcv_xdp) == NET_RX_SUCCESS)) {</p>
+<p>…<br>
+}</p>
+<p>static int veth_forward_skb(struct net_device *dev, struct sk_buff *skb,<br>
+struct veth_rq <em>rq, bool xdp)<br>
+{<br>
+/</em> 这里最后调用了 netif_rx() */<br>
+return __dev_forward_skb(dev, skb) ?: xdp ?<br>
+veth_xdp_rx(rq, skb) :<br>
+netif_rx(skb);<br>
+}</p>
+<p>而 netif_rx() 是一个网络设备驱动里面标准的接收数据包的函数，netif_rx() 里面会为这个数据包 raise 一个 softirq。</p>
+<p>__raise_softirq_irqoff(NET_RX_SOFTIRQ);</p>
+<p>其实 softirq 这个概念，我们之前在CPU 的模块中也提到过。在处理网络数据的时候，一些运行时间较长而且不能在硬中断中处理的工作，就会通过 softirq 来处理。</p>
+<p>一般在硬件中断处理结束之后，网络 softirq 的函数才会再去执行没有完成的包的处理工作。即使这里 softirq 的执行速度很快，还是会带来额外的开销。</p>
+<p><strong>所以，根据 veth 这个虚拟网络设备的实现方式，我们可以看到它必然会带来额外的开销，这样就会增加数据包的网络延时。</strong></p>
+<h2 id="解决问题">解决问题</h2>
+<p>那么我们有什么方法可以减少容器的网络延时呢？你可能会想到，我们可不可以不使用 veth 这个方式配置网络接口，而是换成别的方式呢？</p>
+<p>的确是这样，其实除了 veth 之外，容器还可以选择其他的网络配置方式。在 Docker 的文档中提到了 macvlan 的配置方式，和 macvlan 很类似的方式还有 ipvlan。</p>
+<p>那我们先来简单看一下 macvlan 和 ipvlan 的异同点。</p>
+<p>我们先来看这两个方式的相同之处，无论是 macvlan 还是 ipvlan，它们都是在一个物理的网络接口上再配置几个虚拟的网络接口。在这些虚拟的网络接口上，都可以配置独立的 IP，并且这些 IP 可以属于不同的 Namespace。</p>
+<p>然后我再说说它们的不同点。**对于 macvlan，每个虚拟网络接口都有自己独立的 mac 地址；而 ipvlan 的虚拟网络接口是和物理网络接口共享同一个 mac 地址。**而且它们都有自己的 L2/L3 的配置方式，不过我们主要是拿 macvlan/ipvlan 来和 veth 做比较，这里可以先忽略 macvlan/ipvlan 这些详细的特性。</p>
+<p>我们就以 ipvlan 为例，运行下面的这个脚本，为容器手动配置上 ipvlan 的网络接口。</p>
+<p>docker run &ndash;init &ndash;name lat-test-1 &ndash;network none -d registry/latency-test:v1 sleep 36000</p>
+<p>pid1=$(docker inspect lat-test-1 | grep -i Pid | head -n 1 | awk &lsquo;{print $2}&rsquo; | awk -F &ldquo;,&rdquo; &lsquo;{print $1}&rsquo;)<br>
+echo $pid1<br>
+ln -s /proc/$pid1/ns/net /var/run/netns/$pid1</p>
+<p>ip link add link eth0 ipvt1 type ipvlan mode l2<br>
+ip link set dev ipvt1 netns $pid1</p>
+<p>ip netns exec $pid1 ip link set ipvt1 name eth0<br>
+ip netns exec $pid1 ip addr add 172.17.3.2/16 dev eth0<br>
+ip netns exec $pid1 ip link set eth0 up</p>
+<p>在这个脚本里，我们先启动一个容器，这里我们用&quot;—network none&quot;的方式来启动，也就是在容器中没有配置任何的网络接口。</p>
+<p>接着我们在宿主机 eth0 的接口上增加一个 ipvlan 虚拟网络接口 ipvt1，再把它加入到容器的 Network Namespace 里面，重命名为容器内的 eth0，并且配置上 IP。这样我们就配置好了第一个用 ipvlan 网络接口的容器。</p>
+<p>我们可以用同样的方式配置第二个容器，这样两个容器可以相互 ping 一下 IP，看看网络是否配置成功了。脚本你可以在这里得到。</p>
+<p>两个容器配置好之后，就像下面图中描述的一样了。从这张图里，你很容易就能看出 macvlan/ipvlan 与 veth 网络配置有什么不一样。容器的虚拟网络接口，直接连接在了宿主机的物理网络接口上了，形成了一个网络二层的连接。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/d129bf1961d38ceec98d611c42939a03.png" alt=""></p>
+<p>如果从容器里向宿主机外发送数据，看上去通过的接口要比 veth 少了，那么实际情况是不是这样呢？我们先来看一下 ipvlan 接口发送数据的代码。</p>
+<p>从下面的 ipvlan 接口的发送代码中，我们可以看到，如果是往宿主机外发送数据，发送函数会直接找到 ipvlan 虚拟接口对应的物理网络接口。</p>
+<p>比如在我们的例子中，这个物理接口就是宿主机上的 eth0，然后直接调用 dev_queue_xmit()，通过物理接口把数据直接发送出去。</p>
+<p>static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device <em>dev)<br>
+{<br>
+…<br>
+if (!ipvlan_is_vepa(ipvlan-&gt;port) &amp;&amp;<br>
+ether_addr_equal(eth-&gt;h_dest, eth-&gt;h_source)) {<br>
+…<br>
+} else if (is_multicast_ether_addr(eth-&gt;h_dest)) {<br>
+…<br>
+}<br>
+/</em><br>
+* 对于普通的对外发送数据，上面的 if 和 else if 中的条件都不成立，<br>
+* 所以会执行到这一步，拿到 ipvlan 对应的物理网路接口设备，<br>
+* 然后直接从这个设备发送数据。<br>
+*/<br>
+skb-&gt;dev = ipvlan-&gt;phy_dev;<br>
+return dev_queue_xmit(skb);<br>
+}</p>
+<p>和 veth 接口相比，我们用 ipvlan 发送对外数据就要简单得多，因为这种方式没有内部额外的 softirq 处理开销。</p>
+<p>现在我们还可以看一下，在实际生产环境中，一个应用程序跑在使用 veth 接口的容器中，跟这个应用程序跑在使用 ipvlan 接口的容器中，两者的网络延时差异是怎样的。</p>
+<p>下面这张图是网络延时的监控图，图里蓝色的线表示程序运行在 veth 容器中，黄色线表示程序运行在 ipvlan 的容器里，绿色的线代表程序直接运行在物理机上。</p>
+<p>从这张延时（Latency）图里，我们可以看到，在 veth 容器里程序的网络延时要明显高一些，而程序在 ipvlan 容器里的网络延时已经比较接近物理机上的网络延时了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/2ee1cf7312d7404ba31aa48201da0d38.png" alt=""></p>
+<p>所以对于网络延时敏感的应用程序，我们可以考虑使用 ipvlan/macvlan 的容器网络配置方式来替换缺省的 veth 网络配置。</p>
+<h2 id="重点小结">重点小结</h2>
+<p>好了，今天的内容讲完了，我们来做个总结。今天我们主要讨论了容器网络接口对容器中应用程序网络延时的影响。</p>
+<p>容器通常缺省使用 veth 虚拟网络接口，不过 veth 接口会有比较大的网络延时。我们可以使用 netperf 这个工具来比较网络延时，相比物理机上的网络延时，使用 veth 接口容器的网络延时会增加超过 10%。</p>
+<p>我们通过对 veth 实现的代码做分析，可以看到由于 veth 接口是成对工作，<strong>在对外发送数据的时候，peer veth 接口都会 raise softirq 来完成一次收包操作，这样就会带来数据包处理的额外开销。</strong></p>
+<p>如果要减小容器网络延时，就可以给容器配置 ipvlan/macvlan 的网络接口来替代 veth 网络接口。Ipvlan/macvlan 直接在物理网络接口上虚拟出接口，在发送对外数据包的时候可以直接通过物理接口完成，没有节点内部类似 veth 的那种 softirq 的开销。<strong>容器使用 ipvlan/maclan 的网络接口，它的网络延时可以非常接近物理网络接口的延时。</strong></p>
+<p>对于延时敏感的应用程序，我们可以考虑使用 ipvlan/macvlan 网络接口的容器。不过，由于 ipvlan/macvlan 网络接口直接挂载在物理网络接口上，对于需要使用 iptables 规则的容器，比如 Kubernetes 里使用 service 的容器，就不能工作了。这就需要你结合实际应用的需求做个判断，再选择合适的方案。</p>
+<h2 id="思考题">思考题</h2>
+<p>在这节课的最后，我提到“由于 ipvlan/macvlan 网络接口直接挂载在物理网络接口上，对于需要使用 iptables 规则的容器，比如 Kubernetes 里使用 service 的容器，就不能工作了”，请你思考一下这个判断背后的具体原因。</p>
+<p>欢迎你在留言区写下你的思考和疑问。如果这篇文章让你有所收获，也欢迎分享给你的朋友，一起交流进步。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%AE%B9%E5%99%A8%E5%AE%9E%E6%88%98%E9%AB%98%E6%89%8B%E8%AF%BE/">容器实战高手课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%9F%BA%E4%BA%8E%E4%BA%BA%E5%9B%A0%E7%9A%84%E7%94%A8%E6%88%B7%E4%BD%93%E9%AA%8C%E8%AE%BE%E8%AE%A1%E8%AF%BE/17%E4%BA%BA%E7%9A%84%E7%A4%BE%E4%BC%9A%E5%B1%9E%E6%80%A7%E8%B4%AD%E7%89%A9%E8%8A%82%E8%83%8C%E5%90%8E%E7%9A%84%E7%8E%84%E6%9C%BA/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">17｜人的社会属性：购物节背后的玄机</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%A6%82%E4%BD%95%E8%AF%BB%E6%87%82%E4%B8%80%E9%A6%96%E8%AF%97/17%E8%AF%97%E4%B8%AD%E5%93%B2%E5%AD%A6%E8%AF%BB%E4%BA%86%E8%BF%99%E4%BA%9B%E7%90%86%E8%B6%A3%E8%AF%97%E4%B9%8B%E5%90%8E%E6%88%91%E6%82%9F%E4%BA%86/">
+            <span class="next-text nav-default">17｜诗中哲学：读了这些理趣诗之后，我悟了！</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

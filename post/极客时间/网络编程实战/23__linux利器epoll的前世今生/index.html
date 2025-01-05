@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>23__Linux利器：epoll的前世今生 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 23 讲，欢迎回来。
+性能篇的前三讲，非阻塞 I/O 加上 I/O 多路复用，已经渐渐帮助我们在高性能网络编程这个领域搭建了初步的基石。但是，离最终的目标还差那么一点，如果说 I/O 多路复用帮我们打开了高性能网络编程的窗口，那么今天的主题——epoll，将为我们增添足够的动力。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/23__linux%E5%88%A9%E5%99%A8epoll%E7%9A%84%E5%89%8D%E4%B8%96%E4%BB%8A%E7%94%9F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/23__linux%E5%88%A9%E5%99%A8epoll%E7%9A%84%E5%89%8D%E4%B8%96%E4%BB%8A%E7%94%9F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="23__Linux利器：epoll的前世今生">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 23 讲，欢迎回来。
+性能篇的前三讲，非阻塞 I/O 加上 I/O 多路复用，已经渐渐帮助我们在高性能网络编程这个领域搭建了初步的基石。但是，离最终的目标还差那么一点，如果说 I/O 多路复用帮我们打开了高性能网络编程的窗口，那么今天的主题——epoll，将为我们增添足够的动力。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="23__Linux利器：epoll的前世今生">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 23 讲，欢迎回来。
+性能篇的前三讲，非阻塞 I/O 加上 I/O 多路复用，已经渐渐帮助我们在高性能网络编程这个领域搭建了初步的基石。但是，离最终的目标还差那么一点，如果说 I/O 多路复用帮我们打开了高性能网络编程的窗口，那么今天的主题——epoll，将为我们增添足够的动力。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4788">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="23__Linux利器：epoll的前世今生">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 23 讲，欢迎回来。
+性能篇的前三讲，非阻塞 I/O 加上 I/O 多路复用，已经渐渐帮助我们在高性能网络编程这个领域搭建了初步的基石。但是，离最终的目标还差那么一点，如果说 I/O 多路复用帮我们打开了高性能网络编程的窗口，那么今天的主题——epoll，将为我们增添足够的动力。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">23__Linux利器：epoll的前世今生</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4788 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#epoll-的用法">epoll 的用法</a>
+          <ul>
+            <li><a href="#epoll_create">epoll_create</a></li>
+            <li><a href="#epoll_ctl">epoll_ctl</a></li>
+            <li><a href="#epoll_wait">epoll_wait</a></li>
+          </ul>
+        </li>
+        <li><a href="#epoll-例子">epoll 例子</a>
+          <ul>
+            <li><a href="#代码解析">代码解析</a></li>
+            <li><a href="#实验">实验</a></li>
+          </ul>
+        </li>
+        <li><a href="#edge-triggered-vs-level-triggered">edge-triggered VS level-triggered</a></li>
+        <li><a href="#epoll-的历史">epoll 的历史</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 23 讲，欢迎回来。</p>
+<p>性能篇的前三讲，非阻塞 I/O 加上 I/O 多路复用，已经渐渐帮助我们在高性能网络编程这个领域搭建了初步的基石。但是，离最终的目标还差那么一点，如果说 I/O 多路复用帮我们打开了高性能网络编程的窗口，那么今天的主题——epoll，将为我们增添足够的动力。</p>
+<p>我在文稿中放置了一张图，这张图来自 The Linux Programming Interface(No Starch Press)。这张图直观地为我们展示了 select、poll、epoll 几种不同的 I/O 复用技术在面对不同文件描述符大小时的表现差异。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/07e29d951d1df55e905a0be4acc0d494.png" alt=""><br>
+从图中可以明显地看到，epoll 的性能是最好的，即使在多达 10000 个文件描述的情况下，其性能的下降和有 10 个文件描述符的情况相比，差别也不是很大。而随着文件描述符的增大，常规的 select 和 poll 方法性能逐渐变得很差。</p>
+<p>那么，epoll 究竟使用了什么样的“魔法”，取得了如此令人惊讶的效果呢？接下来，我们就来一起分析一下。</p>
+<h2 id="epoll-的用法">epoll 的用法</h2>
+<p>在分析对比 epoll、poll 和 select 几种技术之前，我们先看一下怎么使用 epoll 来完成一个服务器程序，具体的原理我将在 29 讲中进行讲解。</p>
+<p>epoll 可以说是和 poll 非常相似的一种 I/O 多路复用技术，有些朋友将 epoll 归为异步 I/O，我觉得这是不正确的。本质上 epoll 还是一种 I/O 多路复用技术，epoll 通过监控注册的多个描述字，来进行 I/O 事件的分发处理。不同于 poll 的是，epoll 不仅提供了默认的 level-triggered（条件触发）机制，还提供了性能更为强劲的 edge-triggered（边缘触发）机制。至于这两种机制的区别，我会在后面详细展开。</p>
+<p>使用 epoll 进行网络程序的编写，需要三个步骤，分别是 epoll_create，epoll_ctl 和 epoll_wait。接下来我对这几个 API 详细展开讲一下。</p>
+<h3 id="epoll_create">epoll_create</h3>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int epoll_create(int size);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int epoll_create1(int flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        返回值: 若成功返回一个大于 0 的值，表示 epoll 实例；若返回 -1 表示出错
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>epoll_create() 方法创建了一个 epoll 实例，从 Linux 2.6.8 开始，参数 size 被自动忽略，但是该值仍需要一个大于 0 的整数。这个 epoll 实例被用来调用 epoll_ctl 和 epoll_wait，如果这个 epoll 实例不再需要，比如服务器正常关机，需要调用 close() 方法释放 epoll 实例，这样系统内核可以回收 epoll 实例所分配使用的内核资源。</p>
+<p>关于这个参数 size，在一开始的 epoll_create 实现中，是用来告知内核期望监控的文件描述字大小，然后内核使用这部分的信息来初始化内核数据结构，在新的实现中，这个参数不再被需要，因为内核可以动态分配需要的内核数据结构。我们只需要注意，每次将 size 设置成一个大于 0 的整数就可以了。</p>
+<p>epoll_create1() 的用法和 epoll_create() 基本一致，如果 epoll_create1() 的输入 size 大小为 0，则和 epoll_create() 一样，内核自动忽略。可以增加如 EPOLL_CLOEXEC 的额外选项，如果你有兴趣的话，可以研究一下这个选项有什么意义。</p>
+<h3 id="epoll_ctl">epoll_ctl</h3>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        返回值: 若成功返回 0；若返回 -1 表示出错
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在创建完 epoll 实例之后，可以通过调用 epoll_ctl 往这个 epoll 实例增加或删除监控的事件。函数 epll_ctl 有 4 个入口参数。</p>
+<p>第一个参数 epfd 是刚刚调用 epoll_create 创建的 epoll 实例描述字，可以简单理解成是 epoll 句柄。</p>
+<p>第二个参数表示增加还是删除一个监控事件，它有三个选项可供选择：</p>
+<ul>
+<li>EPOLL_CTL_ADD：向 epoll 实例注册文件描述符对应的事件；</li>
+<li>EPOLL_CTL_DEL：向 epoll 实例删除文件描述符对应的事件；</li>
+<li>EPOLL_CTL_MOD：修改文件描述符对应的事件。</li>
+</ul>
+<p>第三个参数是注册的事件的文件描述符，比如一个监听套接字。</p>
+<p>第四个参数表示的是注册的事件类型，并且可以在这个结构体里设置用户需要的数据，其中最为常见的是使用联合结构里的 fd 字段，表示事件所对应的文件描述符。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">typedef</span> <span class="n">union</span> <span class="n">epoll_data</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">void</span>        <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="ne">int</span>          <span class="n">fd</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">uint32_t</span>     <span class="n">u32</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">uint64_t</span>     <span class="n">u64</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="p">}</span> <span class="n">epoll_data_t</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">struct</span> <span class="n">epoll_event</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">uint32_t</span>     <span class="n">events</span><span class="p">;</span>      <span class="o">/*</span> <span class="n">Epoll</span> <span class="n">events</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">epoll_data_t</span> <span class="n">data</span><span class="p">;</span>        <span class="o">/*</span> <span class="n">User</span> <span class="n">data</span> <span class="n">variable</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="p">};</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们在前面介绍 poll 的时候已经接触过基于 mask 的事件类型了，这里 epoll 仍旧使用了同样的机制，我们重点看一下这几种事件类型：</p>
+<ul>
+<li>EPOLLIN：表示对应的文件描述字可以读；</li>
+<li>EPOLLOUT：表示对应的文件描述字可以写；</li>
+<li>EPOLLRDHUP：表示套接字的一端已经关闭，或者半关闭；</li>
+<li>EPOLLHUP：表示对应的文件描述字被挂起；</li>
+<li>EPOLLET：设置为 edge-triggered，默认为 level-triggered。</li>
+</ul>
+<h3 id="epoll_wait">epoll_wait</h3>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  返回值: 成功返回的是一个大于 0 的数，表示事件的个数；返回 0 表示的是超时时间到；若出错返回 -1.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>epoll_wait() 函数类似之前的 poll 和 select 函数，调用者进程被挂起，在等待内核 I/O 事件的分发。</p>
+<p>这个函数的第一个参数是 epoll 实例描述字，也就是 epoll 句柄。</p>
+<p>第二个参数返回给用户空间需要处理的 I/O 事件，这是一个数组，数组的大小由 epoll_wait 的返回值决定，这个数组的每个元素都是一个需要待处理的 I/O 事件，其中 events 表示具体的事件类型，事件类型取值和 epoll_ctl 可设置的值一样，这个 epoll_event 结构体里的 data 值就是在 epoll_ctl 那里设置的 data，也就是用户空间和内核空间调用时需要的数据。</p>
+<p>第三个参数是一个大于 0 的整数，表示 epoll_wait 可以返回的最大事件值。</p>
+<p>第四个参数是 epoll_wait 阻塞调用的超时值，如果这个值设置为 -1，表示不超时；如果设置为 0 则立即返回，即使没有任何 I/O 事件发生。</p>
+<h2 id="epoll-例子">epoll 例子</h2>
+<h3 id="代码解析">代码解析</h3>
+<p>下面我们把原先基于 poll 的服务器端程序改造成基于 epoll 的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span><span class="lnt">135
+</span><span class="lnt">136
+</span><span class="lnt">137
+</span><span class="lnt">138
+</span><span class="lnt">139
+</span><span class="lnt">140
+</span><span class="lnt">141
+</span><span class="lnt">142
+</span><span class="lnt">143
+</span><span class="lnt">144
+</span><span class="lnt">145
+</span><span class="lnt">146
+</span><span class="lnt">147
+</span><span class="lnt">148
+</span><span class="lnt">149
+</span><span class="lnt">150
+</span><span class="lnt">151
+</span><span class="lnt">152
+</span><span class="lnt">153
+</span><span class="lnt">154
+</span><span class="lnt">155
+</span><span class="lnt">156
+</span><span class="lnt">157
+</span><span class="lnt">158
+</span><span class="lnt">159
+</span><span class="lnt">160
+</span><span class="lnt">161
+</span><span class="lnt">162
+</span><span class="lnt">163
+</span><span class="lnt">164
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#include &#34;lib/common.h&#34;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> #define MAXEVENTS 128
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> char rot13_char(char c) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if ((c &gt;= &#39;a&#39; &amp;&amp; c &lt;= &#39;m&#39;) || (c &gt;= &#39;A&#39; &amp;&amp; c &lt;= &#39;M&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c + 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else if ((c &gt;= &#39;n&#39; &amp;&amp; c &lt;= &#39;z&#39;) || (c &gt;= &#39;N&#39; &amp;&amp; c &lt;= &#39;Z&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c - 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int argc, char **argv) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int listen_fd, socket_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int n, i;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int efd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct epoll_event event;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct epoll_event *events;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     listen_fd = tcp_nonblocking_server_listen(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     efd = epoll_create1(0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (efd == -1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        error(1, errno, &#34;epoll create failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     event.data.fd = listen_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    event.events = EPOLLIN | EPOLLET;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (epoll_ctl(efd, EPOLL_CTL_ADD, listen_fd, &amp;event) == -1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        error(1, errno, &#34;epoll_ctl add listen fd failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     /* Buffer where events are returned */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    events = calloc(MAXEVENTS, sizeof(event));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        n = epoll_wait(efd, events, MAXEVENTS, -1);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        printf(&#34;epoll_wait wakeup\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        for (i = 0; i &lt; n; i++) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if ((events[i].events &amp; EPOLLERR) ||
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                (events[i].events &amp; EPOLLHUP) ||
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                (!(events[i].events &amp; EPOLLIN))) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                fprintf(stderr, &#34;epoll error\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                close(events[i].data.fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } else if (listen_fd == events[i].data.fd) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                struct sockaddr_storage ss;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                socklen_t slen = sizeof(ss);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                int fd = accept(listen_fd, (struct sockaddr *) &amp;ss, &amp;slen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (fd &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    error(1, errno, &#34;accept failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    make_nonblocking(fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    event.data.fd = fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    event.events = EPOLLIN | EPOLLET; //edge-triggered
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if (epoll_ctl(efd, EPOLL_CTL_ADD, fd, &amp;event) == -1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        error(1, errno, &#34;epoll_ctl add connection fd failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                socket_fd = events[i].data.fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                printf(&#34;get event on socket fd == %d \n&#34;, socket_fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    char buf[512];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    if ((n = read(socket_fd, buf, sizeof(buf))) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        if (errno != EAGAIN) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            error(1, errno, &#34;read error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            close(socket_fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    } else if (n == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        close(socket_fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        for (i = 0; i &lt; n; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            buf[i] = rot13_char(buf[i]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        if (write(socket_fd, buf, n) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                            error(1, errno, &#34;write error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     free(events);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    close(listen_fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>程序的第 23 行调用 epoll_create0 创建了一个 epoll 实例。</p>
+<p>28-32 行，调用 epoll_ctl 将监听套接字对应的 I/O 事件进行了注册，这样在有新的连接建立之后，就可以感知到。注意这里使用的是 edge-triggered（边缘触发）。</p>
+<p>35 行为返回的 event 数组分配了内存。</p>
+<p>主循环调用 epoll_wait 函数分发 I/O 事件，当 epoll_wait 成功返回时，通过遍历返回的 event 数组，就直接可以知道发生的 I/O 事件。</p>
+<p>第 41-46 行判断了各种错误情况。</p>
+<p>第 47-61 行是监听套接字上有事件发生的情况下，调用 accept 获取已建立连接，并将该连接设置为非阻塞，再调用 epoll_ctl 把已连接套接字对应的可读事件注册到 epoll 实例中。这里我们使用了 event_data 里面的 fd 字段，将连接套接字存储其中。</p>
+<p>第 63-84 行，处理了已连接套接字上的可读事件，读取字节流，编码后再回应给客户端。</p>
+<h3 id="实验">实验</h3>
+<p>启动该服务器：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./epoll01
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 6
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>再启动几个 telnet 客户端，可以看到有连接建立情况下，epoll_wait 迅速从挂起状态结束；并且套接字上有数据可读时，epoll_wait 也迅速结束挂起状态，这时候通过 read 可以读取套接字接收缓冲区上的数据。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to 127.0.0.1.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fasfsafas
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">snfsfnsnf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">^]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">telnet&gt; quit
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connection closed.
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="edge-triggered-vs-level-triggered">edge-triggered VS level-triggered</h2>
+<p>对于 edge-triggered 和 level-triggered，官方的说法是一个是边缘触发，一个是条件触发。也有文章从电子脉冲角度来解读的，总体上，给初学者的带来的感受是理解上有困难。</p>
+<p>我在文稿里面给了两个程序，我们用这个程序来说明一下这两者之间的不同。</p>
+<p>在这两个程序里，即使已连接套接字上有数据可读，我们也不调用 read 函数去读，只是简单地打印出一句话。</p>
+<p>第一个程序我们设置为 edge-triggered，即边缘触发。开启这个服务器程序，用 telnet 连接上，输入一些字符，我们看到，服务器端只从 epoll_wait 中苏醒过一次，就是第一次有数据可读的时候。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./epoll02
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span></code></pre></td></tr></table>
+</div>
+</div><div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to 127.0.0.1.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">asfafas
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二个程序我们设置为 level-triggered，即条件触发。然后按照同样的步骤来一次，观察服务器端，这一次我们可以看到，服务器端不断地从 epoll_wait 中苏醒，告诉我们有数据需要读取。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./epoll03
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">epoll_wait wakeup
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">get event on socket fd == 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这就是两者的区别，条件触发的意思是只要满足事件的条件，比如有数据需要读，就一直不断地把这个事件传递给用户；而边缘触发的意思是只有第一次满足条件的时候才触发，之后就不会再传递同样的事件了。</p>
+<p>一般我们认为，边缘触发的效率比条件触发的效率要高，这一点也是 epoll 的杀手锏之一。</p>
+<h2 id="epoll-的历史">epoll 的历史</h2>
+<p>早在 Linux 实现 epoll 之前，Windows 系统就已经在 1994 年引入了 IOCP，这是一个异步 I/O 模型，用来支持高并发的网络 I/O，而著名的 FreeBSD 在 2000 年引入了 Kqueue——一个 I/O 事件分发框架。</p>
+<p>Linux 在 2002 年引入了 epoll，不过相关工作的讨论和设计早在 2000 年就开始了。如果你感兴趣的话，可以<a href="./_a_href=.md">http://lkml.iu.edu/hypermail/linux/kernel/0010.3/0003.html</a>&quot;&gt; 点击这里看一下里面的讨论。</p>
+<p>为什么 Linux 不把 FreeBSD 的 kqueue 直接移植过来，而是另辟蹊径创立了 epoll 呢？</p>
+<p>让我们先看下 kqueue 的用法，kqueue 也需要先创建一个名叫 kqueue 的对象，然后通过这个对象，调用 kevent 函数增加感兴趣的事件，同时，也是通过这个 kevent 函数来等待事件的发生。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">kqueue</span><span class="p">(</span><span class="n">void</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="ne">int</span> <span class="n">kevent</span><span class="p">(</span><span class="ne">int</span> <span class="n">kq</span><span class="p">,</span> <span class="k">const</span> <span class="n">struct</span> <span class="n">kevent</span> <span class="o">*</span><span class="n">changelist</span><span class="p">,</span> <span class="ne">int</span> <span class="n">nchanges</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">struct</span> <span class="n">kevent</span> <span class="o">*</span><span class="n">eventlist</span><span class="p">,</span> <span class="ne">int</span> <span class="n">nevents</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="k">const</span> <span class="n">struct</span> <span class="n">timespec</span> <span class="o">*</span><span class="n">timeout</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">void</span> <span class="n">EV_SET</span><span class="p">(</span><span class="n">struct</span> <span class="n">kevent</span> <span class="o">*</span><span class="n">kev</span><span class="p">,</span> <span class="n">uintptr_t</span> <span class="n">ident</span><span class="p">,</span> <span class="n">short</span> <span class="n">filter</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">u_short</span> <span class="n">flags</span><span class="p">,</span> <span class="n">u_int</span> <span class="n">fflags</span><span class="p">,</span> <span class="n">intptr_t</span> <span class="n">data</span><span class="p">,</span> <span class="n">void</span> <span class="o">*</span><span class="n">udata</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">struct</span> <span class="n">kevent</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">uintptr_t</span> <span class="n">ident</span><span class="p">;</span>   <span class="o">/*</span> <span class="n">identifier</span> <span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">g</span><span class="o">.</span><span class="p">,</span> <span class="n">file</span> <span class="n">descriptor</span><span class="p">)</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">short</span>    <span class="n">filter</span><span class="p">;</span>  <span class="o">/*</span> <span class="n">filter</span> <span class="n">type</span> <span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">g</span><span class="o">.</span><span class="p">,</span> <span class="n">EVFILT_READ</span><span class="p">)</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">u_short</span>   <span class="n">flags</span><span class="p">;</span>   <span class="o">/*</span> <span class="n">action</span> <span class="n">flags</span> <span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">g</span><span class="o">.</span><span class="p">,</span> <span class="n">EV_ADD</span><span class="p">)</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">u_int</span>    <span class="n">fflags</span><span class="p">;</span>  <span class="o">/*</span> <span class="n">filter</span><span class="o">-</span><span class="n">specific</span> <span class="n">flags</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">intptr_t</span>   <span class="n">data</span><span class="p">;</span>   <span class="o">/*</span> <span class="n">filter</span><span class="o">-</span><span class="n">specific</span> <span class="n">data</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">void</span>     <span class="o">*</span><span class="n">udata</span><span class="p">;</span>   <span class="o">/*</span> <span class="n">opaque</span> <span class="n">user</span> <span class="n">data</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Linus 在他最初的设想里，提到了这么一句话，也就是说他觉得类似 select 或 poll 的数组方式是可以的，而队列方式则是不可取的。</p>
+<p>So sticky arrays of events are good, while queues are bad. Let’s take that as one of the fundamentals.</p>
+<p>在最初的设计里，Linus 等于把 keque 里面的 kevent 函数拆分了两个部分，一部分负责事件绑定，通过 bind_event 函数来实现；另一部分负责事件等待，通过 get_events 来实现。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct event {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     unsigned long id; /* file descriptor ID the event is on */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     unsigned long event; /* bitmask of active events */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int bind_event(int fd, struct event *event);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int get_events(struct event * event_array, int maxnr, struct timeval *tmout);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>和最终的 epoll 实现相比，前者类似 epoll_ctl，后者类似 epoll_wait，不过原始的设计里没有考虑到创建 epoll 句柄，在最终的实现里增加了 epoll_create，支持了 epoll 句柄的创建。</p>
+<p>2002 年，epoll 最终在 Linux 2.5.44 中首次出现，在 2.6 中趋于稳定，为 Linux 的高性能网络 I/O 画上了一段句号。</p>
+<h2 id="总结">总结</h2>
+<p>Linux 中 epoll 的出现，为高性能网络编程补齐了最后一块拼图。epoll 通过改进的接口设计，避免了用户态 - 内核态频繁的数据拷贝，大大提高了系统性能。在使用 epoll 的时候，我们一定要理解条件触发和边缘触发两种模式。条件触发的意思是只要满足事件的条件，比如有数据需要读，就一直不断地把这个事件传递给用户；而边缘触发的意思是只有第一次满足条件的时候才触发，之后就不会再传递同样的事件了。</p>
+<h2 id="思考题">思考题</h2>
+<p>理解完了 epoll，和往常一样，我给你布置两道思考题：</p>
+<p>第一道，你不妨试着修改一下第 20 讲中 select 的例子，即在已连接套接字上有数据可读，也不调用 read 函数去读，看一看你的结果，你认为 select 是边缘触发的，还是条件触发的？</p>
+<p>第二道，同样的修改一下第 21 讲 poll 的例子，看看你的结果，你认为 poll 是边缘触发的，还是条件触发的？</p>
+<p>你可以在 GitHub 上上传你的代码，并写出你的疑惑，我会和你一起交流，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/23__kafka%E5%89%AF%E6%9C%AC%E6%9C%BA%E5%88%B6%E8%AF%A6%E8%A7%A3/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">23__Kafka副本机制详解</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%90%8E%E7%AB%AF%E5%AD%98%E5%82%A8%E5%AE%9E%E6%88%98%E8%AF%BE/23__mysql%E7%BB%8F%E5%B8%B8%E9%81%87%E5%88%B0%E7%9A%84%E9%AB%98%E5%8F%AF%E7%94%A8%E5%88%86%E7%89%87%E9%97%AE%E9%A2%98newsql%E6%98%AF%E5%A6%82%E4%BD%95%E8%A7%A3%E5%86%B3%E7%9A%84/">
+            <span class="next-text nav-default">23__MySQL经常遇到的高可用、分片问题，NewSQL是如何解决的？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

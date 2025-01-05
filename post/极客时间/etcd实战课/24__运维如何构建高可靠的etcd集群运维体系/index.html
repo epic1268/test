@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>24__运维：如何构建高可靠的etcd集群运维体系？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是唐聪。
+在使用 etcd 过程中，我们经常会面临着一系列问题与选择，比如：
+etcd 是使用虚拟机还是容器部署，各有什么优缺点？ 如何及时发现 etcd 集群隐患项（比如数据不一致）？ 如何及时监控及告警 etcd 的潜在隐患（比如 db 大小即将达到配额）？ 如何优雅的定时、甚至跨城备份 etcd 数据？ 如何模拟磁盘 IO 等异常来复现 Bug、故障？ 今天，我就和你聊聊如何解决以上问题。我将通过从 etcd 集群部署、集群组建、监控体系、巡检、备份及还原、高可用、混沌工程等维度，带你了解如何构建一个高可靠的 etcd 集群运维体系。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/24__%E8%BF%90%E7%BB%B4%E5%A6%82%E4%BD%95%E6%9E%84%E5%BB%BA%E9%AB%98%E5%8F%AF%E9%9D%A0%E7%9A%84etcd%E9%9B%86%E7%BE%A4%E8%BF%90%E7%BB%B4%E4%BD%93%E7%B3%BB/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/24__%E8%BF%90%E7%BB%B4%E5%A6%82%E4%BD%95%E6%9E%84%E5%BB%BA%E9%AB%98%E5%8F%AF%E9%9D%A0%E7%9A%84etcd%E9%9B%86%E7%BE%A4%E8%BF%90%E7%BB%B4%E4%BD%93%E7%B3%BB/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="24__运维：如何构建高可靠的etcd集群运维体系？">
+  <meta property="og:description" content="你好，我是唐聪。
+在使用 etcd 过程中，我们经常会面临着一系列问题与选择，比如：
+etcd 是使用虚拟机还是容器部署，各有什么优缺点？ 如何及时发现 etcd 集群隐患项（比如数据不一致）？ 如何及时监控及告警 etcd 的潜在隐患（比如 db 大小即将达到配额）？ 如何优雅的定时、甚至跨城备份 etcd 数据？ 如何模拟磁盘 IO 等异常来复现 Bug、故障？ 今天，我就和你聊聊如何解决以上问题。我将通过从 etcd 集群部署、集群组建、监控体系、巡检、备份及还原、高可用、混沌工程等维度，带你了解如何构建一个高可靠的 etcd 集群运维体系。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Etcd实战课">
+
+  <meta itemprop="name" content="24__运维：如何构建高可靠的etcd集群运维体系？">
+  <meta itemprop="description" content="你好，我是唐聪。
+在使用 etcd 过程中，我们经常会面临着一系列问题与选择，比如：
+etcd 是使用虚拟机还是容器部署，各有什么优缺点？ 如何及时发现 etcd 集群隐患项（比如数据不一致）？ 如何及时监控及告警 etcd 的潜在隐患（比如 db 大小即将达到配额）？ 如何优雅的定时、甚至跨城备份 etcd 数据？ 如何模拟磁盘 IO 等异常来复现 Bug、故障？ 今天，我就和你聊聊如何解决以上问题。我将通过从 etcd 集群部署、集群组建、监控体系、巡检、备份及还原、高可用、混沌工程等维度，带你了解如何构建一个高可靠的 etcd 集群运维体系。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6161">
+  <meta itemprop="keywords" content="Etcd实战课">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="24__运维：如何构建高可靠的etcd集群运维体系？">
+  <meta name="twitter:description" content="你好，我是唐聪。
+在使用 etcd 过程中，我们经常会面临着一系列问题与选择，比如：
+etcd 是使用虚拟机还是容器部署，各有什么优缺点？ 如何及时发现 etcd 集群隐患项（比如数据不一致）？ 如何及时监控及告警 etcd 的潜在隐患（比如 db 大小即将达到配额）？ 如何优雅的定时、甚至跨城备份 etcd 数据？ 如何模拟磁盘 IO 等异常来复现 Bug、故障？ 今天，我就和你聊聊如何解决以上问题。我将通过从 etcd 集群部署、集群组建、监控体系、巡检、备份及还原、高可用、混沌工程等维度，带你了解如何构建一个高可靠的 etcd 集群运维体系。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">24__运维：如何构建高可靠的etcd集群运维体系？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6161 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#整体解决方案">整体解决方案</a></li>
+        <li><a href="#集群部署">集群部署</a></li>
+        <li><a href="#集群组建">集群组建</a></li>
+        <li><a href="#监控及告警体系">监控及告警体系</a></li>
+        <li><a href="#备份及还原">备份及还原</a></li>
+        <li><a href="#巡检">巡检</a></li>
+        <li><a href="#高可用及自愈">高可用及自愈</a></li>
+        <li><a href="#混沌工程">混沌工程</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是唐聪。</p>
+<p>在使用 etcd 过程中，我们经常会面临着一系列问题与选择，比如：</p>
+<ol>
+<li>etcd 是使用虚拟机还是容器部署，各有什么优缺点？</li>
+<li>如何及时发现 etcd 集群隐患项（比如数据不一致）？</li>
+<li>如何及时监控及告警 etcd 的潜在隐患（比如 db 大小即将达到配额）？</li>
+<li>如何优雅的定时、甚至跨城备份 etcd 数据？</li>
+<li>如何模拟磁盘 IO 等异常来复现 Bug、故障？</li>
+</ol>
+<p>今天，我就和你聊聊如何解决以上问题。我将通过从 etcd 集群部署、集群组建、监控体系、巡检、备份及还原、高可用、混沌工程等维度，带你了解如何构建一个高可靠的 etcd 集群运维体系。</p>
+<p>希望通过这节课，让你对 etcd 集群运维过程中可能会遇到的一系列问题和解决方案有一定的了解，帮助你构建高可靠的 etcd 集群运维体系，助力业务更快、更稳地运行。</p>
+<h2 id="整体解决方案">整体解决方案</h2>
+<p>那要如何构建高可靠的 etcd 集群运维体系呢？</p>
+<p>我通过下面这个思维脑图给你总结了 etcd 运维体系建设核心要点，它由 etcd 集群部署、成员管理、监控及告警体系、备份及还原、巡检、高可用及自愈、混沌工程等维度组成。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/0a988cedf817882c6204aa61a08fe16f.png" alt=""></p>
+<h2 id="集群部署">集群部署</h2>
+<p>要想使用 etcd 集群，我们面对的第一个问题是如何选择合适的方案去部署 etcd 集群。</p>
+<p>首先是计算资源的选择，它本质上就是计算资源的交付演进史，分别如下：</p>
+<ol>
+<li>物理机；</li>
+<li>虚拟机；</li>
+<li>裸容器（如 Docker 实例）；</li>
+<li>Kubernetes 容器编排。</li>
+</ol>
+<p>物理机资源交付慢、成本高、扩缩容流程费时，一般情况下大部分业务团队不再考虑物理机，除非是超大规模的上万个节点的 Kubernetes 集群，对 CPU、内存、网络资源有着极高诉求。</p>
+<p>虚拟机是目前各个云厂商售卖的主流实例，无论是基于 KVM 还是 Xen 实现，都具有良好的稳定性、隔离性，支持故障热迁移，可弹性伸缩，被 etcd、数据库等存储业务大量使用。</p>
+<p>在基于物理机和虚拟机的部署方案中，我推荐你使用 ansible、puppet 等自动运维工具，构建标准、自动化的 etcd 集群搭建、扩缩容流程。基于 ansible 部署 etcd 集群可以拆分成以下若干个任务:</p>
+<ol>
+<li>下载及安装 etcd 二进制到指定目录；</li>
+<li>将 etcd 加入 systemd 等服务管理；</li>
+<li>为 etcd 增加配置文件，合理设置相关参数；</li>
+<li>为 etcd 集群各个节点生成相关证书，构建一个安全的集群；</li>
+<li>组建集群版（静态配置、动态配置，发现集群其他节点）；</li>
+<li>开启 etcd 服务，启动 etcd 集群。</li>
+</ol>
+<p>详细你可以参考 digitalocean这篇博客文章，它介绍了如何使用 ansible 去部署一个安全的 etcd 集群，并给出了对应的 yaml 任务文件。</p>
+<p>容器化部署则具有极速的交付效率、更灵活的资源控制、更低的虚拟化开销等一系列优点。自从 Docker 诞生后，容器化部署就风靡全球。有的业务直接使用裸 Docker 容器来跑 etcd 集群。然而裸 Docker 容器不具备调度、故障自愈、弹性扩容等特性，存在较大局限性。</p>
+<p>随后为了解决以上问题，诞生了以 Kubernetes、Swarm 为首的容器编排平台，Kubernetes 成为了容器编排之战中的王者，大量业务使用 Kubernetes 来部署 etcd、ZooKeeper 等有状态服务。在开源社区中，也诞生了若干个 etcd 的 Kubernetes 容器化解决方案，分别如下：</p>
+<ol>
+<li>etcd-operator；</li>
+<li>bitnami etcd/statefulset；</li>
+<li>etcd-cluster-operator；</li>
+<li>openshit/cluster-etcd-operator；</li>
+<li>kubeadm。</li>
+</ol>
+<p>etcd-operator目前已处于 Archived 状态，无人维护，基本废弃。同时它是基于裸 Pod 实现的，要做好各种备份。在部分异常情况下存在集群宕机、数据丢失风险，我仅建议你使用它的数据备份 etcd-backup-operator。</p>
+<p>bitnami etcd提供了一个 helm 包一键部署 etcd 集群，支持各个云厂商，支持使用 PV、PVC 持久化存储数据，底层基于 StatefulSet 实现，较稳定。目前不少开源项目使用的是它。</p>
+<p>你可以通过如下 helm 命令，快速在 Kubernete 集群中部署一个 etcd 集群。</p>
+<p>helm repo add bitnami <a href="https://charts.bitnami.com/bitnami">https://charts.bitnami.com/bitnami</a><br>
+helm install my-release bitnami/etcd</p>
+<p>etcd-cluster-operator和 openshit/cluster-etcd-operator比较小众，目前 star 不多，但是有相应的开发者维护，你可参考下它们的实现思路，与 etcd-operator 基于 Pod、bitnami etcd 基于 Statefulset 实现不一样的是，它们是基于 ReplicaSet 和 Static Pod 实现的。</p>
+<p>最后要和你介绍的是kubeadm，它是 Kubernetes 集群中的 etcd 高可用部署方案的提供者，kubeadm 是基于 Static Pod 部署 etcd 集群的。Static Pod 相比普通 Pod 有其特殊性，它是直接由节点上的 kubelet 进程来管理，无需通过 kube-apiserver。</p>
+<p>创建 Static Pod 方式有两种，分别是配置文件和 HTTP。kubeadm 使用的是配置文件，也就是在 kubelet 监听的静态 Pod 目录下（一般是 /etc/kubernetes/manifests）放置相应的 etcd Pod YAML 文件即可，如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/ac2cb7e68b32b94c1332d55bd1fe4fee.png" alt=""></p>
+<p>注意在这种部署方式中，部署 etcd 的节点需要部署 docker、kubelet、kubeadm 组件，依赖较重。</p>
+<h2 id="集群组建">集群组建</h2>
+<p>和你聊完 etcd 集群部署的几种模式和基本原理后，我们接下来看看在实际部署过程中最棘手的部分，那就是集群组建。因为集群组建涉及到 etcd 成员管理的原理和节点发现机制。</p>
+<p>在特别放送里，超凡已通过一个诡异的故障案例给你介绍了成员管理的原理，并深入分析了 etcd 集群添加节点、新建集群、从备份恢复等场景的核心工作流程。etcd 目前通过一次只允许添加一个节点的方式，可安全的实现在线成员变更。</p>
+<p>你要特别注意，当变更集群成员节点时，节点的 initial-cluster-state 参数的取值可以是 new 或 existing。</p>
+<ol>
+<li>new，一般用于初始化启动一个新集群的场景。当设置成 new 时，它会根据 initial-cluster-token、initial-cluster 等参数信息计算集群 ID、成员 ID 信息。</li>
+<li>existing，表示 etcd 节点加入一个已存在的集群，它会根据 peerURLs 信息从 Peer 节点获取已存在的集群 ID 信息，更新自己本地配置、并将本身节点信息发布到集群中。</li>
+</ol>
+<p>那么当你要组建一个三节点的 etcd 集群的时候，有哪些方法呢？</p>
+<p>在 etcd 中，无论是 Leader 选举还是日志同步，都涉及到与其他节点通信。因此组建集群的第一步得知道集群总成员数、各个成员节点的 IP 地址等信息。</p>
+<p>这个过程就是发现（Discovery）。目前 etcd 主要通过两种方式来获取以上信息，分别是 <strong>static configuration</strong> 和 <strong>dynamic service discovery</strong>。</p>
+<p><strong>static configuration</strong> 是指集群总成员节点数、成员节点的 IP 地址都是已知、固定的，根据我们上面介绍的 initial-cluster-state 原理，有如下两个方法可基于静态配置组建一个集群。</p>
+<ol>
+<li>方法 1，三个节点的 initial-cluster-state 都配置为 new，静态启动，initial-cluster 参数包含三个节点信息即可，详情你可参考社区文档。</li>
+<li>方法 2，第一个节点 initial-cluster-state 设置为 new，独立成集群，随后第二和第三个节点都为 existing，通过扩容的方式，不断加入到第一个节点所组成的集群中。</li>
+</ol>
+<p>如果成员节点信息是未知的，你可以通过 <strong>dynamic service discovery</strong> 机制解决。</p>
+<p>etcd 社区还提供了通过公共服务来发现成员节点信息，组建集群的方案。它的核心是集群内的各个成员节点向公共服务注册成员地址等信息，各个节点通过公共服务来发现彼此，你可以参考官方详细文档。</p>
+<h2 id="监控及告警体系">监控及告警体系</h2>
+<p>当我们把集群部署起来后，在业务开始使用之前，部署监控是必不可少的一个环节，它是我们保障业务稳定性，提前发现风险、隐患点的重要核心手段。那么要如何快速监控你的 etcd 集群呢？</p>
+<p>正如我在14和15里和你介绍延时、内存时所提及的，etcd 提供了丰富的 metrics 来展示整个集群的核心指标、健康度。metrics 按模块可划分为磁盘、网络、MVCC 事务、gRPC RPC、etcdserver。</p>
+<p>磁盘相关的 metrics 及含义如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/04928fef321b1442bc9307d0eeb48113.png" alt=""></p>
+<p>网络相关的 metrics 及含义如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/fcb9c76ca502cb75f3572d0a2dfc8f21.png" alt=""></p>
+<p>mvcc 相关的较多，我在下图中列举了部分其含义，如下所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/bb72b9c94597fdd52ec36231bae8ecbf.png" alt=""></p>
+<p>etcdserver 相关的如下，集群是否有 leader、堆积的 proposal 数等都在此模块。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/04def24ec860f73b5e243828e3b9642c.png" alt=""></p>
+<p>更多 metrics，你可以通过如下方法查看。</p>
+<p>curl 127.0.0.1:2379/metrics</p>
+<p>了解常见的 metrics 后，我们只需要配置 Prometheus 服务，采集 etcd 集群的 2379 端口的 metrics 路径。</p>
+<p>采集的方案一般有两种，静态配置和动态配置。</p>
+<p>静态配置是指添加待监控的 etcd target 到 Prometheus 配置文件，如下所示。</p>
+<p>global:<br>
+scrape_interval: 10s<br>
+scrape_configs:</p>
+<ul>
+<li>job_name: test-etcd<br>
+static_configs:
+<ul>
+<li>targets:<br>
+[&lsquo;10.240.0.32:2379&rsquo;,&lsquo;10.240.0.33:2379&rsquo;,&lsquo;10.240.0.34:2379&rsquo;]</li>
+</ul>
+</li>
+</ul>
+<p>静态配置的缺点是每次新增集群、成员变更都需要人工修改配置，而动态配置就可解决这个痛点。</p>
+<p>动态配置是通过 Prometheus-Operator 的提供 ServiceMonitor 机制实现的，当你想采集一个 etcd 实例时，若 etcd 服务部署在同一个 Kubernetes 集群，你只需要通过 Kubernetes 的 API 创建一个如下的 ServiceMonitor 资源即可。若 etcd 集群与 Promehteus-Operator 不在同一个集群，你需要去创建、更新对应的集群 Endpoint。</p>
+<p>那 Prometheus 是如何知道该采集哪些服务的 metrics 信息呢？</p>
+<p>答案 ServiceMonitor 资源通过 Namespace、Labels 描述了待采集实例对应的 Service Endpoint。</p>
+<p>apiVersion: monitoring.coreos.com/v1<br>
+kind: ServiceMonitor<br>
+metadata:<br>
+name: prometheus-prometheus-oper-kube-etcd<br>
+namespace: monitoring<br>
+spec:<br>
+endpoints:</p>
+<ul>
+<li>bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token<br>
+port: http-metrics<br>
+scheme: https<br>
+tlsConfig:<br>
+caFile: /etc/prometheus/secrets/etcd-certs/ca.crt<br>
+certFile: /etc/prometheus/secrets/etcd-certs/client.crt<br>
+insecureSkipVerify: true<br>
+keyFile: /etc/prometheus/secrets/etcd-certs/client.key<br>
+jobLabel: jobLabel<br>
+namespaceSelector:<br>
+matchNames:
+<ul>
+<li>kube-system<br>
+selector:<br>
+matchLabels:<br>
+app: prometheus-operator-kube-etcd<br>
+release: prometheus</li>
+</ul>
+</li>
+</ul>
+<p>采集了 metrics 监控数据后，下一步就是要基于 metrics 监控数据告警了。你可以通过 Prometheus 和Alertmanager组件实现，那你应该为哪些核心指标告警呢？</p>
+<p>当然是影响集群可用性的最核心的 metric。比如是否有 Leader、Leader 切换次数、WAL 和事务操作延时。etcd 社区提供了一个丰富的告警规则，你可以参考下。</p>
+<p>最后，为了方便你查看 etcd 集群运行状况和提升定位问题的效率，你可以基于采集的 metrics 配置个grafana 可视化面板。下面我给你列出了集群是否有 Leader、总的 key 数、总的 watcher 数、出流量、WAL 持久化延时的可视化面板。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/83417c0d3b0e48e8ded1a6db730c562b.png" alt=""></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/fb91a28932a275488cac4ec46f1edd55.png" alt=""></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/bf2ea26b95cd5454b166052f4e1f2e13.png" alt=""></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/063da99bffb3da79b51cc1f114a30dd6.png" alt=""></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/01b0d44f906270d6c8c901d79664d1bc.png" alt=""></p>
+<h2 id="备份及还原">备份及还原</h2>
+<p>监控及告警就绪后，就可以提供给业务在生产环境使用了吗？</p>
+<p>当然不行，数据是业务的安全红线，所以你还需要做好最核心的数据备份工作。</p>
+<p>如何做呢？</p>
+<p>主要有以下方法，首先是通过 etcdctl snapshot 命令行人工备份。在发起重要变更的时候，你可以通过如下命令进行备份，并查看快照状态。</p>
+<p>ETCDCTL_API=3 etcdctl &ndash;endpoints $ENDPOINT<br>
+snapshot save snapshotdb<br>
+ETCDCTL_API=3 etcdctl &ndash;write-out=table snapshot status snapshotdb</p>
+<p>其次是通过定时任务进行定时备份，建议至少每隔 1 个小时备份一次。</p>
+<p>然后是通过etcd-backup-operator进行自动化的备份，类似 ServiceMonitor，你可以通过创建一个备份任务 CRD 实现。CRD 如下：</p>
+<p>apiVersion: &ldquo;etcd.database.coreos.com/v1beta2&rdquo;<br>
+kind: &ldquo;EtcdBackup&rdquo;<br>
+metadata:<br>
+name: example-etcd-cluster-periodic-backup<br>
+spec:<br>
+etcdEndpoints: [<etcd-cluster-endpoints>]<br>
+storageType: S3<br>
+backupPolicy:<br>
+# 0 &gt; enable periodic backup<br>
+backupIntervalInSecond: 125<br>
+maxBackups: 4<br>
+s3:<br>
+# The format of &ldquo;path&rdquo; must be: &ldquo;<s3-bucket-name>/<path-to-backup-file>&rdquo;<br>
+# e.g: &ldquo;mybucket/etcd.backup&rdquo;<br>
+path: <full-s3-path><br>
+awsSecret: <aws-secret></p>
+<p>最后你可以通过给 etcd 集群增加 Learner 节点，实现跨地域热备。因 Learner 节点属于非投票成员的节点，因此它并不会影响你集群的性能。它的基本工作原理是当 Leader 收到写请求时，它会通过 Raft 模块将日志同步给 Learner 节点。你需要注意的是，在 etcd 3.4 中目前只支持 1 个 Learner 节点，并且只允许串行读。</p>
+<h2 id="巡检">巡检</h2>
+<p>完成集群部署、了解成员管理、构建好监控及告警体系并添加好定时备份策略后，这时终于可以放心给业务使用了。然而在后续业务使用过程中，你可能会遇到各类问题，而这些问题很可能是 metrics 监控无法发现的，比如如下：</p>
+<ol>
+<li>etcd 集群因重启进程、节点等出现数据不一致；</li>
+<li>业务写入大 key-value 导致 etcd 性能骤降；</li>
+<li>业务异常写入大量 key 数，稳定性存在隐患；</li>
+<li>业务少数 key 出现写入 QPS 异常，导致 etcd 集群出现限速等错误；</li>
+<li>重启、升级 etcd 后，需要人工从多维度检查集群健康度；</li>
+<li>变更 etcd 集群过程中，操作失误可能会导致 etcd 集群出现分裂；</li>
+</ol>
+<p>&hellip;&hellip;</p>
+<p>因此为了实现高效治理 etcd 集群，我们可将这些潜在隐患总结成一个个自动化检查项，比如：</p>
+<ol>
+<li>如何高效监控 etcd 数据不一致性？</li>
+<li>如何及时发现大 key-value?</li>
+<li>如何及时通过监控发现 key 数异常增长？</li>
+<li>如何及时监控异常写入 QPS?</li>
+<li>如何从多维度的对集群进行自动化的健康检测，更安心变更？</li>
+<li>&hellip;&hellip;</li>
+</ol>
+<p>如何将这些 etcd 的最佳实践策略反哺到现网大规模 etcd 集群的治理中去呢？</p>
+<p>答案就是巡检。</p>
+<p>参考 ServiceMonitor 和 EtcdBackup 机制，你同样可以通过 CRD 的方式描述此巡检任务，然后通过相应的 Operator 实现此巡检任务。比如下面就是一个数据一致性巡检的 YAML 文件，其对应的 Operator 组件会定时、并发检查其关联的 etcd 集群各个节点的 key 差异数。</p>
+<p>apiVersion: etcd.cloud.tencent.com/v1beta1<br>
+kind: EtcdMonitor<br>
+metadata: <br>
+creationTimestamp: &ldquo;2020-06-15T12:19:30Z&rdquo; <br>
+generation: 1 <br>
+labels:   <br>
+clusterName: gz-qcloud-etcd-03   <br>
+region: gz   <br>
+source: etcd-life-cycle-operator <br>
+name: gz-qcloud-etcd-03-etcd-node-key-diff <br>
+namespace: gz<br>
+spec: <br>
+clusterId: gz-qcloud-etcd-03 <br>
+metricName: etcd-node-key-diff <br>
+metricProviderName: cruiser <br>
+name: gz-qcloud-etcd-03 <br>
+productName: tke <br>
+region: gz<br>
+status: <br>
+records:</p>
+<ul>
+<li>endTime: &ldquo;2021-02-25T11:22:26Z&rdquo;   <br>
+message: collectEtcdNodeKeyDiff,etcd cluster gz-qcloud-etcd-03,total key num is     <br>
+122143,nodeKeyDiff is 0    <br>
+startTime: &ldquo;2021-02-25T12:39:28Z&rdquo; <br>
+updatedAt: &ldquo;2021-02-25T12:39:28Z&rdquo;</li>
+</ul>
+<h2 id="高可用及自愈">高可用及自愈</h2>
+<p>通过以上机制，我们已经基本建设好一个高可用的 etcd 集群运维体系了。最后再给你提供几个集群高可用及自愈的小建议：</p>
+<ol>
+<li>若 etcd 集群性能已满足业务诉求，可容忍一定的延时上升，建议你将 etcd 集群做高可用部署，比如对 3 个节点来说，把每个节点部署在独立的可用区，可容忍任意一个可用区故障。</li>
+<li>逐步尝试使用 Kubernetes 容器化部署 etcd 集群。当节点出现故障时，能通过 Kubernetes 的自愈机制，实现故障自愈。</li>
+<li>设置合理的 db quota 值，配置合理的压缩策略，避免集群 db quota 满从而导致集群不可用的情况发生。</li>
+</ol>
+<h2 id="混沌工程">混沌工程</h2>
+<p>在使用 etcd 的过程中，你可能会遇到磁盘、网络、进程异常重启等异常导致的故障。如何快速复现相关故障进行问题定位呢？</p>
+<p>答案就是混沌工程。一般常见的异常我们可以分为如下几类：</p>
+<ol>
+<li>磁盘 IO 相关的。比如模拟磁盘 IO 延时上升、IO 操作报错。之前遇到的一个底层磁盘硬件异常导致 IO 延时飙升，最终触发了 etcd 死锁的 Bug，我们就是通过模拟磁盘 IO 延时上升后来验证的。</li>
+<li>网络相关的。比如模拟网络分区、网络丢包、网络延时、包重复等。</li>
+<li>进程相关的。比如模拟进程异常被杀、重启等。之前遇到的一个非常难定位和复现的数据不一致 Bug，我们就是通过注入进程异常重启等故障，最后成功复现。</li>
+<li>压力测试相关的。比如模拟 CPU 高负载、内存使用率等。</li>
+</ol>
+<p>开源社区在混沌工程领域诞生了若干个优秀的混沌工程项目，如 chaos-mesh、chaos-blade、litmus。这里我重点和你介绍下chaos-mesh，它是基于 Kubernetes 实现的云原生混沌工程平台，下图是其架构图（引用自社区）。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/9ae1554a932173d0b523d0973cd20cac.png" alt=""></p>
+<p>为了实现以上异常场景的故障注入，chaos-mesh 定义了若干种资源类型，分别如下：</p>
+<ol>
+<li>IOChaos，用于模拟文件系统相关的 IO 延时和读写错误等。</li>
+<li>NetworkChaos，用于模拟网络延时、丢包等。</li>
+<li>PodChaos，用于模拟业务 Pod 异常，比如 Pod 被杀、Pod 内的容器重启等。</li>
+<li>StressChaos，用于模拟 CPU 和内存压力测试。</li>
+</ol>
+<p>当你希望给 etcd Pod 注入一个磁盘 IO 延时的故障时，你只需要创建此 YAML 文件就好。</p>
+<p>apiVersion: chaos-mesh.org/v1alpha1<br>
+kind: IoChaos<br>
+metadata:<br>
+name: io-delay-example<br>
+spec:<br>
+action: latency<br>
+mode: one<br>
+selector:<br>
+labelSelectors:<br>
+app: etcd<br>
+volumePath: /var/run/etcd<br>
+path: &lsquo;/var/run/etcd/**/*&rsquo;<br>
+delay: &lsquo;100ms&rsquo;<br>
+percent: 50<br>
+duration: &lsquo;400s&rsquo;<br>
+scheduler:<br>
+cron: &lsquo;@every 10m&rsquo;</p>
+<h2 id="小结">小结</h2>
+<p>最后我们来小结下今天的内容。</p>
+<p>今天我通过从集群部署、集群组建、监控及告警体系、备份、巡检、高可用、混沌工程几个维度，和你深入介绍了如何构建一个高可靠的 etcd 集群运维体系。</p>
+<p>在集群部署上，当你的业务集群规模非常大、对稳定性有着极高的要求时，推荐使用大规格、高性能的物理机、虚拟机独占部署，并且使用 ansible 等自动化运维工具，进行标准化的操作 etcd，避免人工一个个修改操作。</p>
+<p>对容器化部署来说，Kubernetes 场景推荐你使用 kubeadm，其他场景可考虑分批、逐步使用 bitnami 提供的 etcd helm 包，它是基于 statefulset、PV、PVC 实现的，各大云厂商都广泛支持，建议在生产环境前，多验证各个极端情况下的行为是否符合你的预期。</p>
+<p>在集群组建上，各个节点需要一定机制去发现集群中的其他成员节点，主要可分为 <strong>static configuration</strong> 和 <strong>dynamic service discovery</strong>。</p>
+<p>static configuration 是指集群中各个成员节点信息是已知的，dynamic service discovery 是指你可以通过服务发现组件去注册自身节点信息、发现集群中其他成员节点信息。另外我和你介绍了重要参数 initial-cluster-state 的含义，它也是影响集群组建的一个核心因素。</p>
+<p>在监控及告警体系上，我和你介绍了 etcd 网络、磁盘、etcdserver、gRPC 核心的 metrics。通过修改 Prometheues 配置文件，添加 etcd target，你就可以方便的采集 etcd 的监控数据。我还给你介绍了 ServiceMonitor 机制，你可通过它实现动态新增、删除、修改待监控的 etcd 实例，灵活的、高效的采集 etcd Metrcis。</p>
+<p>备份及还原上，重点和你介绍了 etcd snapshot 命令，etcd-backup-operator 的备份任务 CRD 机制，推荐使用后者。</p>
+<p>最后是巡检、混沌工程，它能帮助我们高效治理 etcd 集群，及时发现潜在隐患，低成本、快速的复现 Bug 和故障等。</p>
+<h2 id="思考题">思考题</h2>
+<p>好了，这节课到这里也就结束了，最后我给你留了一个思考题。</p>
+<p>你在生产环境中目前是使用哪种方式部署 etcd 集群的呢？若基于 Kubernetes 容器化部署的，是否遇到过容器化后的相关问题？</p>
+<p>感谢你的阅读，也欢迎你把这篇文章分享给更多的朋友一起阅读。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/etcd%E5%AE%9E%E6%88%98%E8%AF%BE/">etcd实战课</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%BD%AF%E4%BB%B6%E8%AE%BE%E8%AE%A1%E4%B9%8B%E7%BE%8E/24__%E4%BE%9D%E8%B5%96%E5%80%92%E7%BD%AE%E5%8E%9F%E5%88%99%E9%AB%98%E5%B1%82%E4%BB%A3%E7%A0%81%E5%92%8C%E5%BA%95%E5%B1%82%E4%BB%A3%E7%A0%81%E5%88%B0%E5%BA%95%E8%B0%81%E8%AF%A5%E4%BE%9D%E8%B5%96%E8%B0%81/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">24__依赖倒置原则：高层代码和底层代码，到底谁该依赖谁？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E9%AB%98%E5%B9%B6%E5%8F%91%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A140%E9%97%AE/24__%E6%B3%A8%E5%86%8C%E4%B8%AD%E5%BF%83%E5%88%86%E5%B8%83%E5%BC%8F%E7%B3%BB%E7%BB%9F%E5%A6%82%E4%BD%95%E5%AF%BB%E5%9D%80/">
+            <span class="next-text nav-default">24__注册中心：分布式系统如何寻址？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

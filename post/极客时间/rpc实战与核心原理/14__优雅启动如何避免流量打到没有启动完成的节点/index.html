@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>14__优雅启动：如何避免流量打到没有启动完成的节点？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是何小锋。上一讲我们介绍了优雅停机，就是为了让服务提供方在停机应用的时候，保证所有调用方都能“安全”地切走流量，不再调用自己，从而做到对业务无损。其中实现的关键点就在于，让正在停机的服务提供方应用有状态，让调用方感知到服务提供方正在停机。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/14__%E4%BC%98%E9%9B%85%E5%90%AF%E5%8A%A8%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E6%B5%81%E9%87%8F%E6%89%93%E5%88%B0%E6%B2%A1%E6%9C%89%E5%90%AF%E5%8A%A8%E5%AE%8C%E6%88%90%E7%9A%84%E8%8A%82%E7%82%B9/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/14__%E4%BC%98%E9%9B%85%E5%90%AF%E5%8A%A8%E5%A6%82%E4%BD%95%E9%81%BF%E5%85%8D%E6%B5%81%E9%87%8F%E6%89%93%E5%88%B0%E6%B2%A1%E6%9C%89%E5%90%AF%E5%8A%A8%E5%AE%8C%E6%88%90%E7%9A%84%E8%8A%82%E7%82%B9/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="14__优雅启动：如何避免流量打到没有启动完成的节点？">
+  <meta property="og:description" content="你好，我是何小锋。上一讲我们介绍了优雅停机，就是为了让服务提供方在停机应用的时候，保证所有调用方都能“安全”地切走流量，不再调用自己，从而做到对业务无损。其中实现的关键点就在于，让正在停机的服务提供方应用有状态，让调用方感知到服务提供方正在停机。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="RPC实战与核心原理">
+
+  <meta itemprop="name" content="14__优雅启动：如何避免流量打到没有启动完成的节点？">
+  <meta itemprop="description" content="你好，我是何小锋。上一讲我们介绍了优雅停机，就是为了让服务提供方在停机应用的时候，保证所有调用方都能“安全”地切走流量，不再调用自己，从而做到对业务无损。其中实现的关键点就在于，让正在停机的服务提供方应用有状态，让调用方感知到服务提供方正在停机。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3274">
+  <meta itemprop="keywords" content="RPC实战与核心原理">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="14__优雅启动：如何避免流量打到没有启动完成的节点？">
+  <meta name="twitter:description" content="你好，我是何小锋。上一讲我们介绍了优雅停机，就是为了让服务提供方在停机应用的时候，保证所有调用方都能“安全”地切走流量，不再调用自己，从而做到对业务无损。其中实现的关键点就在于，让正在停机的服务提供方应用有状态，让调用方感知到服务提供方正在停机。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">14__优雅启动：如何避免流量打到没有启动完成的节点？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3274 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#启动预热">启动预热</a></li>
+        <li><a href="#延迟暴露">延迟暴露</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后思考">课后思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是何小锋。上一讲我们介绍了优雅停机，就是为了让服务提供方在停机应用的时候，保证所有调用方都能“安全”地切走流量，不再调用自己，从而做到对业务无损。其中实现的关键点就在于，让正在停机的服务提供方应用有状态，让调用方感知到服务提供方正在停机。</p>
+<p>接着上一讲的内容，今天我们来聊聊优雅启动。</p>
+<p>是不是很诧异？应用启动居然也要这么“讲究”吗？这就好比我们日常生活中的热车，行驶之前让发动机空跑一会，可以让汽车的各个部件都“热”起来，减小磨损。</p>
+<p>换到应用上来看，原理也是一样的。运行了一段时间后的应用，执行速度会比刚启动的应用更快。这是因为在 Java 里面，在运行过程中，JVM 虚拟机会把高频的代码编译成机器码，被加载过的类也会被缓存到 JVM 缓存中，再次使用的时候不会触发临时加载，这样就使得“热点”代码的执行不用每次都通过解释，从而提升执行速度。</p>
+<p>但是这些“临时数据”，都在我们应用重启后就消失了。重启后的这些“红利”没有了之后，如果让我们刚启动的应用就承担像停机前一样的流量，这会使应用在启动之初就处于高负载状态，从而导致调用方过来的请求可能出现大面积超时，进而对线上业务产生损害行为。</p>
+<p>在上一讲我们说过，在微服务架构里面，上线肯定是频繁发生的，那我们总不能因为上线，就让过来的请求出现大面积超时吧？所以我们得想点办法。既然问题的关键是在于“刚重启的服务提供方因为没有预跑就承担了大流量”，那我们是不是可以通过某些方法，让应用一开始只接少许流量呢？这样低功率运行一段时间后，再逐渐提升至最佳状态。</p>
+<p>这其实就是我今天要和你分享的重点，RPC 里面的一个实用功能——启动预热。</p>
+<h2 id="启动预热">启动预热</h2>
+<p>那什么叫启动预热呢？</p>
+<p>简单来说，就是让刚启动的服务提供方应用不承担全部的流量，而是让它被调用的次数随着时间的移动慢慢增加，最终让流量缓和地增加到跟已经运行一段时间后的水平一样。</p>
+<p><strong>那在 RPC 里面，我们该怎么实现这个功能呢？</strong></p>
+<p>我们现在是要控制调用方发送到服务提供方的流量。我们可以先简单地回顾下调用方发起的 RPC 调用流程是怎样的，调用方应用通过服务发现能够获取到服务提供方的 IP 地址，然后每次发送请求前，都需要通过负载均衡算法从连接池中选择一个可用连接。那这样的话，我们是不是就可以让负载均衡在选择连接的时候，区分一下是否是刚启动不久的应用？对于刚启动的应用，我们可以让它被选择到的概率特别低，但这个概率会随着时间的推移慢慢变大，从而实现一个动态增加流量的过程。</p>
+<p><strong>现在方案有了，我们就可以考虑具体实现了。</strong></p>
+<p>首先对于调用方来说，我们要知道服务提供方启动的时间，这个怎么获取呢？我这里给出两种方法，一种是服务提供方在启动的时候，把自己启动的时间告诉注册中心；另外一种就是注册中心收到的服务提供方的请求注册时间。这两个时间我认为都可以，不过可能你会犹豫我们该怎么确保所有机器的日期时间是一样的？这其实不用太关心，因为整个预热过程的时间是一个粗略值，即使机器之间的日期时间存在 1 分钟的误差也不影响，并且在真实环境中机器都会默认开启 NTP 时间同步功能，来保证所有机器时间的一致性。</p>
+<p>不管你是选择哪个时间，最终的结果就是，调用方通过服务发现，除了可以拿到 IP 列表，还可以拿到对应的启动时间。我们需要把这个时间作用在负载均衡上，在[第 11 讲] 我们介绍过一种基于权重的负载均衡，但是这个权重是由服务提供方设置的，属于一个固定状态。现在我们要让这个权重变成动态的，并且是随着时间的推移慢慢增加到服务提供方设定的固定值，整个过程如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/57730990aaf33f8b365c1836c888e13b.png" alt=""></p>
+<p>预热过程图</p>
+<p>通过这个小逻辑的改动，我们就可以保证当服务提供方运行时长小于预热时间时，对服务提供方进行降权，减少被负载均衡选择的概率，避免让应用在启动之初就处于高负载状态，从而实现服务提供方在启动后有一个预热的过程。</p>
+<p>看到这儿，你可能还会有另外一个疑问，就是当我在大批量重启服务提供方的时候，会不会导致没有重启的机器因为扛的流量太大而出现问题？</p>
+<p>关于这个问题，我是这么考虑的。当你大批量重启服务提供方的时候，对于调用方来说，这些刚重启的机器权重基本是一样的，也就是说这些机器被选中的概率是一样的，大家都是一样得低，也就不存在权重区分的问题了。但是对于那些没有重启过的应用提供方来说，它们被负载均衡选中的概率是相对较高的，但是我们可以通过[第 11 讲] 学到的自适应负载的方法平缓地切换，所以也是没有问题的。</p>
+<p>启动预热更多是从调用方的角度出发，去解决服务提供方应用冷启动的问题，让调用方的请求量通过一个时间窗口过渡，慢慢达到一个正常水平，从而实现平滑上线。但对于服务提供方本身来说，有没有相关方案可以实现这种效果呢？</p>
+<p>当然有，这也是我今天要分享的另一个重点，和热启动息息相关，那就是延迟暴露。</p>
+<h2 id="延迟暴露">延迟暴露</h2>
+<p>我们应用启动的时候都是通过 main 入口，然后顺序加载各种相关依赖的类。以 Spring 应用启动为例，在加载的过程中，Spring 容器会顺序加载 Spring Bean，如果某个 Bean 是 RPC 服务的话，我们不光要把它注册到 Spring-BeanFactory 里面去，还要把这个 Bean 对应的接口注册到注册中心。注册中心在收到新上线的服务提供方地址的时候，会把这个地址推送到调用方应用内存中；当调用方收到这个服务提供方地址的时候，就会去建立连接发请求。</p>
+<p>但这时候是不是存在服务提供方可能并没有启动完成的情况？因为服务提供方应用可能还在加载其它的 Bean。对于调用方来说，只要获取到了服务提供方的 IP，就有可能发起 RPC 调用，但如果这时候服务提供方没有启动完成的话，就会导致调用失败，从而使业务受损。</p>
+<p><strong>那有什么办法可以避免这种情况吗？</strong></p>
+<p>在解决问题前，我们先看下出现上述问题的根本原因。这是因为服务提供方应用在没有启动完成的时候，调用方的请求就过来了，而调用方请求过来的原因是，服务提供方应用在启动过程中把解析到的 RPC 服务注册到了注册中心，这就导致在后续加载没有完成的情况下服务提供方的地址就被服务调用方感知到了。</p>
+<p>这样的话，其实我们就可以把接口注册到注册中心的时间挪到应用启动完成后。具体的做法就是在应用启动加载、解析 Bean 的时候，如果遇到了 RPC 服务的 Bean，只先把这个 Bean 注册到 Spring-BeanFactory 里面去，而并不把这个 Bean 对应的接口注册到注册中心，只有等应用启动完成后，才把接口注册到注册中心用于服务发现，从而实现让服务调用方延迟获取到服务提供方地址。</p>
+<p>这样是可以保证应用在启动完后才开始接入流量的，但其实这样做，我们还是没有实现最开始的目标。因为这时候应用虽然启动完成了，但并没有执行相关的业务代码，所以 JVM 内存里面还是冷的。如果这时候大量请求过来，还是会导致整个应用在高负载模式下运行，从而导致不能及时地返回请求结果。而且在实际业务中，一个服务的内部业务逻辑一般会依赖其它资源的，比如缓存数据。如果我们能在服务正式提供服务前，先完成缓存的初始化操作，而不是等请求来了之后才去加载，我们就可以降低重启后第一次请求出错的概率。</p>
+<p><strong>那具体怎么实现呢？</strong></p>
+<p>我们还是需要利用服务提供方把接口注册到注册中心的那段时间。我们可以在服务提供方应用启动后，接口注册到注册中心前，预留一个 Hook 过程，让用户可以实现可扩展的 Hook 逻辑。用户可以在 Hook 里面模拟调用逻辑，从而使 JVM 指令能够预热起来，并且用户也可以在 Hook 里面事先预加载一些资源，只有等所有的资源都加载完成后，最后才把接口注册到注册中心。整个应用启动过程如下图所示：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/RPC%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/b5e74322d92f5fccb62e8decfb2c3c4b.png" alt=""></p>
+<p>启动顺序图</p>
+<h2 id="总结">总结</h2>
+<p>包括[第 11 讲] 在内，到今天为止，我们就已经把整个 RPC 里面的启停机流程都讲完了。就像前面说过的那样，虽然启停机流程看起来不属于 RPC 主流程，但是如果你能在 RPC 里面把这些“微小”的工作做好，就可以让你的技术团队感受到更多的微服务带来的好处。</p>
+<p>另外，我们今天的两大重点——启动预热与延迟暴露，它们并不是 RPC 的专属功能，我们在开发其它系统时，也可以利用这两点来减少冷启动对业务的影响。</p>
+<h2 id="课后思考">课后思考</h2>
+<p>在启动预热那部分，我们特意提到过一个问题，就是“当大批量重启服务提供方的时候，会导致请求大概率发到没有重启的机器上，这时服务提供方有可能扛不住”，不知道你是怎么看待这个问题的，是否有好的解决方案呢？</p>
+<p>欢迎留言和我分享你的思考，也欢迎你把文章分享给你的朋友，邀请他加入学习。我们下节课再见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/rpc%E5%AE%9E%E6%88%98%E4%B8%8E%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86/">RPC实战与核心原理</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%B3%BB%E7%BB%9F%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/14__%E4%BC%98%E5%8C%96tls_ssl%E6%80%A7%E8%83%BD%E8%AF%A5%E4%BB%8E%E4%BD%95%E4%B8%8B%E6%89%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">14__优化TLS_SSL性能该从何下手？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/webassembly%E5%85%A5%E9%97%A8%E8%AF%BE/14__%E6%9C%89%E5%93%AA%E4%BA%9B%E6%AD%A3%E5%9C%A8%E8%A1%8C%E8%BF%9B%E4%B8%AD%E7%9A%84_webassembly_post-mvp_%E6%8F%90%E6%A1%88/">
+            <span class="next-text nav-default">14__有哪些正在行进中的_WebAssembly_Post-MVP_提案？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

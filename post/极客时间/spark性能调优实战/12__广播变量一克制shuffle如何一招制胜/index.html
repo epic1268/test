@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>12__广播变量（一）：克制Shuffle，如何一招制胜！ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是吴磊。
+在数据分析领域，数据关联（Joins）是 Shuffle 操作的高发区，二者如影随从。可以说，有 Joins 的地方，就有 Shuffle。
+我们说过，面对 Shuffle，开发者应当“能省则省、能拖则拖”。我们已经讲过了怎么拖，拖指的就是，把应用中会引入 Shuffle 的操作尽可能地往后面的计算步骤去拖。那具体该怎么省呢？
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/12__%E5%B9%BF%E6%92%AD%E5%8F%98%E9%87%8F%E4%B8%80%E5%85%8B%E5%88%B6shuffle%E5%A6%82%E4%BD%95%E4%B8%80%E6%8B%9B%E5%88%B6%E8%83%9C/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/12__%E5%B9%BF%E6%92%AD%E5%8F%98%E9%87%8F%E4%B8%80%E5%85%8B%E5%88%B6shuffle%E5%A6%82%E4%BD%95%E4%B8%80%E6%8B%9B%E5%88%B6%E8%83%9C/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="12__广播变量（一）：克制Shuffle，如何一招制胜！">
+  <meta property="og:description" content="你好，我是吴磊。
+在数据分析领域，数据关联（Joins）是 Shuffle 操作的高发区，二者如影随从。可以说，有 Joins 的地方，就有 Shuffle。
+我们说过，面对 Shuffle，开发者应当“能省则省、能拖则拖”。我们已经讲过了怎么拖，拖指的就是，把应用中会引入 Shuffle 的操作尽可能地往后面的计算步骤去拖。那具体该怎么省呢？">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Spark性能调优实战">
+
+  <meta itemprop="name" content="12__广播变量（一）：克制Shuffle，如何一招制胜！">
+  <meta itemprop="description" content="你好，我是吴磊。
+在数据分析领域，数据关联（Joins）是 Shuffle 操作的高发区，二者如影随从。可以说，有 Joins 的地方，就有 Shuffle。
+我们说过，面对 Shuffle，开发者应当“能省则省、能拖则拖”。我们已经讲过了怎么拖，拖指的就是，把应用中会引入 Shuffle 的操作尽可能地往后面的计算步骤去拖。那具体该怎么省呢？">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4583">
+  <meta itemprop="keywords" content="Spark性能调优实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="12__广播变量（一）：克制Shuffle，如何一招制胜！">
+  <meta name="twitter:description" content="你好，我是吴磊。
+在数据分析领域，数据关联（Joins）是 Shuffle 操作的高发区，二者如影随从。可以说，有 Joins 的地方，就有 Shuffle。
+我们说过，面对 Shuffle，开发者应当“能省则省、能拖则拖”。我们已经讲过了怎么拖，拖指的就是，把应用中会引入 Shuffle 的操作尽可能地往后面的计算步骤去拖。那具体该怎么省呢？">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">12__广播变量（一）：克制Shuffle，如何一招制胜！</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4583 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何理解广播变量">如何理解广播变量？</a></li>
+        <li><a href="#广播分布式数据集">广播分布式数据集</a></li>
+        <li><a href="#如何用广播变量克制-shuffle">如何用广播变量克制 Shuffle？</a>
+          <ul>
+            <li><a href="#shuffle-joins">Shuffle Joins</a></li>
+            <li><a href="#克制-shuffle-的方式">克制 Shuffle 的方式</a></li>
+          </ul>
+        </li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#每日一练">每日一练</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是吴磊。</p>
+<p>在数据分析领域，数据关联（Joins）是 Shuffle 操作的高发区，二者如影随从。可以说，有 Joins 的地方，就有 Shuffle。</p>
+<p>我们说过，面对 Shuffle，开发者应当“能省则省、能拖则拖”。我们已经讲过了怎么拖，拖指的就是，把应用中会引入 Shuffle 的操作尽可能地往后面的计算步骤去拖。那具体该怎么省呢？</p>
+<p>在数据关联场景中，广播变量就可以轻而易举地省去 Shuffle。所以今天这一讲，我们就先说一说广播变量的含义和作用，再说一说它是如何帮助开发者省去 Shuffle 操作的。</p>
+<h2 id="如何理解广播变量">如何理解广播变量？</h2>
+<p>接下来，咱们借助一个小例子，来讲一讲广播变量的含义与作用。这个例子和 Word Count 有关，它可以说是分布式编程里的 Hello world 了，Word Count 就是用来统计文件中全部单词的，你肯定已经非常熟悉了，所以，我们例子中的需求增加了一点难度，我们要对指定列表中给定的单词计数。</p>
+<p>val dict = List(“spark”, “tune”)<br>
+val words = spark.sparkContext.textFile(“~/words.csv”)<br>
+val keywords = words.filter(word =&gt; dict.contains(word))<br>
+keywords.map((<em>, 1)).reduceByKey(</em> + _).collect</p>
+<p>按照这个需求，同学小 A 实现了如上的代码，一共有 4 行，我们逐一来看。第 1 行在 Driver 端给定待查单词列表 dict；第 2 行以 textFile API 读取分布式文件，内容包含一列，存储的是常见的单词；第 3 行用列表 dict 中的单词过滤分布式文件内容，只保留 dict 中给定的单词；第 4 行调用 reduceByKey 对单词进行累加计数。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/beb3b4bfb1fab860546464590347f64f.png" alt=""></p>
+<p>数据结构 dict 随着 Task 一起分发到 Executors</p>
+<p>学习过调度系统之后，我们知道，第一行代码定义的 dict 列表连带后面的 3 行代码会一同打包到 Task 里面去。这个时候，Task 就像是一架架小飞机，携带着这些“行李”，飞往集群中不同的 Executors。对于这些“行李”来说，代码的“负重”较轻，可以忽略不计，而数据的负重占了大头，成了最主要的负担。</p>
+<p>你可能会说：“也还好吧，dict 列表又不大，也没什么要紧的”。但是，如果我们假设这个例子中的并行度是 10000，那么，Driver 端需要通过网络分发总共 10000 份 dict 拷贝。这个时候，集群内所有的 Executors 需要消耗大量内存来存储这 10000 份的拷贝，对宝贵的网络和内存资源来说，这已经是一笔不小的浪费了。更何况，如果换做一个更大的数据结构，Task 分发所引入的网络与内存开销会更可怕。</p>
+<p>换句话说，统计计数的业务逻辑还没有开始执行，Spark 就已经消耗了大量的网络和存储资源，这简直不可理喻。因此，我们需要对示例中的代码进行优化，从而跳出这样的窘境。</p>
+<p>但是，在着手优化之前，我们不妨先来想一想，现有的问题是什么，我们要达到的目的是什么。结合刚刚的分析，我们不难发现，<strong>Word Count 的核心痛点在于，数据结构的分发和存储受制于并行，并且是以 Task 为粒度的，因此往往频次过高。痛点明确了，调优的目的也就清晰了，我们需要降低数据结构分发的频次</strong>。</p>
+<p>要达到这个目的，我们首先想到的就是降低并行度。不过，牵一发而动全身，并行度一旦调整，其他与 CPU、内存有关的配置项都要跟着适配，这难免把调优变复杂了。实际上，要降低数据结构的分发频次，我们还可以考虑广播变量。</p>
+<p>**广播变量是一种分发机制，它一次性封装目标数据结构，以 Executors 为粒度去做数据分发。**换句话说，在广播变量的工作机制下，数据分发的频次等同于集群中的 Executors 个数。通常来说，集群中的 Executors 数量都远远小于 Task 数量，相差两到三个数量级是常有的事。那么，对于第一版的 Word Count 实现，如果我们使用广播变量的话，会有哪些变化呢？</p>
+<p>代码的改动很简单，主要有两个改动：第一个改动是用 broadcast 封装 dict 列表，第二个改动是在访问 dict 列表的地方改用 broadcast.value 替代。</p>
+<p>val dict = List(“spark”, “tune”)<br>
+val bc = spark.sparkContext.broadcast(dict)<br>
+val words = spark.sparkContext.textFile(“~/words.csv”)<br>
+val keywords = words.filter(word =&gt; bc.value.contains(word))<br>
+keywords.map((<em>, 1)).reduceByKey(</em> + _).collect</p>
+<p>你可能会说：“这个改动看上去也没什么呀！”别着急，我们先来分析一下，改动之后的代码在运行时都有哪些变化。</p>
+<p><strong>在广播变量的运行机制下，封装成广播变量的数据，由 Driver 端以 Executors 为粒度分发，每一个 Executors 接收到广播变量之后，将其交给 BlockManager 管理</strong>。由于广播变量携带的数据已经通过专门的途径存储到 BlockManager 中，因此分发到 Executors 的 Task 不需要再携带同样的数据。</p>
+<p>这个时候，你可以把广播变量想象成一架架专用货机，专门为 Task 这些小飞机运送“大件行李”。Driver 与每一个 Executors 之间都开通一条这样的专用货机航线，统一运载负重较大的“数据行李”。有了专用货机来帮忙，Task 小飞机只需要携带那些负重较轻的代码就好了。等这些 Task 小飞机在 Executors 着陆，它们就可以到 Executors 的公用仓库 BlockManager 里去提取它们的“大件行李”。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/ef2e32172549560f20c56fcb93b59fa3.png" alt=""></p>
+<p>用广播变量封装 dict 列表</p>
+<p>总之，在广播变量的机制下，dict 列表数据需要分发和存储的次数锐减。我们假设集群中有 20 个 Executors，不过任务并行度还是 10000，那么，Driver 需要通过网络分发的 dict 列表拷贝就会由原来的 10000 份减少到 20 份。同理，集群范围内所有 Executors 需要存储的 dict 拷贝，也由原来的 10000 份，减少至 20 份。这个时候，引入广播变量后的开销只是原来 Task 分发的 1/500！</p>
+<h2 id="广播分布式数据集">广播分布式数据集</h2>
+<p>那在刚刚的示例代码中，广播变量封装的是 Driver 端创建的普通变量：字符串列表。除此之外，<strong>广播变量也可以封装分布式数据集</strong>。</p>
+<p>我们来看这样一个例子。在电子商务领域中，开发者往往用事实表来存储交易类数据，用维度表来存储像物品、用户这样的描述性数据。事实表的特点是规模庞大，数据体量随着业务的发展不断地快速增长。维度表的规模要比事实表小很多，数据体量的变化也相对稳定。</p>
+<p>假设用户维度数据以 Parquet 文件格式存储在 HDFS 文件系统中，业务部门需要我们读取用户数据并创建广播变量以备后用，我们该怎么做呢？很简单，几行代码就可以搞定！</p>
+<p>val userFile: String = “hdfs://ip:port/rootDir/userData”<br>
+val df: DataFrame = spark.read.parquet(userFile)<br>
+val bc_df: Broadcast[DataFrame] = spark.sparkContext.broadcast(df)</p>
+<p>首先，我们用 Parquet API 读取 HDFS 分布式数据文件生成 DataFrame，然后用 broadcast 封装 DataFrame。从代码上来看，这种实现方式和封装普通变量没有太大差别，它们都调用了 broadcast API，只是传入的参数不同。</p>
+<p>但如果不从开发的视角来看，转而去观察运行时广播变量的创建过程的话，我们就会发现，分布式数据集与普通变量之间的差异非常显著。</p>
+<p>从普通变量创建广播变量，由于数据源就在 Driver 端，因此，只需要 Driver 把数据分发到各个 Executors，再让 Executors 把数据缓存到 BlockManager 就好了。</p>
+<p>但是，从分布式数据集创建广播变量就要复杂多了，具体的过程如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/0afd775ae1b97998028d8f7a505815f1.png" alt=""></p>
+<p>从分布式数据集创建广播变量的过程</p>
+<p>与普通变量相比，分布式数据集的数据源不在 Driver 端，而是来自所有的 Executors。Executors 中的每个分布式任务负责生产全量数据集的一部分，也就是图中不同的数据分区。因此，步骤 1 就是 **Driver 从所有的 Executors 拉取这些数据分区，然后在本地构建全量数据。**步骤 2 与从普通变量创建广播变量的过程类似。 <strong>Driver 把汇总好的全量数据分发给各个 Executors，Executors 将接收到的全量数据缓存到存储系统的 BlockManager 中</strong>。</p>
+<p>不难发现，相比从普通变量创建广播变量，从分布式数据集创建广播变量的网络开销更大。原因主要有二：一是，前者比后者多了一步网络通信；二是，前者的数据体量通常比后者大很多。</p>
+<h2 id="如何用广播变量克制-shuffle">如何用广播变量克制 Shuffle？</h2>
+<p>你可能会问：“Driver 从 Executors 拉取 DataFrame 的数据分片，揉成一份全量数据，然后再广播出去，抛开网络开销不说，来来回回得费这么大劲，图啥呢？”这是一个好问题，因为以广播变量的形式缓存分布式数据集，正是克制 Shuffle 杀手锏。</p>
+<h3 id="shuffle-joins">Shuffle Joins</h3>
+<p>为什么这么说呢？我还是拿电子商务场景举例。有了用户的数据之后，为了分析不同用户的购物习惯，业务部门要求我们对交易表和用户表进行数据关联。这样的数据关联需求在数据分析领域还是相当普遍的。</p>
+<p>val transactionsDF: DataFrame = _<br>
+val userDF: DataFrame = _<br>
+transactionsDF.join(userDF, Seq(“userID”), “inner”)</p>
+<p>因为需求非常明确，同学小 A 立即调用 Parquet 数据源 API，读取分布式文件，创建交易表和用户表的 DataFrame，然后调用 DataFrame 的 Join 方法，以 userID 作为 Join keys，用内关联（Inner Join）的方式完成了两表的数据关联。</p>
+<p>在分布式环境中，交易表和用户表想要以 userID 为 Join keys 进行关联，就必须要确保一个前提：交易记录和与之对应的用户信息在同一个 Executors 内。也就是说，如果用户黄小乙的购物信息都存储在 Executor 0，而个人属性信息缓存在 Executor 2，那么，在分布式环境中，这两种信息必须要凑到同一个进程里才能实现关联计算。</p>
+<p>在不进行任何调优的情况下，Spark 默认采用 Shuffle Join 的方式来做到这一点。Shuffle Join 的过程主要有两步。</p>
+<p><strong>第一步就是对参与关联的左右表分别进行 Shuffle</strong>，Shuffle 的分区规则是先对 Join keys 计算哈希值，再把哈希值对分区数取模。由于左右表的分区数是一致的，因此 Shuffle 过后，一定能够保证 userID 相同的交易记录和用户数据坐落在同一个 Executors 内。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/af210772fc4bb5523932eb2d04b45394.png" alt=""></p>
+<p>Shuffle Join 中左右表的数据分发</p>
+<p>Shuffle 完成之后，<strong>第二步就是在同一个 Executors 内，Reduce task 就可以对 userID 一致的记录进行关联操作</strong>。但是，由于交易表是事实表，数据体量异常庞大，对 TB 级别的数据进行 Shuffle，想想都觉得可怕！因此，上面对两个 DataFrame 直接关联的代码，还有很大的调优空间。我们该怎么做呢？话句话说，对于分布式环境中的数据关联来说，要想确保交易记录和与之对应的用户信息在同一个 Executors 中，我们有没有其他办法呢？</p>
+<h3 id="克制-shuffle-的方式">克制 Shuffle 的方式</h3>
+<p>还记得之前业务部门要求我们把用户表封装为广播变量，以备后用吗？现在它终于派上用场了！</p>
+<p>import org.apache.spark.sql.functions.broadcast</p>
+<p>val transactionsDF: DataFrame = _<br>
+val userDF: DataFrame = _</p>
+<p>val bcUserDF = broadcast(userDF)<br>
+transactionsDF.join(bcUserDF, Seq(“userID”), “inner”)</p>
+<p>Driver 从所有 Executors 收集 userDF 所属的所有数据分片，在本地汇总用户数据，然后给每一个 Executors 都发送一份全量数据的拷贝。既然每个 Executors 都有 userDF 的<strong>全量数据</strong>，这个时候，交易表的数据分区待在原地、保持不动，就可以轻松地关联到一致的用户数据。如此一来，我们不需要对数据体量巨大的交易表进行 Shuffle，同样可以在分布式环境中，完成两张表的数据关联。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/26a1234d78afada00e29556b8b7c8527.png" alt=""></p>
+<p>Broadcast Join 将小表广播，避免大表 Shuffle</p>
+<p>利用广播变量，我们成功地避免了海量数据在集群内的存储、分发，节省了原本由 Shuffle 引入的磁盘和网络开销，大幅提升运行时执行性能。当然，采用广播变量优化也是有成本的，毕竟广播变量的创建和分发，也是会带来网络开销的。但是，相比大表的全网分发，小表的网络开销几乎可以忽略不计。这种小投入、大产出，用极小的成本去博取高额的性能收益，真可以说是“四两拨千斤”！</p>
+<h2 id="小结">小结</h2>
+<p>在数据关联场景中，广播变量是克制 Shuffle 的杀手锏。掌握了它，我们就能以极小的成本，获得高额的性能收益。关键是我们要掌握两种创建广播变量的方式。</p>
+<p>第一种，从普通变量创建广播变量。在广播变量的运行机制下，普通变量存储的数据封装成广播变量，由 Driver 端以 Executors 为粒度进行分发，每一个 Executors 接收到广播变量之后，将其交由 BlockManager 管理。</p>
+<p>第二种，从分布式数据集创建广播变量，这就要比第一种方式复杂一些了。第一步，Driver 需要从所有的 Executors 拉取数据分片，然后在本地构建全量数据；第二步，Driver 把汇总好的全量数据分发给各个 Executors，Executors 再将接收到的全量数据缓存到存储系统的 BlockManager 中。</p>
+<p>结合这两种方式，我们在做数据关联的时候，把 Shuffle Joins 转换为 Broadcast Joins，就可以用小表广播来代替大表的全网分发，真正做到克制 Shuffle。</p>
+<h2 id="每日一练">每日一练</h2>
+<ol>
+<li>Spark 广播机制现有的实现方式是存在隐患的，在数据量较大的情况下，Driver 可能会成为瓶颈，你能想到更好的方式来重新实现 Spark 的广播机制吗？（提示：SPARK-17556）</li>
+<li>在什么情况下，不适合把 Shuffle Joins 转换为 Broadcast Joins？</li>
+</ol>
+<p>期待在留言区看到你的思考和答案，我们下一讲见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/">Spark性能调优实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%91%84%E5%BD%B1%E5%85%A5%E9%97%A8%E8%AF%BE/12__%E5%85%89%E4%B8%AD%E4%BD%A0%E7%9C%9F%E7%9A%84%E4%BC%9A%E5%9C%A8%E9%98%B3%E5%85%89%E4%B8%8B%E6%8B%8D%E7%85%A7%E7%89%87%E4%B9%88/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">12__光（中）：你真的会在阳光下拍照片么？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%8B%8F%E6%9D%B0%E7%9A%84%E4%BA%A7%E5%93%81%E5%88%9B%E6%96%B0%E8%AF%BE/12__%E5%92%8C%E7%94%A8%E6%88%B7%E4%B8%80%E8%B5%B7%E6%88%90%E9%95%BF%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E4%B8%8D%E5%90%8C%E9%98%B6%E6%AE%B5%E6%80%8E%E4%B9%88%E8%BF%90%E8%90%A5/">
+            <span class="next-text nav-default">12__和用户一起成长：生命周期，不同阶段怎么运营</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20_Spark的性能优化案例分析（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="上一期，我讲了软件性能优化必须经过进行性能测试，并在了解软件架构和技术的基础上进行。今天，我们通过几个 Spark 性能优化的案例，看一看所讲的性能优化原则如何落地。如果你忘记了性能优化的原则，可以返回上一期复习一下。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/20_spark%E7%9A%84%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/20_spark%E7%9A%84%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20_Spark的性能优化案例分析（下）">
+  <meta property="og:description" content="上一期，我讲了软件性能优化必须经过进行性能测试，并在了解软件架构和技术的基础上进行。今天，我们通过几个 Spark 性能优化的案例，看一看所讲的性能优化原则如何落地。如果你忘记了性能优化的原则，可以返回上一期复习一下。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="从0开始学大数据">
+
+  <meta itemprop="name" content="20_Spark的性能优化案例分析（下）">
+  <meta itemprop="description" content="上一期，我讲了软件性能优化必须经过进行性能测试，并在了解软件架构和技术的基础上进行。今天，我们通过几个 Spark 性能优化的案例，看一看所讲的性能优化原则如何落地。如果你忘记了性能优化的原则，可以返回上一期复习一下。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3298">
+  <meta itemprop="keywords" content="从0开始学大数据">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20_Spark的性能优化案例分析（下）">
+  <meta name="twitter:description" content="上一期，我讲了软件性能优化必须经过进行性能测试，并在了解软件架构和技术的基础上进行。今天，我们通过几个 Spark 性能优化的案例，看一看所讲的性能优化原则如何落地。如果你忘记了性能优化的原则，可以返回上一期复习一下。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20_Spark的性能优化案例分析（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3298 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#案例-1spark-任务文件初始化调优">案例 1：Spark 任务文件初始化调优</a></li>
+        <li><a href="#案例-2spark-任务调度优化">案例 2：Spark 任务调度优化</a></li>
+        <li><a href="#案例-3spark-应用配置优化">案例 3：Spark 应用配置优化</a></li>
+        <li><a href="#案例-4操作系统配置优化">案例 4：操作系统配置优化</a></li>
+        <li><a href="#案例-5硬件优化">案例 5：硬件优化</a></li>
+        <li><a href="#小结">小结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>上一期，我讲了软件性能优化必须经过进行性能测试，并在了解软件架构和技术的基础上进行。今天，我们通过几个 Spark 性能优化的案例，看一看所讲的性能优化原则如何落地。如果你忘记了性能优化的原则，可以返回上一期复习一下。</p>
+<p>基于软件性能优化原则和 Spark 的特点，Spark 性能优化可以分解为下面几步。</p>
+<p>1. 性能测试，观察 Spark 性能特性和资源（CPU、Memory、Disk、Net）利用情况。</p>
+<p>2. 分析、寻找资源瓶颈。</p>
+<p>3. 分析系统架构、代码，发现资源利用关键所在，思考优化策略。</p>
+<p>4. 代码、架构、基础设施调优，优化、平衡资源利用。</p>
+<p>5. 性能测试，观察系统性能特性，是否达到优化目的，以及寻找下一个瓶颈点。</p>
+<p>下面我们一起进入详细的案例分析，希望通过这几个案例，可以帮助你更好地理解 Spark 的原理，以及性能优化如何实践落地，希望能对你有所启发。</p>
+<h2 id="案例-1spark-任务文件初始化调优">案例 1：Spark 任务文件初始化调优</h2>
+<p>首先进行性能测试，发现这个视频图谱 N 度级联关系应用分为 5 个 job，最后一个 job 为保存结果到 HDFS，其余 job 为同样计算过程的反复迭代。但是发现第一个 job 比其他 job 又多了个计算阶段 stage，如图中红圈所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/b453be464f8c3a9e8ce202150d631a3e.png" alt=""></p>
+<p>通过阅读程序代码，发现第一个 job 需要初始化一个空数组，从而产生了一个 stage，但是这个 stage 在性能测试结果上显示，花费了 14 秒的时间，远远超出合理的预期范围。同时，发现这段时间网络通信也有一定开销，事实上只是内存数据初始化，代码上看不出需要进行网络通信的地方。下图是其中一台计算节点的通信开销，发现在第一个 stage，写通信操作几乎没有，读通信操作大约每秒几十 MB 的传输速率。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/9723eeecb7caeb68d1cbca40713bd944.png" alt=""></p>
+<p>分析 Spark 运行日志，发现这个 stage 主要花费时间并不是处理应用的计算逻辑，而是在从 Driver 进程下载应用执行代码。前面说过，Spark 和 MapReduce 都是通过移动计算程序到数据所在的服务器节点，从而节省数据传输的网络通信开销，并进行分布式计算，即移动计算比移动数据更划算，而移动计算程序就是在这个阶段进行。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/70bc3675b59df7b9d61c12a22e4e6db9.png" alt=""></p>
+<p>这个视频关系图谱计算程序因为依赖一个第三方的程序包，整个计算程序打包后大小超过 17MB，这个 17MB 的 JAR 包需要部署到所有计算服务器上，即 Worker 节点上。但是只传输 17MB 的数据不可能花费这么多时间啊？</p>
+<p>进一步分析 Spark 日志和代码后发现，每个计算节点上会启动多个 Executor 进程进行计算，而 Spark 的策略是每个 Executor 进程自己去下载应用程序 JAR 包，当时每台机器启动了 30 个 Executor 进程，这样就是 4×30=120 个进程下载，而 Driver 进程所在机器是一块千兆网卡，导致将这些数据传输完成花费了 14 秒的时间。</p>
+<p>发现问题以后，解决办法就显而易见了。同一台服务器上的多个 Executor 进程不必每个都通过网络下载应用程序，只需要一个进程下载到本地后，其他进程将这个文件 copy 到自己的工作路径就可以了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/c8ab3d8119f624626e73fe057a6b679a.png" alt=""></p>
+<p>这段代码有个技术实现细节需要关注，就是多个进程同时去下载程序包的时候，如何保证只有一个进程去下载，而其他进程阻塞等待，也就是进程间的同步问题。</p>
+<p>解决办法是使用了一个本地文件作为进程间同步的锁，只有获得文件锁的进程才去下载，其他进程得不到文件锁，就阻塞等待，阻塞结束后，检查本地程序文件是否已经生成。</p>
+<p>这个优化实测效果良好，第一个 stage 从 14 秒下降到不足 1 秒，效果显著。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/c101e86e5b55f7596720240f68ce97a2.png" alt=""></p>
+<p>这个案例的具体代码你可以参考：<br>
+<a href="https://github.com/apache/spark/pull/1616">https://github.com/apache/spark/pull/1616</a></p>
+<h2 id="案例-2spark-任务调度优化">案例 2：Spark 任务调度优化</h2>
+<p>继续前面的性能测试，看看有没有新的性能瓶颈以及性能指标不合理的地方。我们将 4 台 Worker 机器的 CPU 使用率进行对比分析，发现 CPU 使用率有些蹊跷的地方。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/2cdaa2583b90d91d7575828a9b815e60.png" alt=""><br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/1edc956054561b3460f4c70aafbe37a1.png" alt=""><br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/d60c20b5bab668ed88252e2760338b9d.png" alt=""><br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/65911e158f8fdfbead7daee70814c080.png" alt=""></p>
+<p>从图中看到，在第一个 job 的第二个阶段，第三台机器的 CPU 使用率和其他机器明显不同，也就是说计算资源利用不均衡，<strong>这种有忙有闲的资源分配方式通常会引起性能问题</strong>。</p>
+<p>分析 Spark 运行日志和 Spark 源代码，发现当有空闲计算资源的 Worker 节点向 Driver 注册的时候，就会触发 Spark 的任务分配，分配的时候使用轮询方式，每个 Worker 都会轮流分配任务，保证任务分配均衡，每个服务器都能领到一部分任务。但是为什么实测的结果却是在第二个 stage，只有一个 Worker 服务器领了任务，而其他服务器没有任何任务可以执行？</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/adfcf3677771feb334bf75572ae540ac.png" alt=""></p>
+<p>进一步分析日志，发现 Worker 节点向 Driver 注册有先有后，先注册的 Worker 开始领取任务，如果需要执行的任务数小于 Worker 提供的计算单元数，就会出现一个 Worker 领走所有任务的情况。</p>
+<p>而第一个 job 的第二个 stage 刚好是这样的情况，demo 数据量不大，按照 HDFS 默认的 Block 大小，只有 17 个 Block，第二个 stage 就是加载这 17 个 Block 进行初始迭代计算，只需要 17 个计算任务就能完成，所以当第三台服务器先于其他三台服务器向 Driver 注册的时候，触发 Driver 的任务分配，领走了所有 17 个任务。</p>
+<p>同时，为了避免这种一个 Worker 先注册先领走全部任务的情况，我们考虑的一个优化策略是增加一个配置项，只有注册的计算资源数达到一定比例才开始分配任务，默认值是 0.8。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spark.scheduler.minRegisteredResourcesRatio = 0.8
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>为了避免注册计算资源达不到期望资源比例而无法开始分配任务，在启动任务执行时，又增加了一个配置项，也就是最小等待时间，超过最小等待时间（秒），不管是否达到注册比例，都开始分配任务。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">spark.scheduler.maxRegisteredResourcesWaitingTime = 3
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>启用这两个配置项后，第二个 stage 的任务被均匀分配到 4 个 Worker 服务器上，执行时间缩短了 1.32 倍。而 4 台 Worker 服务器的 CPU 利用率也变得很均衡了。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/5f12e9eac1327e5d51a264e04252f278.png" alt=""><br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/ca74a0fdfc2dee5b4e1388798ca6c49f.png" alt=""><br>
+<img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/e6846d4b4bec449d9682b9b54b84b4c1.png" alt=""></p>
+<p>这个案例的具体代码你可以参考：<a href="https://github.com/apache/spark/pull/900">https://github.com/apache/spark/pull/900</a><br>
+<a href="https://github.com/apache/spark/pull/1525">https://github.com/apache/spark/pull/1525</a></p>
+<h2 id="案例-3spark-应用配置优化">案例 3：Spark 应用配置优化</h2>
+<p>看案例 2 的几张 CPU 利用率的图，我们还发现所有 4 个 Worker 服务器的 CPU 利用率最大只能达到 60% 多一点。例如下图，绿色部分就是 CPU 空闲。</p>
+<p>这种资源利用瓶颈的分析无需分析 Spark 日志和源代码，根据 Spark 的工作原理，稍加思考就可以发现，当时使用的这些服务器的 CPU 的核心数是 48 核，而应用配置的最大 Executor 数目是 120，每台服务器 30 个任务，虽然 30 个任务在每个 CPU 核上都 100% 运行，但是总的 CPU 使用率仍只有 60% 多。</p>
+<p>具体优化也很简单，设置应用启动参数的 Executor 数为 48×4=192 即可。</p>
+<h2 id="案例-4操作系统配置优化">案例 4：操作系统配置优化</h2>
+<p>在性能测试过程中发现，当使用不同服务器的时候，CPU 资源利用情况也不同，某些服务器的 CPU 处于 sys 态，即系统态运行的占比非常高，如下图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/badc68824208e7d8258d283be969b75e.png" alt=""></p>
+<p>图中紫色为 CPU 处于 sys 态，某些时候 sys 态占了 CPU 总使用率的近 80%，这个比例显然是不合理的，表示虽然 CPU 很忙，但是没有执行用户计算，而是在执行操作系统的计算。</p>
+<p>那么，操作系统究竟在忙什么，占用了这么多 CPU 时间？通过跟踪 Linux 内核执行指令，发现这些 sys 态的执行指令和 Linux 的配置参数 transparent huge pages 有关。</p>
+<p>当 transparent huge pages 打开的时候，sys 态 CPU 消耗就会增加，而不同 Linux 版本的 transparent huge pages 默认是否打开是不同的，对于默认打开 transparent huge pages 的 Linux 执行下面的指令，关闭 transparent huge pages。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">echo never &gt; /sys/kernel/mm/transparent_hugepage/enabled
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">echo never &gt; /sys/kernel/mm/ transparent_hugepage/defrag
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>关闭以后，对比前面的 CPU 消耗，sys 占比明显下降，总的应用耗时也有明显下降。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/599586f4bfea863e896fbb088540b262.png" alt=""></p>
+<h2 id="案例-5硬件优化">案例 5：硬件优化</h2>
+<p>分析网卡的资源消耗，发现网络通信是性能的瓶颈，对整个应用的影响非常明显。比如在第二个、第三个 job，网络通信消耗长达 50 秒的时间，网络读写通信都达到了网卡的最大吞吐能力，整个集群都在等待网络传输。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/5f779a37daee8a15ae63a04eb75f2e6c.png" alt=""></p>
+<p>我们知道千兆网卡的最大传输速率是每秒 125MB，这样的速率和 CPU 内存固然没法比，而虽然比单个磁盘快一些，但是服务器磁盘是 8 块磁盘组成的阵列，总的磁盘吞吐量依然碾压千兆网卡，因此网卡传输速率的瓶颈就成为整个系统的性能瓶颈。</p>
+<p>而优化手段其实很简单粗暴，就是是升级网卡使用万兆网卡。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/36e563ed671ba4b9449d6fad60be2e42.png" alt=""></p>
+<p>硬件优化的效果非常明显，以前需要 50 多秒的网络通信时间，缩短为 10 秒左右。从性能曲线上看，网络通信在刚刚触及网卡最大传输速率的时候，就完成了传输，总的计算时间缩短了近 100 秒。</p>
+<h2 id="小结">小结</h2>
+<p>一般说来，大数据软件性能优化会涉及硬件、操作系统、大数据产品及其配置、应用程序开发和部署几个方面。当性能不能满足需求的时候，先看看各项性能指标是否合理，如果资源没有全面利用，那么可能是配置不合理或者大数据应用程序（包括 SQL 语句）需要优化；如果某项资源利用已经达到极限，那么就要具体来分析，是集群资源不足，需要增加新的硬件服务器，还是需要对某项硬件、操作系统或是 JVM，甚至是对大数据产品源代码进行调优。</p>
+<h2 id="思考题">思考题</h2>
+<p>关于目前的主要大数据产品，你在学习、使用过程中，从 SQL 写法、应用编程、参数配置，到大数据产品自身的架构原理与源码实现，你有没有发现有哪些可以进行性能优化的地方？</p>
+<p>欢迎你点击“请朋友读”，把今天的文章分享给好友。也欢迎你写下自己的思考或疑问，与我和其他同学一起讨论。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/db513920e735cd054f4c7a22f3dcebc3.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E4%BB%8E0%E5%BC%80%E5%A7%8B%E5%AD%A6%E5%A4%A7%E6%95%B0%E6%8D%AE/">从0开始学大数据</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98%E8%AF%BE/20_javascript%E7%BC%96%E8%AF%91%E5%99%A8%E4%B8%80v8%E7%9A%84%E8%A7%A3%E6%9E%90%E5%92%8C%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20_JavaScript编译器（一）：V8的解析和编译过程</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%AE%89%E5%85%A8%E6%94%BB%E9%98%B2%E6%8A%80%E8%83%BD30%E8%AE%B2/20_waf%E5%A6%82%E4%BD%95%E4%B8%BA%E6%BC%8F%E6%B4%9E%E7%99%BE%E5%87%BA%E7%9A%84web%E5%BA%94%E7%94%A8%E4%BF%9D%E9%A9%BE%E6%8A%A4%E8%88%AA/">
+            <span class="next-text nav-default">20_WAF：如何为漏洞百出的Web应用保驾护航？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

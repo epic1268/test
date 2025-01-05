@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>25如何实现接口限流和降级？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在前面的第 23 课时中，我们已经介绍了限流和降级的相关概念以及在服务高可用架构中的重要性。那本课时我们就继续往下剖析，来详细讲解限流和降级的使用场景以及二者的区别，接着我还会给你一些具体的案例，让你更好地掌握如何去进行限流和降级。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/25%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%8E%A5%E5%8F%A3%E9%99%90%E6%B5%81%E5%92%8C%E9%99%8D%E7%BA%A7/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/25%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%8E%A5%E5%8F%A3%E9%99%90%E6%B5%81%E5%92%8C%E9%99%8D%E7%BA%A7/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="25如何实现接口限流和降级？">
+  <meta property="og:description" content="在前面的第 23 课时中，我们已经介绍了限流和降级的相关概念以及在服务高可用架构中的重要性。那本课时我们就继续往下剖析，来详细讲解限流和降级的使用场景以及二者的区别，接着我还会给你一些具体的案例，让你更好地掌握如何去进行限流和降级。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go微服务实战38讲">
+
+  <meta itemprop="name" content="25如何实现接口限流和降级？">
+  <meta itemprop="description" content="在前面的第 23 课时中，我们已经介绍了限流和降级的相关概念以及在服务高可用架构中的重要性。那本课时我们就继续往下剖析，来详细讲解限流和降级的使用场景以及二者的区别，接着我还会给你一些具体的案例，让你更好地掌握如何去进行限流和降级。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3271">
+  <meta itemprop="keywords" content="Go微服务实战38讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="25如何实现接口限流和降级？">
+  <meta name="twitter:description" content="在前面的第 23 课时中，我们已经介绍了限流和降级的相关概念以及在服务高可用架构中的重要性。那本课时我们就继续往下剖析，来详细讲解限流和降级的使用场景以及二者的区别，接着我还会给你一些具体的案例，让你更好地掌握如何去进行限流和降级。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">25如何实现接口限流和降级？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3271 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在前面的第 23 课时中，我们已经介绍了限流和降级的相关概念以及在服务高可用架构中的重要性。那本课时我们就继续往下剖析，来详细讲解限流和降级的使用场景以及二者的区别，接着我还会给你一些具体的案例，让你更好地掌握如何去进行限流和降级。</p>
+<p>限流和降级</p>
+<p>限流和降级都是为了保护下游服务提供者不被大流量请求冲垮而采取的手段，但是二者也是有一定区别的。</p>
+<p>1. 应用的服务定位不同</p>
+<p>在大多数微服务架构系统中，不同服务的定位和重要性往往是不一样的。</p>
+<p>我们一般将提供核心业务支撑相关的服务称为核心链路服务，它们负责提供最为核心的业务，比如支付宝的支付链路、滴滴的打车链路等。</p>
+<p>而提供核心业务之外的服务我们一般称为次要链路服务，它们负责提供非核心业务，比如滴滴的司机评价功能等。</p>
+<p>上述服务也统称为内部服务：都是由公司或组织负责开发运维和管理的服务。由于这些服务都是自家开发管理的，所以往往对其性能和稳定性有一定的了解。与内部服务对应的就是外部服务，是指通过 API 或 SOA 等手段调用的其他公司或者组织的服务，这些服务的性能和稳定性往往无法保证或者被自家熟知。</p>
+<p>系统服务定位和分类示意图</p>
+<p>如上图所示，外部请求通过网关直接访问上流服务 A，服务 A、服务 B 和服务 C 是核心链路服务，服务 D 是次要链路服务，服务 E 是外部服务。</p>
+<p>其中，外部请求的数量往往无法控制，比如双 11 抢购和微博热点事件，可能会有巨量瞬时流量，所以直面不可控的外部请求的服务 A 往往需要进行限流，需要根据整条核心链路经过压测计算出来的处理上限，过滤掉部分请求。</p>
+<p>除了服务 A 需要限流外，一般来说，服务 B、服务 C 和服务 D 都不需要限流。而服务 E 是外部服务，在另外一个系统中也相当于服务 A 的地位，直面外部请求，所以理论上它也是需要进行限流操作的，以防止上游系统的请求将其冲垮。</p>
+<p>对于服务 B 来说，它除了负责自身业务外，还需要协调调用服务 C、服务 D 和服务 E，当流量过大系统逐渐无法应对时，往往就会引入降级，关闭掉对次要链路中服务 D 的调用，腾出更多的服务器资源给核心链路的服务。</p>
+<p>服务 B 需要调用外部服务 E，它是一个稳定性未知的外部服务，相当于一个黑盒，所以一般服务 B 需要断路器来提供熔断机制以保护自己不被外部服务 E 拖垮。</p>
+<p>2. 效果不同</p>
+<p>限流方案能预防突发的大流量，保护系统不被冲垮，但是其在处理瞬时流量时，大多数时候会拒绝掉系统无法处理的过量流量，服务的处理能力并没有过多改变，这就可能会导致拒绝掉一些关键业务请求的尴尬情况发生。</p>
+<p>而降级设计能够暂时提高系统某些关键服务的处理能力，从而承载更多的请求访问，当然它会牺牲其他次要功能的资源。</p>
+<p>具体业务场景</p>
+<p>我们还是以上一课时的电商商品系统为例，商品详情页面需要展示下游评论系统的实时评论信息，但是实时的评论信息相对来说并不是不可或缺的，紧急情况下可以不显示。下图展示了相关的服务交互过程：</p>
+<p>商品系统和评论系统交互图</p>
+<p>商品系统直接处理外部的网络请求，所以需要进行限流操作，并且商品系统相对于下游的评论系统来说，级别更高，不应该受到评论系统的错误影响，在面对较大网络流量时，可以不再调用评论系统获取实时的派送信息，而是直接显示默认数据或缓存的过期数据。</p>
+<p>限流案例</p>
+<p>关于限流，我们可以直接使用 Golang 标准库自带的 x/time/rate 组件。</p>
+<p>rate 组件是基于经典的令牌桶（Token Bucket）算法实现的。下面，我们就简单讲解一下令牌桶算法的基础理念，你可以将令牌桶想象成一个固定大小的桶，限流系统会以恒定速率向桶中放令牌，比如每分钟放 10 个，桶满了之后则停止放入，桶中还有空间则继续放入；而用户可以从桶中取令牌，如果有剩余则直接拿走，如果没有剩余，则需要等待系统中被放置了新的令牌再拿走。</p>
+<p>而限流器就相当于一个这样的令牌桶，每次处理请求时都需要从限流器这里获得一个令牌，如果没有则一直等待。所以，要使用 rate 组件实现限流功能，我们先要构造一个限流器。rate 提供了 NewLimiter 方法来构造限流器，它有两个参数：</p>
+<p>第一个参数代表系统每秒钟向令牌桶中放入多少个令牌，也就是限流器平稳状态下每秒可以允许多少请求通过，它的参数类型是 Limit，是 float64 类型的别名；</p>
+<p>第二个参数代表令牌桶的上限或者整体大小，也就是限流器允许多大的瞬时请求流量通过。</p>
+<p>如下面的示例代码所示，其构造出的限流器的相关参数为：令牌桶大小为 10，向桶中放置令牌的速率为每秒 20 个令牌。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">// 使用x/time/rate创建限流中间件
+</span></span><span class="line"><span class="cl">limiter := rate.NewLimiter(10, 20)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>除了直接指定每秒产生的令牌个数外，还可以用 Every 方法来指定向令牌桶中放置令牌的间隔，例如：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">limit := Every(100 * time.Millisecond);
+</span></span><span class="line"><span class="cl">limiter := NewLimiter(limit, 1);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>以上就表示每 100ms 往桶中放一个令牌，也就是说 1 秒钟可以产生 10 个令牌。</p>
+<p>Limiter 提供了三类方法供用户消费令牌，用户可以每次消费一个令牌，也可以一次性消费多个令牌，这里我们就只展示其中的 Allow 类方法的使用（如下示例代码），剩下的 Wait 和 Reserve 类方法跟 Allow 类方法的使用比较类似，你若感兴趣的话可以自行了解，这里我们就不做过多讲解了。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">if !limit.Allow() {
+</span></span><span class="line"><span class="cl">    // Allow返回false，表示桶内不足一个令牌，应该被限流，默认返回 ErrLimiExceed 异常
+</span></span><span class="line"><span class="cl">    return nil, errors.New(&#34;ErrLimitExceed&#34;)
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">// Allow 返回true，则正常执行业务逻辑
+</span></span><span class="line"><span class="cl">return doRealJob(params)
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>然后可以使用 postman 等工具进行验证，当请求频次超过限流标准后，会返回 &ldquo;error&rdquo;: &ldquo;ErrLimitExceed&rdquo; 信息。</p>
+<p>降级案例</p>
+<p>降级的核心目的就是要保证服务基本可用，一般可以通过配置中心配置或人工配置一些关键数据去进行降级。同时，需要注意的是，降级也需要根据系统的吞吐量、响应时间、可用率等条件进行自动或手动降级。</p>
+<p>一般来说，降级的手段有很多，比如有一种降级方案就是通过断路器打开和被限流时返回的默认固化的数据或者处理逻辑来实现的。除此之外，还可以使用配置中心提供动态开关的手段进行服务降级。</p>
+<p>降级示意图</p>
+<p>动态开关方案需要依赖配置中心，并且配置中心和服务需要提供如下一些功能。</p>
+<p>启动主动拉取配置：服务启动时拉取配置相关数据，并缓存在本地。</p>
+<p>发布订阅配置：当决定降级时，配置中心中保存的配置数据会被修改，服务需要感知该变更并主动更新本地缓存。</p>
+<p>定时拉取配置：可以解决订阅配置失效等极端场景问题。</p>
+<p>在本课时的案例中我们使用 Go 语言实现的 etcd作为配置中心。</p>
+<p>分布式系统将 etcd 用作配置管理、服务发现和协调分布式工作的一致键值存储组件。许多组织在生产系统上使用 etcd，例如容器调度程序、服务发现和分布式数据存储。所以，可以将服务降级相关的开关配置存储到 etcd 中，并供业务服务拉取和订阅。</p>
+<p>这里我们看一下 Go 语言中如何去主动拉取 etcd配置，首先要使用 etcd 提供的客户端 API 初始化一个客户端，然后调用其 Get 方法获取对应键的数值，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">service</span> <span class="o">*</span><span class="n">GoodsDetailServiceImpl</span><span class="p">)</span> <span class="n">InitConfig</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="n">cli</span><span class="p">,</span> <span class="n">_</span> <span class="p">:</span><span class="o">=</span> <span class="n">clientv3</span><span class="o">.</span><span class="n">New</span><span class="p">(</span><span class="n">clientv3</span><span class="o">.</span><span class="n">Config</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">Endpoints</span><span class="p">:</span>   <span class="p">[]</span><span class="n">string</span><span class="p">{</span><span class="s2">&#34;127.0.0.1:2379&#34;</span><span class="p">},</span>
+</span></span><span class="line"><span class="cl">      <span class="n">DialTimeout</span><span class="p">:</span> <span class="mi">5</span> <span class="o">*</span> <span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">   <span class="p">})</span>
+</span></span><span class="line"><span class="cl">   <span class="o">//</span> <span class="n">get</span>
+</span></span><span class="line"><span class="cl">   <span class="n">resp</span><span class="p">,</span> <span class="n">_</span> <span class="p">:</span><span class="o">=</span> <span class="n">cli</span><span class="o">.</span><span class="n">Get</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&#34;call_service_d&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">ev</span> <span class="p">:</span><span class="o">=</span> <span class="nb">range</span> <span class="n">resp</span><span class="o">.</span><span class="n">Kvs</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">&#34;</span><span class="si">%s</span><span class="s2">:</span><span class="si">%s</span><span class="se">\n</span><span class="s2">&#34;</span><span class="p">,</span> <span class="n">ev</span><span class="o">.</span><span class="n">Key</span><span class="p">,</span> <span class="n">ev</span><span class="o">.</span><span class="n">Value</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="n">ev</span><span class="o">.</span><span class="n">Key</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&#34;call_service_d&#34;</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">         <span class="n">service</span><span class="o">.</span><span class="n">callCommentService</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">strconv</span><span class="o">.</span><span class="n">Atoi</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="n">ev</span><span class="o">.</span><span class="n">Value</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">      <span class="p">}</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>获取到对应降级开关的值后，服务 B 就可以根据该值来判断是否需要调用服务 D，当然没有必要在每次服务调用时都去 etcd 中获取一次开关的具体数值，而是在启动时就将数据缓存在本地，并且使用 etcd 的订阅功能，也就是它的 watch 功能。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">rch := cli.Watch(context.Background(), &#34;call_service_d&#34;) // &lt;-chan WatchResponse
+</span></span><span class="line"><span class="cl">for wresp := range rch {
+</span></span><span class="line"><span class="cl">   for _, ev := range wresp.Events {
+</span></span><span class="line"><span class="cl">      fmt.Printf(&#34;Type: %s Key:%s Value:%s\n&#34;, ev.Type, ev.Kv.Key, ev.Kv.Value)
+</span></span><span class="line"><span class="cl">      if (string(ev.Kv.Key) == &#34;call_service_d&#34;) {
+</span></span><span class="line"><span class="cl">         service.callCommentService, _ = strconv.Atoi(string(ev.Kv.Value))
+</span></span><span class="line"><span class="cl">      }
+</span></span><span class="line"><span class="cl">   }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上代码所示，服务 B 可以订阅监听 etcd 中 call_service_d 这个键，如果其发生改变，比如我们手动更改了服务降级开关的配置，则服务 B 可以获取到该变化，对应的 Watch 方法就会返回，然后服务 B 更新本地的数据，从而进行服务降级，不需要再调用次要链路服务 D。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="k">func</span> <span class="p">(</span><span class="n">service</span> <span class="o">*</span><span class="n">GoodsDetailServiceImpl</span><span class="p">)</span> <span class="n">GetGoodsDetail</span><span class="p">(</span><span class="n">ctx</span> <span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">id</span> <span class="n">string</span><span class="p">)</span> <span class="p">(</span><span class="n">GoodsDetailVO</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">   <span class="n">detail</span> <span class="p">:</span><span class="o">=</span> <span class="n">GoodsDetailVO</span><span class="p">{</span><span class="n">Id</span><span class="p">:</span> <span class="n">id</span><span class="p">,</span> <span class="n">Name</span><span class="p">:</span><span class="s2">&#34;Name&#34;</span><span class="p">}</span>
+</span></span><span class="line"><span class="cl">   <span class="o">//</span> <span class="err">根据</span> <span class="n">callCommentService</span> <span class="err">来判断是否要调用次要服务</span>
+</span></span><span class="line"><span class="cl">   <span class="k">if</span> <span class="n">service</span><span class="o">.</span><span class="n">callCommentService</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">detail</span><span class="o">.</span><span class="n">Comments</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">GetGoodsComments</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl">   <span class="k">var</span> <span class="n">err</span> <span class="n">error</span>
+</span></span><span class="line"><span class="cl">   <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="k">return</span> <span class="n">detail</span><span class="p">,</span> <span class="n">err</span>
+</span></span><span class="line"><span class="cl">   <span class="p">}</span>
+</span></span><span class="line"><span class="cl">   <span class="k">return</span> <span class="n">detail</span><span class="p">,</span><span class="n">nil</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>如上述代码所示，业务逻辑中根据 etcd 中键值来进行判断，如果不等于 0 则调用次要服务来获取商品的评论，否则就不调用。</p>
+<p>小结</p>
+<p>在本课时，我为你讲述了限流和降级的具体使用场景和区别：限流是为了应对突发的大流量，保护系统不被冲垮；而服务降级则是以牺牲部分非核心服务来提高系统的整体性能。接着我们又分别学习了有关限流和降级的具体实现案例，了解了 etcd 的相关使用。</p>
+<p>那么，除了使用 etcd 作为配置中心，还有哪些可以使用的中间件呢？它们之间又有哪些异同或优劣点呢？欢迎你留言，我们一起讨论分析。</p>
+<p>-&ndash; ### 精选评论 ##### **龙： &gt; 当然还有consul ##### **富： &gt; zk吧足够简单 高效</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%AE%9E%E6%88%9838%E8%AE%B2/">Go微服务实战38讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%89%8D%E7%AB%AF%E5%9F%BA%E7%A1%80%E5%BB%BA%E8%AE%BE%E4%B8%8E%E6%9E%B6%E6%9E%8430%E8%AE%B2/25%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E4%B8%80%E4%B8%AA%E5%89%8D%E7%AB%AF&#43;%E7%A7%BB%E5%8A%A8%E7%AB%AF%E7%A6%BB%E7%BA%BF%E5%8C%85%E6%96%B9%E6%A1%88/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">25如何设计一个前端&#43;移动端离线包方案？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/25%E7%A8%B3%E5%AE%9A%E5%9F%BA%E7%9F%B3%E5%B8%A6%E4%BD%A0%E5%89%96%E6%9E%90%E5%AE%B9%E5%99%A8%E8%BF%90%E8%A1%8C%E6%97%B6%E4%BB%A5%E5%8F%8Acri%E5%8E%9F%E7%90%86/">
+            <span class="next-text nav-default">25稳定基石：带你剖析容器运行时以及CRI原理</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

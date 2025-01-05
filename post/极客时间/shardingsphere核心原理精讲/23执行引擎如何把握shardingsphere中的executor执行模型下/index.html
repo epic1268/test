@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>23执行引擎：如何把握ShardingSphere中的Executor执行模型？（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在上一课时，我们已经对 ShardingSphere 执行引擎中关于底层的 SQLExecuteTemplate，以及上层的 StatementExecutor 和 PreparedStatementExecutor 对象进行了全面介绍。
+今天，我们在此基础上更上一层，重点关注 ShardingStatement 和 ShardingPreparedStatement 对象，这两个对象分别是 StatementExecutor 和 PreparedStatementExecutor 的使用者。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/23%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E6%8A%8A%E6%8F%A1shardingsphere%E4%B8%AD%E7%9A%84executor%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8B%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/23%E6%89%A7%E8%A1%8C%E5%BC%95%E6%93%8E%E5%A6%82%E4%BD%95%E6%8A%8A%E6%8F%A1shardingsphere%E4%B8%AD%E7%9A%84executor%E6%89%A7%E8%A1%8C%E6%A8%A1%E5%9E%8B%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="23执行引擎：如何把握ShardingSphere中的Executor执行模型？（下）">
+  <meta property="og:description" content="在上一课时，我们已经对 ShardingSphere 执行引擎中关于底层的 SQLExecuteTemplate，以及上层的 StatementExecutor 和 PreparedStatementExecutor 对象进行了全面介绍。
+今天，我们在此基础上更上一层，重点关注 ShardingStatement 和 ShardingPreparedStatement 对象，这两个对象分别是 StatementExecutor 和 PreparedStatementExecutor 的使用者。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="ShardingSphere核心原理精讲">
+
+  <meta itemprop="name" content="23执行引擎：如何把握ShardingSphere中的Executor执行模型？（下）">
+  <meta itemprop="description" content="在上一课时，我们已经对 ShardingSphere 执行引擎中关于底层的 SQLExecuteTemplate，以及上层的 StatementExecutor 和 PreparedStatementExecutor 对象进行了全面介绍。
+今天，我们在此基础上更上一层，重点关注 ShardingStatement 和 ShardingPreparedStatement 对象，这两个对象分别是 StatementExecutor 和 PreparedStatementExecutor 的使用者。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4344">
+  <meta itemprop="keywords" content="ShardingSphere核心原理精讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="23执行引擎：如何把握ShardingSphere中的Executor执行模型？（下）">
+  <meta name="twitter:description" content="在上一课时，我们已经对 ShardingSphere 执行引擎中关于底层的 SQLExecuteTemplate，以及上层的 StatementExecutor 和 PreparedStatementExecutor 对象进行了全面介绍。
+今天，我们在此基础上更上一层，重点关注 ShardingStatement 和 ShardingPreparedStatement 对象，这两个对象分别是 StatementExecutor 和 PreparedStatementExecutor 的使用者。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">23执行引擎：如何把握ShardingSphere中的Executor执行模型？（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4344 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在上一课时，我们已经对 ShardingSphere 执行引擎中关于底层的 SQLExecuteTemplate，以及上层的 StatementExecutor 和 PreparedStatementExecutor 对象进行了全面介绍。</p>
+<p>今天，我们在此基础上更上一层，重点关注 ShardingStatement 和 ShardingPreparedStatement 对象，这两个对象分别是 StatementExecutor 和 PreparedStatementExecutor 的使用者。</p>
+<p>ShardingStatement</p>
+<p>我们先来看 ShardingStatement 类，该类中的变量在前面的内容中都已经有过介绍：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private final ShardingConnection connection;
+</span></span><span class="line"><span class="cl">private final StatementExecutor statementExecutor;
+</span></span><span class="line"><span class="cl">private boolean returnGeneratedKeys;
+</span></span><span class="line"><span class="cl">private SQLRouteResult sqlRouteResult;
+</span></span><span class="line"><span class="cl">private ResultSet currentResultSet;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>ShardingStatement 类的构造函数同样不是很复杂，我们发现 StatementExecutor 就是在这个构造函数中完成了其创建过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public ShardingStatement(final ShardingConnection connection, final int resultSetType, final int resultSetConcurrency, final int resultSetHoldability) {
+</span></span><span class="line"><span class="cl">    super(Statement.class);
+</span></span><span class="line"><span class="cl">    this.connection = connection;
+</span></span><span class="line"><span class="cl">    //创建 StatementExecutor
+</span></span><span class="line"><span class="cl">    statementExecutor = new StatementExecutor(resultSetType, resultSetConcurrency, resultSetHoldability, connection);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在继续介绍 ShardingStatement 之前，我们先梳理一下与它相关的类层结构。我们在 “06 | 规范兼容：JDBC 规范与 ShardingSphere 是什么关系？” 中的 ShardingConnection 提到，ShardingSphere 通过适配器模式包装了自己的实现类，除了已经介绍的 ShardingConnection 类之外，还包含今天要介绍的 ShardingStatement 和 ShardingPreparedStament。</p>
+<p>根据这一点，我们可以想象 ShardingStatement 应该具备与 ShardingConnection 类似的类层结构：</p>
+<p>然后我们来到上图中 AbstractStatementAdapter 类，这里的很多方法的风格都与 ShardingConnection 的父类 AbstractConnectionAdapter 一致，例如如下所示的 setPoolable 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final void setPoolable(final boolean poolable) throws SQLException {
+</span></span><span class="line"><span class="cl">    this.poolable = poolable;
+</span></span><span class="line"><span class="cl">    recordMethodInvocation(targetClass, &#34;setPoolable&#34;, new Class[] {boolean.class}, new Object[] {poolable});
+</span></span><span class="line"><span class="cl">    forceExecuteTemplate.execute((Collection) getRoutedStatements(), new ForceExecuteCallback&lt;Statement&gt;() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        @Override
+</span></span><span class="line"><span class="cl">        public void execute(final Statement statement) throws SQLException {
+</span></span><span class="line"><span class="cl">            statement.setPoolable(poolable);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    });
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里涉及的 recordMethodInvocation 方法、ForceExecuteTemplate，以及 ForceExecuteCallback 我们都已经在“03 | 规范兼容：JDBC 规范与 ShardingSphere 是什么关系？”中进行了介绍，这里不再展开。</p>
+<p>同样，AbstractStatementAdapter 的父类 AbstractUnsupportedOperationStatement 的作用也与 AbstractUnsupportedOperationConnection 的作用完全一致。</p>
+<p>了解了 ShardingStatement 的类层结构之后，我们来看它的核心方法，首当其冲的还是它的 executeQuery 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public ResultSet executeQuery(final String sql) throws SQLException {
+</span></span><span class="line"><span class="cl">    if (Strings.isNullOrEmpty(sql)) {
+</span></span><span class="line"><span class="cl">        throw new SQLException(SQLExceptionConstant.SQL_STRING_NULL_OR_EMPTY);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    ResultSet result;
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">         //清除 StatementExecutor 中的相关变量
+</span></span><span class="line"><span class="cl">        clearPrevious();
+</span></span><span class="line"><span class="cl">        //执行路由引擎，获取路由结果
+</span></span><span class="line"><span class="cl">        shard(sql);
+</span></span><span class="line"><span class="cl">        //初始化 StatementExecutor
+</span></span><span class="line"><span class="cl">        initStatementExecutor();
+</span></span><span class="line"><span class="cl">        //调用归并引擎
+</span></span><span class="line"><span class="cl">        MergeEngine mergeEngine = MergeEngineFactory.newInstance(connection.getRuntimeContext().getDatabaseType(), connection.getRuntimeContext().getRule(), sqlRouteResult, connection.getRuntimeContext().getMetaData().getRelationMetas(), statementExecutor.executeQuery());
+</span></span><span class="line"><span class="cl">        //获取归并结果
+</span></span><span class="line"><span class="cl">        result = getResultSet(mergeEngine);
+</span></span><span class="line"><span class="cl">    } finally {
+</span></span><span class="line"><span class="cl">        currentResultSet = null;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    currentResultSet = result;
+</span></span><span class="line"><span class="cl">    return result;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这个方法中有几个子方法值得具体展开一下，首先是 shard 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private void shard(final String sql) {
+</span></span><span class="line"><span class="cl">    //从 Connection 中获取 ShardingRuntimeContext 上下文
+</span></span><span class="line"><span class="cl">    ShardingRuntimeContext runtimeContext = connection.getRuntimeContext();
+</span></span><span class="line"><span class="cl">    //创建 SimpleQueryShardingEngine
+</span></span><span class="line"><span class="cl">    SimpleQueryShardingEngine shardingEngine = new SimpleQueryShardingEngine(runtimeContext.getRule(), runtimeContext.getProps(), runtimeContext.getMetaData(), runtimeContext.getParseEngine());
+</span></span><span class="line"><span class="cl">    //执行分片路由并获取路由结果
+</span></span><span class="line"><span class="cl">    sqlRouteResult = shardingEngine.shard(sql, Collections.emptyList());
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这段代码就是路由引擎的入口，我们创建了 SimpleQueryShardingEngine，并调用它的 shard 方法获取路由结果对象 SQLRouteResult。</p>
+<p>然后我们来看 initStatementExecutor 方法，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private void initStatementExecutor() throws SQLException {
+</span></span><span class="line"><span class="cl">    statementExecutor.init(sqlRouteResult);
+</span></span><span class="line"><span class="cl">    replayMethodForStatements();
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里通过路由结果对象 SQLRouteResult 对 statementExecutor 进行了初始化，然后执行了一个 replayMethodForStatements 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private void replayMethodForStatements() {
+</span></span><span class="line"><span class="cl">    for (Statement each : statementExecutor.getStatements()) {
+</span></span><span class="line"><span class="cl">        replayMethodsInvocation(each);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>该方法实际上就是调用了基于反射的 replayMethodsInvocation 方法，然后这个replayMethodsInvocation 方法会针对 statementExecutor 中所有 Statement的 SQL 操作执行目标方法。</p>
+<p>最后，我们通过执行 statementExecutor.executeQuery() 方法获取 SQL 执行的结果，并用这个结果来创建归并引擎 MergeEngine，并通过归并引擎 MergeEngine 获取最终的执行结果。</p>
+<p>归并引擎是 ShardingSphere 中与 SQL 解析引擎、路由引擎以及执行引擎并列的一个引擎，我们在下一课时中就会开始介绍这块内容，这里先不做具体展开。</p>
+<p>以 ShardingStatement 中的其中一个 executeUpdate 方法为例，可以看到它的执行流程也与前面的 executeQuery 方法非常类似：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public int executeUpdate(final String sql) throws SQLException {
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">         //清除 StatementExecutor 中的相关变量
+</span></span><span class="line"><span class="cl">        clearPrevious();
+</span></span><span class="line"><span class="cl">        //执行路由引擎，获取路由结果
+</span></span><span class="line"><span class="cl">        shard(sql);
+</span></span><span class="line"><span class="cl">        //初始化 StatementExecutor
+</span></span><span class="line"><span class="cl">        initStatementExecutor();
+</span></span><span class="line"><span class="cl">        return statementExecutor.executeUpdate();
+</span></span><span class="line"><span class="cl">    } finally {
+</span></span><span class="line"><span class="cl">        currentResultSet = null;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然，对于 Update 操作而言，不需要通过归并引擎做结果的归并。</p>
+<p>ShardingPreparedStatement</p>
+<p>我们接着来看 ShardingPreparedStatement 类，这个类的变量也基本都是前面介绍过的对象：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private final ShardingConnection connection;
+</span></span><span class="line"><span class="cl">private final String sql;
+</span></span><span class="line"><span class="cl">private final PreparedQueryShardingEngine shardingEngine;
+</span></span><span class="line"><span class="cl">private final PreparedStatementExecutor preparedStatementExecutor;
+</span></span><span class="line"><span class="cl">private final BatchPreparedStatementExecutor batchPreparedStatementExecutor;
+</span></span><span class="line"><span class="cl">private SQLRouteResult sqlRouteResult;
+</span></span><span class="line"><span class="cl">private ResultSet currentResultSet;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的 ShardingEngine、PreparedStatementExecutor 和 BatchPreparedStatementExecutor 对象的创建过程都发生在 ShardingPreparedStatement 的构造函数中。</p>
+<p>然后我们来看它的代表性方法 ExecuteQuery，如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public ResultSet executeQuery() throws SQLException {
+</span></span><span class="line"><span class="cl">    ResultSet result;
+</span></span><span class="line"><span class="cl">    try {
+</span></span><span class="line"><span class="cl">        clearPrevious();
+</span></span><span class="line"><span class="cl">        shard();
+</span></span><span class="line"><span class="cl">        initPreparedStatementExecutor();
+</span></span><span class="line"><span class="cl">        MergeEngine mergeEngine = MergeEngineFactory.newInstance(connection.getRuntimeContext().getDatabaseType(), connection.getRuntimeContext().getRule(), sqlRouteResult, connection.getRuntimeContext().getMetaData().getRelationMetas(), preparedStatementExecutor.executeQuery());
+</span></span><span class="line"><span class="cl">        result = getResultSet(mergeEngine);
+</span></span><span class="line"><span class="cl">    } finally {
+</span></span><span class="line"><span class="cl">        clearBatch();
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    currentResultSet = result;
+</span></span><span class="line"><span class="cl">    return result;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里我们没加注释，但也应该理解这一方法的执行流程，因为该方法的风格与 ShardingStatement 中的同名方法非常一致。</p>
+<p>关于 ShardingPreparedStatement 就没有太多可以介绍的内容了，我们接着来看它的父类AbstractShardingPreparedStatementAdapter 类，看到该类持有一个 SetParameterMethodInvocation 的列表，以及一个参数列表：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private final List&lt;SetParameterMethodInvocation&gt; setParameterMethodInvocations = new LinkedList&lt;&gt;();
+</span></span><span class="line"><span class="cl">private final List&lt;Object&gt; parameters = new ArrayList&lt;&gt;();
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的 SetParameterMethodInvocation 类直接集成了介绍 ShardingConnection 时提到的 JdbcMethodInvocation 类：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">public</span> <span class="n">final</span> <span class="k">class</span> <span class="n">SetParameterMethodInvocation</span> <span class="k">extends</span> <span class="n">JdbcMethodInvocation</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Getter</span>
+</span></span><span class="line"><span class="cl">    <span class="n">private</span> <span class="n">final</span> <span class="ne">int</span> <span class="n">index</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="err">@</span><span class="n">Getter</span>
+</span></span><span class="line"><span class="cl">    <span class="n">private</span> <span class="n">final</span> <span class="ne">Object</span> <span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">SetParameterMethodInvocation</span><span class="p">(</span><span class="n">final</span> <span class="n">Method</span> <span class="n">method</span><span class="p">,</span> <span class="n">final</span> <span class="ne">Object</span><span class="p">[]</span> <span class="n">arguments</span><span class="p">,</span> <span class="n">final</span> <span class="ne">Object</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">super</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">arguments</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="n">this</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="p">(</span><span class="ne">int</span><span class="p">)</span> <span class="n">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">        <span class="n">this</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">public</span> <span class="n">void</span> <span class="n">changeValueArgument</span><span class="p">(</span><span class="n">final</span> <span class="ne">Object</span> <span class="n">value</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">getArguments</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于 ShardingPreparedStatement 而言，这个类的作用是在 JdbcMethodInvocation 中所保存的方法和参数的基础上，添加了 SQL 执行过程中所需要的参数信息。</p>
+<p>所以它的 replaySetParameter 方法就变成了如下的风格：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">protected final void replaySetParameter(final PreparedStatement preparedStatement, final List&lt;Object&gt; parameters) {
+</span></span><span class="line"><span class="cl">    setParameterMethodInvocations.clear();
+</span></span><span class="line"><span class="cl">   //添加参数信息
+</span></span><span class="line"><span class="cl">    addParameters(parameters);
+</span></span><span class="line"><span class="cl">    for (SetParameterMethodInvocation each : setParameterMethodInvocations) {
+</span></span><span class="line"><span class="cl">        each.invoke(preparedStatement);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>关于 AbstractShardingPreparedStatementAdapter 还需要注意的是它的类层结构，如下图所示，可以看到 AbstractShardingPreparedStatementAdapter 继承了 AbstractUnsupportedOperationPreparedStatement 类；而 AbstractUnsupportedOperationPreparedStatement 却又继承了 AbstractStatementAdapter 类并实现了 PreparedStatement：</p>
+<p>形成这种类层结构的原因在于，PreparedStatement 本来就是在 Statement 的基础上添加了各种参数设置功能，换句话说，Statement 的功能 PreparedStatement 都应该有。</p>
+<p>所以一方面 AbstractStatementAdapter 提供了所有 Statement 的功能；另一方面，AbstractShardingPreparedStatementAdapter 首先把 AbstractStatementAdapter 所有的功能继承过来，但它自身可能有一些无法实现的关于 PreparedStatement 的功能，所以同样提供了 AbstractUnsupportedOperationPreparedStatement 类，并被最终的 AbstractShardingPreparedStatementAdapter 适配器类所继承。</p>
+<p>这样就形成了如上图所示的复杂类层结构。</p>
+<p>ShardingConnection</p>
+<p>介绍完 ShardingStatement 和 ShardingPreparedStatement 之后，我们来关注使用它们的具体应用场景，这也是 ShardingSphere 执行引擎的最后一部分内容。</p>
+<p>通过查看调用关系，我们发现创建这两个类的入口都在 ShardingConnection 类中，该类包含了用于创建 ShardingStatement 的 createStatement 方法和用于创建 ShardingPreparedStatement 的 prepareStatement 方法，以及它们的各种重载方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span><span class="lnt">9
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public Statement createStatement(final int resultSetType, final int resultSetConcurrency, final int resultSetHoldability) {
+</span></span><span class="line"><span class="cl">    return new ShardingStatement(this, resultSetType, resultSetConcurrency, resultSetHoldability);
+</span></span><span class="line"><span class="cl"> }
+</span></span><span class="line"><span class="cl">	 
+</span></span><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public PreparedStatement prepareStatement(final String sql, final int resultSetType, final int resultSetConcurrency, final int resultSetHoldability) throws SQLException {
+</span></span><span class="line"><span class="cl">    return new ShardingPreparedStatement(this, sql, resultSetType, resultSetConcurrency, resultSetHoldability);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>同时，ShardingConnection 中包含了用于管理分布式事务的 ShardingTransactionManager。关于分布式事务的讨论不是今天的重点，我们后面会有专题来做详细展开。</p>
+<p>但我们可以先看一下 commit 和 rollback 方法：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public void commit() throws SQLException {
+</span></span><span class="line"><span class="cl">    if (TransactionType.LOCAL == transactionType) {
+</span></span><span class="line"><span class="cl">        super.commit();
+</span></span><span class="line"><span class="cl">    } else {
+</span></span><span class="line"><span class="cl">        shardingTransactionManager.commit();
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public void rollback() throws SQLException {
+</span></span><span class="line"><span class="cl">    if (TransactionType.LOCAL == transactionType) {
+</span></span><span class="line"><span class="cl">        super.rollback();
+</span></span><span class="line"><span class="cl">    } else {
+</span></span><span class="line"><span class="cl">        shardingTransactionManager.rollback();
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到这两个方法的逻辑还是比较清晰的，即当事务类型为本地事务时直接调用 ShardingConnection 父类 AbstractConnectionAdapter 中的 commit 和 rollback 方法，这两个方法会调用真正的 connection 的相关方法。</p>
+<p>以 commit 方法为例，我们可以看到 AbstractConnectionAdapter 中基于这一设计思想的实现过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public void commit() throws SQLException {
+</span></span><span class="line"><span class="cl">    forceExecuteTemplate.execute(cachedConnections.values(), new ForceExecuteCallback&lt;Connection&gt;() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        @Override
+</span></span><span class="line"><span class="cl">        public void execute(final Connection connection) throws SQLException {
+</span></span><span class="line"><span class="cl">            connection.commit();
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    });
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>ShardingDataSource</p>
+<p>我们知道在 JDBC 规范中，可以通过 DataSource 获取 Connection 对象。ShardingSphere 完全兼容 JDBC 规范，所以 ShardingConnection 的创建过程应该也是在对应的 DataSource 中，这个 DataSource 就是ShardingDataSource。</p>
+<p>ShardingDataSource 类比较简单，其构造函数如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public ShardingDataSource(final Map&lt;String, DataSource&gt; dataSourceMap, final ShardingRule shardingRule, final Properties props) throws SQLException {
+</span></span><span class="line"><span class="cl">    super(dataSourceMap);
+</span></span><span class="line"><span class="cl">    checkDataSourceType(dataSourceMap);
+</span></span><span class="line"><span class="cl">    runtimeContext = new ShardingRuntimeContext(dataSourceMap, shardingRule, props, getDatabaseType());
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到，ShardingRuntimeContext 这个上下文对象是在 ShardingDataSource 的构造函数中被创建的，而创建 ShardingConnection 的过程也很直接：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">@Override
+</span></span><span class="line"><span class="cl">public final ShardingConnection getConnection() {
+</span></span><span class="line"><span class="cl">    return new ShardingConnection(getDataSourceMap(), runtimeContext, TransactionTypeHolder.get());
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ShardingDataSource 的实现上，也同样采用的是装饰器模式，所以它的类层结构也与 ShardingConnection 的类似。在 ShardingDataSource 的父类 AbstractDataSourceAdapter 中，主要的工作是完成 DatabaseType 的创建，核心方法 createDatabaseType 如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">private DatabaseType createDatabaseType(final DataSource dataSource) throws SQLException {
+</span></span><span class="line"><span class="cl">    if (dataSource instanceof AbstractDataSourceAdapter) {
+</span></span><span class="line"><span class="cl">        return ((AbstractDataSourceAdapter) dataSource).databaseType;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    try (Connection connection = dataSource.getConnection()) {
+</span></span><span class="line"><span class="cl">        return DatabaseTypes.getDatabaseTypeByURL(connection.getMetaData().getURL());
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到这里使用到了 DatabaseTypes 类，该类负责 DatabaseType 实例的动态管理。而在 ShardingSphere 中，DatabaseType 接口代表数据库类型：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public interface DatabaseType {
+</span></span><span class="line"><span class="cl">    //获取数据库名称
+</span></span><span class="line"><span class="cl">	String getName();
+</span></span><span class="line"><span class="cl">	//获取 JDBC URL 的前缀
+</span></span><span class="line"><span class="cl">	Collection&lt;String&gt; getJdbcUrlPrefixAlias();
+</span></span><span class="line"><span class="cl">	//获取数据源元数据
+</span></span><span class="line"><span class="cl">    DataSourceMetaData getDataSourceMetaData(String url, String username);
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以想象 ShardingSphere 中针对各种数据库提供了 DatabaseType 接口的实现类，其中以 MySQLDatabaseType 为例：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class MySQLDatabaseType implements DatabaseType {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">    public String getName() {
+</span></span><span class="line"><span class="cl">        return &#34;MySQL&#34;;
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">    public Collection&lt;String&gt; getJdbcUrlPrefixAlias() {
+</span></span><span class="line"><span class="cl">        return Collections.singletonList(&#34;jdbc:mysqlx:&#34;);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @Override
+</span></span><span class="line"><span class="cl">    public MySQLDataSourceMetaData getDataSourceMetaData(final String url, final String username) {
+</span></span><span class="line"><span class="cl">        return new MySQLDataSourceMetaData(url);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>上述代码中的 MySQLDataSourceMetaData 实现了 DataSourceMetaData 接口，并提供如下所示的对输入 url 的解析过程：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public MySQLDataSourceMetaData(final String url) {
+</span></span><span class="line"><span class="cl">    Matcher matcher = pattern.matcher(url);
+</span></span><span class="line"><span class="cl">    if (!matcher.find()) {
+</span></span><span class="line"><span class="cl">        throw new UnrecognizedDatabaseURLException(url, pattern.pattern());
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    hostName = matcher.group(4);
+</span></span><span class="line"><span class="cl">    port = Strings.isNullOrEmpty(matcher.group(5)) ? DEFAULT_PORT : Integer.valueOf(matcher.group(5));
+</span></span><span class="line"><span class="cl">    catalog = matcher.group(6);
+</span></span><span class="line"><span class="cl">    schema = null;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>显然，DatabaseType 用于保存与特定数据库元数据相关的信息，ShardingSphere 还基于 SPI 机制实现对各种 DatabaseType 实例的动态管理。</p>
+<p>最后，我们来到 ShardingDataSourceFactory 工厂类，该类负责 ShardingDataSource 的创建：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public final class ShardingDataSourceFactory {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public static DataSource createDataSource(
+</span></span><span class="line"><span class="cl">            final Map&lt;String, DataSource&gt; dataSourceMap, final ShardingRuleConfiguration shardingRuleConfig, final Properties props) throws SQLException {
+</span></span><span class="line"><span class="cl">        return new ShardingDataSource(dataSourceMap, new ShardingRule(shardingRuleConfig, dataSourceMap.keySet()), props);
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们在这里创建了 ShardingDataSource，同时发现 ShardingRule 的创建过程实际上也是在这里，通过传入的 ShardingRuleConfiguration 来构建一个新的 ShardingRule 对象。</p>
+<p>一旦创建了 DataSource，我们就可以使用与 JDBC 规范完全兼容的 API，通过该 DataSource 完成各种 SQL 的执行。我们可以回顾 ShardingDataSourceFactory 的使用过程来加深对他的理解：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">public DataSource dataSource() throws SQLException {
+</span></span><span class="line"><span class="cl">     //创建分片规则配置类
+</span></span><span class="line"><span class="cl">    ShardingRuleConfiguration shardingRuleConfig = new ShardingRuleConfiguration();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //创建分表规则配置类
+</span></span><span class="line"><span class="cl">    TableRuleConfiguration tableRuleConfig = new TableRuleConfiguration(&#34;user&#34;, &#34;ds${0..1}.user${0..1}&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //创建分布式主键生成配置类
+</span></span><span class="line"><span class="cl">    Properties properties = new Properties();
+</span></span><span class="line"><span class="cl">    result.setProperty(&#34;worker.id&#34;, &#34;33&#34;);
+</span></span><span class="line"><span class="cl">    KeyGeneratorConfiguration keyGeneratorConfig = new KeyGeneratorConfiguration(&#34;SNOWFLAKE&#34;, &#34;id&#34;, properties);
+</span></span><span class="line"><span class="cl">    result.setKeyGeneratorConfig(keyGeneratorConfig);
+</span></span><span class="line"><span class="cl">    shardingRuleConfig.getTableRuleConfigs().add(tableRuleConfig);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //根据年龄分库，一共分为 2 个库
+</span></span><span class="line"><span class="cl">   shardingRuleConfig.setDefaultDatabaseShardingStrategyConfig(new InlineShardingStrategyConfiguration(&#34;sex&#34;, &#34;ds${sex % 2}&#34;));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //根据用户 id 分表，一共分为 2 张表
+</span></span><span class="line"><span class="cl">    shardingRuleConfig.setDefaultTableShardingStrategyConfig(new StandardShardingStrategyConfiguration(&#34;id&#34;, &#34;user${id % 2}&#34;));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    //通过工厂类创建具体的 DataSource
+</span></span><span class="line"><span class="cl">    return ShardingDataSourceFactory.createDataSource(createDataSourceMap(), shardingRuleConfig, new Properties());
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一旦获取了目标 DataSource 之后，我们就可以使用 JDBC 中的核心接口来执行传入的 SQL 语句：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">List&lt;User&gt; getUsers(final String sql) throws SQLException {
+</span></span><span class="line"><span class="cl">    List&lt;User&gt; result = new LinkedList&lt;&gt;();
+</span></span><span class="line"><span class="cl">    try (Connection connection = dataSource.getConnection();
+</span></span><span class="line"><span class="cl">         PreparedStatement preparedStatement = connection.prepareStatement(sql);
+</span></span><span class="line"><span class="cl">         ResultSet resultSet = preparedStatement.executeQuery()) {
+</span></span><span class="line"><span class="cl">        while (resultSet.next()) {
+</span></span><span class="line"><span class="cl">            User user= new User();
+</span></span><span class="line"><span class="cl">            //省略设置 User 对象的赋值语句
+</span></span><span class="line"><span class="cl">            result.add(user);
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    return result;
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>ShardingSphere 通过在准备阶段获取的连接模式，在执行阶段生成内存归并结果集或流式归并结果集，并将其传递至结果归并引擎，以进行下一步工作。</p>
+<p>从源码解析到日常开发</p>
+<p>基于适配器模式完成对 JDBC 规范的重写，是我们学习 ShardingSphere 框架非常重要的一个切入点，同样也是我们将这种模式应用到日常开发工作中的一个切入点。</p>
+<p>适配器模式是作为两个不兼容的接口之间的桥梁。在业务系统中，我们经常会碰到需要与外部系统进行对接和集成的场景，这个时候为了保证内部系统的功能演进，能够独立于外部系统进行发展，一般都需要采用适配器模式完成两者之间的隔离。</p>
+<p>当我们设计这种系统时，可以参考 JDBC 规范中的接口定义方式，以及 ShardingSphere 中基于这种接口定义方式，而完成适配的具体做法。</p>
+<p>小结与预告</p>
+<p>这是 ShardingSphere 执行引擎的最后一个课时，我们围绕执行引擎的上层组件，给出了以“ Sharding”作为前缀的各种 JDBC 规范中的核心接口实现类。</p>
+<p>其中 ShardingStatement 和 ShardingPreparedStatement 直接依赖于上一课时介绍的 StatementExecutor 和 PreparedStatementExecutor；而 ShardingConnection 和 ShardingDataSource 则为我们使用执行引擎提供了入口。</p>
+<p>这里给你留一道思考题：ShardingSphere 中，AbstractShardingPreparedStatementAdapter 的类层结构为什么会比 AbstractStatementAdapter 复杂很多？欢迎你在留言区与大家讨论，我将逐一点评解答。</p>
+<p>现在，我们已经通过执行引擎获取了来自不同数据源的结果数据，对于查询语句而言，我们通常都需要对这些结果数据进行归并才能返回给客户端。在接下来的内容中，就让我们来分析一下 ShardingSphere 的归并引擎。</p>
+<p>-&ndash; ### 精选评论</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/shardingsphere%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E7%B2%BE%E8%AE%B2/">ShardingSphere核心原理精讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/23%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E5%87%BA%E7%8E%B0%E8%82%A1%E7%A5%A8/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">23为什么会出现股票？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/23%E6%9C%80%E5%90%8E%E7%9A%84%E9%98%B2%E7%BA%BF%E6%80%8E%E6%A0%B7%E5%AF%B9kubernete%E9%9B%86%E7%BE%A4%E8%BF%9B%E8%A1%8C%E7%81%BE%E5%A4%87%E5%92%8C%E6%81%A2%E5%A4%8D/">
+            <span class="next-text nav-default">23最后的防线：怎样对Kubernete集群进行灾备和恢复？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

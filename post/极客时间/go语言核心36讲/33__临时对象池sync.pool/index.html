@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>33__临时对象池sync.Pool - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="到目前为止，我们已经一起学习了 Go 语言标准库中最重要的那几个同步工具，这包括非常经典的互斥锁、读写锁、条件变量和原子操作，以及 Go 语言特有的几个同步工具：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/33__%E4%B8%B4%E6%97%B6%E5%AF%B9%E8%B1%A1%E6%B1%A0sync.pool/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/33__%E4%B8%B4%E6%97%B6%E5%AF%B9%E8%B1%A1%E6%B1%A0sync.pool/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="33__临时对象池sync.Pool">
+  <meta property="og:description" content="到目前为止，我们已经一起学习了 Go 语言标准库中最重要的那几个同步工具，这包括非常经典的互斥锁、读写锁、条件变量和原子操作，以及 Go 语言特有的几个同步工具：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Go语言核心36讲">
+
+  <meta itemprop="name" content="33__临时对象池sync.Pool">
+  <meta itemprop="description" content="到目前为止，我们已经一起学习了 Go 语言标准库中最重要的那几个同步工具，这包括非常经典的互斥锁、读写锁、条件变量和原子操作，以及 Go 语言特有的几个同步工具：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="5104">
+  <meta itemprop="keywords" content="Go语言核心36讲">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="33__临时对象池sync.Pool">
+  <meta name="twitter:description" content="到目前为止，我们已经一起学习了 Go 语言标准库中最重要的那几个同步工具，这包括非常经典的互斥锁、读写锁、条件变量和原子操作，以及 Go 语言特有的几个同步工具：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">33__临时对象池sync.Pool</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 5104 字 </span>
+          <span class="more-meta"> 预计阅读 11 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#问题解析">问题解析</a></li>
+        <li><a href="#知识扩展">知识扩展</a>
+          <ul>
+            <li><a href="#问题-1临时对象池存储值所用的数据结构是怎样的">问题 1：临时对象池存储值所用的数据结构是怎样的？</a></li>
+            <li><a href="#问题-2临时对象池是怎样利用内部数据结构来存取值的">问题 2：临时对象池是怎样利用内部数据结构来存取值的？</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>到目前为止，我们已经一起学习了 Go 语言标准库中最重要的那几个同步工具，这包括非常经典的互斥锁、读写锁、条件变量和原子操作，以及 Go 语言特有的几个同步工具：</p>
+<ol>
+<li><code>sync/atomic.Value</code>；</li>
+<li><code>sync.Once</code>；</li>
+<li><code>sync.WaitGroup</code></li>
+<li><code>context.Context</code>。</li>
+</ol>
+<p>今天，我们来讲 Go 语言标准库中的另一个同步工具：<code>sync.Pool</code>。</p>
+<p><code>sync.Pool</code>类型可以被称为临时对象池，它的值可以被用来存储临时的对象。与 Go 语言的很多同步工具一样，<code>sync.Pool</code>类型也属于结构体类型，它的值在被真正使用之后，就不应该再被复制了。</p>
+<p>这里的“临时对象”的意思是：不需要持久使用的某一类值。这类值对于程序来说可有可无，但如果有的话会明显更好。它们的创建和销毁可以在任何时候发生，并且完全不会影响到程序的功能。</p>
+<p>同时，它们也应该是无需被区分的，其中的任何一个值都可以代替另一个。如果你的某类值完全满足上述条件，那么你就可以把它们存储到临时对象池中。</p>
+<p>你可能已经想到了，我们可以把临时对象池当作针对某种数据的缓存来用。实际上，在我看来，临时对象池最主要的用途就在于此。</p>
+<p><code>sync.Pool</code>类型只有两个方法——<code>Put</code>和<code>Get</code>。Put 用于在当前的池中存放临时对象，它接受一个<code>interface{}</code>类型的参数；而 Get 则被用于从当前的池中获取临时对象，它会返回一个<code>interface{}</code>类型的值。</p>
+<p>更具体地说，这个类型的<code>Get</code>方法可能会从当前的池中删除掉任何一个值，然后把这个值作为结果返回。如果此时当前的池中没有任何值，那么这个方法就会使用当前池的<code>New</code>字段创建一个新值，并直接将其返回。</p>
+<p><code>sync.Pool</code>类型的<code>New</code>字段代表着创建临时对象的函数。它的类型是没有参数但有唯一结果的函数类型，即：<code>func() interface{}</code>。</p>
+<p>这个函数是<code>Get</code>方法最后的临时对象获取手段。<code>Get</code>方法如果到了最后，仍然无法获取到一个值，那么就会调用该函数。该函数的结果值并不会被存入当前的临时对象池中，而是直接返回给<code>Get</code>方法的调用方。</p>
+<p>这里的<code>New</code>字段的实际值需要我们在初始化临时对象池的时候就给定。否则，在我们调用它的<code>Get</code>方法的时候就有可能会得到<code>nil</code>。所以，<code>sync.Pool</code>类型并不是开箱即用的。不过，这个类型也就只有这么一个公开的字段，因此初始化起来也并不麻烦。</p>
+<p>举个例子。标准库代码包<code>fmt</code>就使用到了<code>sync.Pool</code>类型。这个包会创建一个用于缓存某类临时对象的<code>sync.Pool</code>类型值，并将这个值赋给一个名为<code>ppFree</code>的变量。这类临时对象可以识别、格式化和暂存需要打印的内容。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">var</span> <span class="n">ppFree</span> <span class="o">=</span> <span class="n">sync</span><span class="o">.</span><span class="n">Pool</span><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="n">New</span><span class="p">:</span> <span class="k">func</span><span class="p">()</span> <span class="n">interface</span><span class="p">{}</span> <span class="p">{</span> <span class="k">return</span> <span class="n">new</span><span class="p">(</span><span class="n">pp</span><span class="p">)</span> <span class="p">},</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>临时对象池<code>ppFree</code>的<code>New</code>字段在被调用的时候，总是会返回一个全新的<code>pp</code>类型值的指针（即临时对象）。这就保证了<code>ppFree</code>的<code>Get</code>方法总能返回一个可以包含需要打印内容的值。</p>
+<p><code>pp</code>类型是<code>fmt</code>包中的私有类型，它有很多实现了不同功能的方法。不过，这里的重点是，它的每一个值都是独立的、平等的和可重用的。</p>
+<blockquote>
+<p>更具体地说，这些对象既互不干扰，又不会受到外部状态的影响。它们几乎只针对某个需要打印内容的缓冲区而已。由于<code>fmt</code>包中的代码在真正使用这些临时对象之前，总是会先对其进行重置，所以它们并不在意取到的是哪一个临时对象。这就是临时对象的平等性的具体体现。</p>
+</blockquote>
+<p>另外，这些代码在使用完临时对象之后，都会先抹掉其中已缓冲的内容，然后再把它存放到<code>ppFree</code>中。这样就为重用这类临时对象做好了准备。</p>
+<p>众所周知的<code>fmt.Println</code>、<code>fmt.Printf</code>等打印函数都是如此使用<code>ppFree</code>，以及其中的临时对象的。因此，在程序同时执行很多的打印函数调用的时候，<code>ppFree</code>可以及时地把它缓存的临时对象提供给它们，以加快执行的速度。</p>
+<p>而当程序在一段时间内不再执行打印函数调用时，<code>ppFree</code>中的临时对象又能够被及时地清理掉，以节省内存空间。</p>
+<p>显然，在这个维度上，临时对象池可以帮助程序实现可伸缩性。这就是它的最大价值。</p>
+<p>我想，到了这里你已经清楚了临时对象池的基本功能、使用方式、适用场景和存在意义。我们下面来讨论一下它的一些内部机制，这样，我们就可以更好地利用它做更多的事。</p>
+<p>首先，我来问你一个问题。这个问题很可能也是你想问的。今天的问题是：为什么说临时对象池中的值会被及时地清理掉？</p>
+<p>这里的典型回答是：因为，Go 语言运行时系统中的垃圾回收器，所以在每次开始执行之前，都会对所有已创建的临时对象池中的值进行全面地清除。</p>
+<h2 id="问题解析">问题解析</h2>
+<p>我在前面已经向你讲述了临时对象会在什么时候被创建，下面我再来详细说说它会在什么时候被销毁。</p>
+<p><code>sync</code>包在被初始化的时候，会向 Go 语言运行时系统注册一个函数，这个函数的功能就是清除所有已创建的临时对象池中的值。我们可以把它称为池清理函数。</p>
+<p>一旦池清理函数被注册到了 Go 语言运行时系统，后者在每次即将执行垃圾回收时就都会执行前者。</p>
+<p>另外，在<code>sync</code>包中还有一个包级私有的全局变量。这个变量代表了当前的程序中使用的所有临时对象池的汇总，它是元素类型为<code>*sync.Pool</code>的切片。我们可以称之为池汇总列表。</p>
+<p>通常，在一个临时对象池的<code>Put</code>方法或<code>Get</code>方法第一次被调用的时候，这个池就会被添加到池汇总列表中。正因为如此，池清理函数总是能访问到所有正在被真正使用的临时对象池。</p>
+<p>更具体地说，池清理函数会遍历池汇总列表。对于其中的每一个临时对象池，它都会先将池中所有的私有临时对象和共享临时对象列表都置为<code>nil</code>，然后再把这个池中的所有本地池列表都销毁掉。</p>
+<p>最后，池清理函数会把池汇总列表重置为空的切片。如此一来，这些池中存储的临时对象就全部被清除干净了。</p>
+<p>如果临时对象池以外的代码再无对它们的引用，那么在稍后的垃圾回收过程中，这些临时对象就会被当作垃圾销毁掉，它们占用的内存空间也会被回收以备他用。</p>
+<p>以上，就是我对临时对象清理的进一步说明。首先需要记住的是，池清理函数和池汇总列表的含义，以及它们起到的关键作用。一旦理解了这些，那么在有人问到你这个问题的时候，你应该就可以从容地应对了。</p>
+<p>不过，我们在这里还碰到了几个新的词，比如：私有临时对象、共享临时对象列表和本地池。这些都代表着什么呢？这就涉及了下面的问题。</p>
+<h2 id="知识扩展">知识扩展</h2>
+<h3 id="问题-1临时对象池存储值所用的数据结构是怎样的">问题 1：临时对象池存储值所用的数据结构是怎样的？</h3>
+<p>在临时对象池中，有一个多层的数据结构。正因为有了它的存在，临时对象池才能够非常高效地存储大量的值。</p>
+<p>这个数据结构的顶层，我们可以称之为本地池列表，不过更确切地说，它是一个数组。这个列表的长度，总是与 Go 语言调度器中的 P 的数量相同。</p>
+<p>还记得吗？Go 语言调度器中的 P 是 processor 的缩写，它指的是一种可以承载若干个 G、且能够使这些 G 适时地与 M 进行对接，并得到真正运行的中介。</p>
+<p>这里的 G 正是 goroutine 的缩写，而 M 则是 machine 的缩写，后者指代的是系统级的线程。正因为有了 P 的存在，G 和 M 才能够进行灵活、高效的配对，从而实现强大的并发编程模型。</p>
+<p>P 存在的一个很重要的原因是为了分散并发程序的执行压力，而让临时对象池中的本地池列表的长度与 P 的数量相同的主要原因也是分散压力。这里所说的压力包括了存储和性能两个方面。在说明它们之前，我们先来探索一下临时对象池中的那个数据结构。</p>
+<p>在本地池列表中的每个本地池都包含了三个字段（或者说组件），它们是：存储私有临时对象的字段<code>private</code>、代表了共享临时对象列表的字段<code>shared</code>，以及一个<code>sync.Mutex</code>类型的嵌入字段。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/ee4a929dc09f439aa95d6452c4e530d0.png" alt=""><br>
+<strong>sync.Pool 中的本地池与各个 G 的对应关系</strong></p>
+<p>实际上，每个本地池都对应着一个 P。我们都知道，一个 goroutine 要想真正运行就必须先与某个 P 产生关联。也就是说，一个正在运行的 goroutine 必然会关联着某个 P。</p>
+<p>在程序调用临时对象池的<code>Put</code>方法或<code>Get</code>方法的时候，总会先试图从该临时对象池的本地池列表中，获取与之对应的本地池，依据的就是与当前的 goroutine 关联的那个 P 的 ID。</p>
+<p>换句话说，一个临时对象池的<code>Put</code>方法或<code>Get</code>方法会获取到哪一个本地池，完全取决于调用它的代码所在的 goroutine 关联的那个 P。</p>
+<p>既然说到了这里，那么紧接着就会有下面这个问题。</p>
+<h3 id="问题-2临时对象池是怎样利用内部数据结构来存取值的">问题 2：临时对象池是怎样利用内部数据结构来存取值的？</h3>
+<p>临时对象池的<code>Put</code>方法总会先试图把新的临时对象，存储到对应的本地池的<code>private</code>字段中，以便在后面获取临时对象的时候，可以快速地拿到一个可用的值。</p>
+<p>只有当这个<code>private</code>字段已经存有某个值时，该方法才会去访问本地池的<code>shared</code>字段。</p>
+<p>相应的，临时对象池的<code>Get</code>方法，总会先试图从对应的本地池的<code>private</code>字段处获取一个临时对象。只有当这个<code>private</code>字段的值为<code>nil</code>时，它才会去访问本地池的<code>shared</code>字段。</p>
+<p>一个本地池的<code>shared</code>字段原则上可以被任何 goroutine 中的代码访问到，不论这个 goroutine 关联的是哪一个 P。这也是我把它叫做共享临时对象列表的原因。</p>
+<p>相比之下，一个本地池的<code>private</code>字段，只可能被与之对应的那个 P 所关联的 goroutine 中的代码访问到，所以可以说，它是 P 级私有的。</p>
+<p>以临时对象池的<code>Put</code>方法为例，它一旦发现对应的本地池的<code>private</code>字段已存有值，就会去访问这个本地池的<code>shared</code>字段。当然，由于<code>shared</code>字段是共享的，所以此时必须受到互斥锁的保护。</p>
+<p>还记得本地池嵌入的那个<code>sync.Mutex</code>类型的字段吗？它就是这里用到的互斥锁，也就是说，本地池本身就拥有互斥锁的功能。<code>Put</code>方法会在互斥锁的保护下，把新的临时对象追加到共享临时对象列表的末尾。</p>
+<p>相应的，临时对象池的<code>Get</code>方法在发现对应本地池的<code>private</code>字段未存有值时，也会去访问后者的<code>shared</code>字段。它会在互斥锁的保护下，试图把该共享临时对象列表中的最后一个元素值取出并作为结果。</p>
+<p>不过，这里的共享临时对象列表也可能是空的，这可能是由于这个本地池中的所有临时对象都已经被取走了，也可能是当前的临时对象池刚被清理过。</p>
+<p>无论原因是什么，<code>Get</code>方法都会去访问当前的临时对象池中的所有本地池，它会去逐个搜索它们的共享临时对象列表。</p>
+<p>只要发现某个共享临时对象列表中包含元素值，它就会把该列表的最后一个元素值取出并作为结果返回。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/cda0d5abd9aaa9804d0c38ace58d17d6.png" alt=""><br>
+<strong>从 sync.Pool 中获取临时对象的步骤</strong></p>
+<p>当然了，即使这样也可能无法拿到一个可用的临时对象，比如，在所有的临时对象池都刚被大清洗的情况下就会是如此。</p>
+<p>这时，<code>Get</code>方法就会使出最后的手段——调用可创建临时对象的那个函数。还记得吗？这个函数是由临时对象池的<code>New</code>字段代表的，并且需要我们在初始化临时对象池的时候给定。如果这个字段的值是<code>nil</code>，那么<code>Get</code>方法此时也只能返回<code>nil</code>了。</p>
+<p>以上，就是我对这个问题的较完整回答。</p>
+<h2 id="总结">总结</h2>
+<p>今天，我们一起讨论了另一个比较有用的同步工具——<code>sync.Pool</code>类型，它的值被我称为临时对象池。</p>
+<p>临时对象池有一个<code>New</code>字段，我们在初始化这个池的时候最好给定它。临时对象池还拥有两个方法，即：<code>Put</code>和<code>Get</code>，它们分别被用于向池中存放临时对象，和从池中获取临时对象。</p>
+<p>临时对象池中存储的每一个值都应该是独立的、平等的和可重用的。我们应该既不用关心从池中拿到的是哪一个值，也不用在意这个值是否已经被使用过。</p>
+<p>要完全做到这两点，可能会需要我们额外地写一些代码。不过，这个代码量应该是微乎其微的，就像<code>fmt</code>包对临时对象池的用法那样。所以，在选用临时对象池的时候，我们必须要把它将要存储的值的特性考虑在内。</p>
+<p>在临时对象池的内部，有一个多层的数据结构支撑着对临时对象的存储。它的顶层是本地池列表，其中包含了与某个 P 对应的那些本地池，并且其长度与 P 的数量总是相同的。</p>
+<p>在每个本地池中，都包含一个私有的临时对象和一个共享的临时对象列表。前者只能被其对应的 P 所关联的那个 goroutine 中的代码访问到，而后者却没有这个约束。从另一个角度讲，前者用于临时对象的快速存取，而后者则用于临时对象的池内共享。</p>
+<p>正因为有了这样的数据结构，临时对象池才能够有效地分散存储压力和性能压力。同时，又因为临时对象池的<code>Get</code>方法对这个数据结构的妙用，才使得其中的临时对象能够被高效地利用。比如，该方法有时候会从其他的本地池的共享临时对象列表中，“偷取”一个临时对象。</p>
+<p>这样的内部结构和存取方式，让临时对象池成为了一个特点鲜明的同步工具。它存储的临时对象都应该是拥有较长生命周期的值，并且，这些值不应该被某个 goroutine 中的代码长期的持有和使用。</p>
+<p>因此，临时对象池非常适合用作针对某种数据的缓存。从某种角度讲，临时对象池可以帮助程序实现可伸缩性，这也正是它的最大价值。</p>
+<h2 id="思考题">思考题</h2>
+<p>今天的思考题是：怎样保证一个临时对象池中总有比较充足的临时对象？</p>
+<p>请从临时对象池的初始化和方法调用两个方面作答。必要时可以参考<code>fmt</code>包以及 demo70.go 文件中使用临时对象池的方式。</p>
+<p>感谢你的收听，我们下次再见。</p>
+<p><a href="./Golang%5FPuzzlers.md">戳此查看 Go 语言专栏文章配套详细代码。</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/6d035e7ef07f11a615a16b7e601fabe9.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go%E8%AF%AD%E8%A8%80%E6%A0%B8%E5%BF%8336%E8%AE%B2/">Go语言核心36讲</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F%E4%B9%8B%E7%BE%8E/33__%E7%90%86%E8%AE%BA%E4%BA%94%E8%AE%A9%E4%BD%A0%E6%9C%80%E5%BF%AB%E9%80%9F%E5%9C%B0%E6%94%B9%E5%96%84%E4%BB%A3%E7%A0%81%E8%B4%A8%E9%87%8F%E7%9A%8420%E6%9D%A1%E7%BC%96%E7%A8%8B%E8%A7%84%E8%8C%83%E4%B8%8B/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">33__理论五：让你最快速地改善代码质量的20条编程规范（下）</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/redis%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/33__%E8%84%91%E8%A3%82%E4%B8%80%E6%AC%A1%E5%A5%87%E6%80%AA%E7%9A%84%E6%95%B0%E6%8D%AE%E4%B8%A2%E5%A4%B1/">
+            <span class="next-text nav-default">33__脑裂：一次奇怪的数据丢失</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

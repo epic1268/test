@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>20资源优化：Kubernete中有GC（垃圾回收）吗？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是正范。
+Garbage Collector 即垃圾回收，通常简称 GC，和你之前在其他编程语言中了解到的 GC 基本上是一样的，用来清理一些不用的资源。Kubernetes 中有各种各样的资源，当然需要 GC啦，今天我们就一起来了解下 Kubernetes 中的 GC。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/20%E8%B5%84%E6%BA%90%E4%BC%98%E5%8C%96kubernete%E4%B8%AD%E6%9C%89gc%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E5%90%97/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/20%E8%B5%84%E6%BA%90%E4%BC%98%E5%8C%96kubernete%E4%B8%AD%E6%9C%89gc%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E5%90%97/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="20资源优化：Kubernete中有GC（垃圾回收）吗？">
+  <meta property="og:description" content="你好，我是正范。
+Garbage Collector 即垃圾回收，通常简称 GC，和你之前在其他编程语言中了解到的 GC 基本上是一样的，用来清理一些不用的资源。Kubernetes 中有各种各样的资源，当然需要 GC啦，今天我们就一起来了解下 Kubernetes 中的 GC。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes原理剖析与实战应用">
+
+  <meta itemprop="name" content="20资源优化：Kubernete中有GC（垃圾回收）吗？">
+  <meta itemprop="description" content="你好，我是正范。
+Garbage Collector 即垃圾回收，通常简称 GC，和你之前在其他编程语言中了解到的 GC 基本上是一样的，用来清理一些不用的资源。Kubernetes 中有各种各样的资源，当然需要 GC啦，今天我们就一起来了解下 Kubernetes 中的 GC。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3183">
+  <meta itemprop="keywords" content="Kubernetes原理剖析与实战应用">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="20资源优化：Kubernete中有GC（垃圾回收）吗？">
+  <meta name="twitter:description" content="你好，我是正范。
+Garbage Collector 即垃圾回收，通常简称 GC，和你之前在其他编程语言中了解到的 GC 基本上是一样的，用来清理一些不用的资源。Kubernetes 中有各种各样的资源，当然需要 GC啦，今天我们就一起来了解下 Kubernetes 中的 GC。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">20资源优化：Kubernete中有GC（垃圾回收）吗？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3183 字 </span>
+          <span class="more-meta"> 预计阅读 7 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是正范。</p>
+<p>Garbage Collector 即垃圾回收，通常简称 GC，和你之前在其他编程语言中了解到的 GC 基本上是一样的，用来清理一些不用的资源。Kubernetes 中有各种各样的资源，当然需要 GC啦，今天我们就一起来了解下 Kubernetes 中的 GC。</p>
+<p>你可能最先想到的就是容器的清理，即 Kubelet 侧的 GC，清理许多处于退出（Exited）状态的容器，那么就先来了解一下吧。</p>
+<p>Kubelet GC</p>
+<p>GC 在 Kubelet 中非常重要，它不仅可以清理无用的容器，还可以清理未使用的镜像以达到节省空间的目的。当然 Kubelet 清理的这些容器都是 Kubernetes 自己创建的容器，你通过 Docker 手动创建的容器均不在 GC 的范围内，所以不必过于担心。</p>
+<p>Kubelet 会对容器每分钟执行一次 GC 操作，对容器镜像每 5 分钟执行一次 GC 操作，这样可以保障 Kubelet 节点的稳定性，避免节点出现资源紧缺的情况。Kubelet 刚启动时并不会立即执行 GC 操作，而是在启动 1 分钟后开始执行第一次对容器的 GC 操作，启动 5 分钟后开始执行第一次对容器镜像的回收操作。这里建议你最好不用使用其他外部的 GC 工具，有可能会破坏 Kubelet 的 GC 逻辑。</p>
+<p>目前 Kubelet 提供了 3 个参数，可以方便你调整容器镜像的 GC 参数：</p>
+<p>&ndash;minimum-image-ttl-duration
+表示一个镜像在清理前的最小存活时间；</p>
+<p>&ndash;image-gc-high-threshold
+表示磁盘使用率的上限阈值，默认值是 90%，即当磁盘使用率达到 90% 的时候会触发对镜像的 GC 操作；</p>
+<p>&ndash;image-gc-low-threshold
+表示磁盘使用率的下限阈值，默认值是 80%，即当磁盘使用率降到 80% 的时候，GC 操作结束。</p>
+<p>对镜像的 GC 操作，就是逐个删除最久最少使用（Least Recently Used）的镜像。</p>
+<p>对于容器的 GC 操作，Kubelet 也提供了 3 个参数供你使用调整：</p>
+<p>&ndash;minimum-container-ttl-duration
+表示已停止的容器在被清理之前最小的存活时间，默认值是 1 分钟，即容器停止超过 1 分钟才会被标记可被 GC 清理；</p>
+<p>&ndash;maximum-dead-containers-per-container
+表示一个 Pod 内可以保留的已停止的容器数量，默认值是 2。Kubernetes 是以 Pod 为单位进行容器管理的。有时候 Pod 内运行失败的容器，比如容器自身的问题，或者健康检查失败，会被 kubelet 自动重启，这将产生一些停止的容器；</p>
+<p>&ndash;maximum-dead-containers
+表示在本节点上可以保留的已停止容器的最大数量，默认值是240。毕竟这些容器也会消耗额外的磁盘空间，所以超过这个上限阈值后，就会触发 Kubelet 的 GC 操作，来帮你自动清理这些已停止的容器，释放磁盘空间。</p>
+<p>当然，如果你想要关闭容器的 GC 操作，只需要将
+&ndash;minimun-container-ttl-duration
+设置为0，把
+&ndash;maximum-dead-containers-per-container
+和
+&ndash;maximum-dead-containers
+都设置为负数即可。</p>
+<p>在有些场景中，容器的日志需要保留在本地，如果直接清理掉这些容器会丢失日志。所以这里我强烈建议你将
+&ndash;maximum-dead-containers-per-container
+设置为一个足够大的值，以便每个容器至少有一个退出的实例。这里，你就可以根据自己的场景进行配置。</p>
+<p>提到的这些 flag，目前仍能继续使用，在未来的版本中，Kubernetes 会用新的 flag 进行替换，详见官方文档。我们会在下一节课中，介绍这个新的 flag 的用法。</p>
+<p>除了这些基本的 GC 以外，Kubernetes 内部也有很多操作对象，而且这些对象之间还存在着一定的“从属关系”，比如 Deployment 管理着 ReplicaSet。下面我们就来了解下 Kubernetes 内部对象的 GC。</p>
+<p>Kubernetes 内部对象的 GC</p>
+<p>通过之前的学习，我们已经知道创建好一个 Deployment 以后，kube-controller-manager 会帮助我们创建对应的 ReplicaSet。这些 ReplicaSet 会自动跟我们创建的 Deployment 进行关联，那 Kubernetes 是怎么样维护这种从属关系的呢？</p>
+<p>在 Kubernetes 中，每个对象都可以设置多个 OwnerReference，即该对象从属于谁。</p>
+<p>我们先来看看 OwnerReference 的定义：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-zed" data-lang="zed"><span class="line"><span class="cl"><span class="c1">// OwnerReference contains enough information to let you identify an owning
+</span></span></span><span class="line"><span class="cl"><span class="c1">// object. An owning object must be in the same namespace as the dependent, or
+</span></span></span><span class="line"><span class="cl"><span class="c1">// be cluster-scoped, so there is no namespace field.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="n">type</span><span class="w"> </span><span class="n">OwnerReference</span><span class="w"> </span><span class="n">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// API version of the referent.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">APIVersion</span><span class="w"> </span><span class="n">string</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">apiVersion</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">bytes</span><span class="p">,</span><span class="err">5</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">apiVersion</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// Kind of the referent.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">Kind</span><span class="w"> </span><span class="n">string</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">kind</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">bytes</span><span class="p">,</span><span class="err">1</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">kind</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// Name of the referent.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// More info: http://kubernetes.io/docs/user-guide/identifiers#names
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">Name</span><span class="w"> </span><span class="n">string</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">name</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">bytes</span><span class="p">,</span><span class="err">3</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// UID of the referent.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// More info: http://kubernetes.io/docs/user-guide/identifiers#uids
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">UID</span><span class="w"> </span><span class="n">types</span><span class="p">.</span><span class="n">UID</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">uid</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">bytes</span><span class="p">,</span><span class="err">4</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">uid</span><span class="p">,</span><span class="n">casttype</span><span class="o">=</span><span class="n">k8s</span><span class="p">.</span><span class="nn">io/apimachinery/pkg/</span><span class="n">types</span><span class="p">.</span><span class="n">UID</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// If true, this reference points to the managing controller.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// +optional
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">Controller</span><span class="w"> </span><span class="o">*</span><span class="n">bool</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">controller</span><span class="p">,</span><span class="n">omitempty</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">varint</span><span class="p">,</span><span class="err">6</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">controller</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// If true, AND if the owner has the &#34;foregroundDeletion&#34; finalizer, then
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// the owner cannot be deleted from the key-value store until this
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// reference is removed.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// Defaults to false.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// To set this field, a user needs &#34;delete&#34; permission of the owner,
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// otherwise 422 (Unprocessable Entity) will be returned.
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="c1">// +optional
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">BlockOwnerDeletion</span><span class="w"> </span><span class="o">*</span><span class="n">bool</span><span class="w"> </span><span class="err">`</span><span class="n">json</span><span class="o">:</span><span class="err">&#34;</span><span class="n">blockOwnerDeletion</span><span class="p">,</span><span class="n">omitempty</span><span class="err">&#34;</span><span class="w"> </span><span class="n">protobuf</span><span class="o">:</span><span class="err">&#34;</span><span class="n">varint</span><span class="p">,</span><span class="err">7</span><span class="p">,</span><span class="n">opt</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">blockOwnerDeletion</span><span class="err">&#34;`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 OwnerReference 中，我们可以确定该对象所“从属于”的对象，从而建立两者之间的从属关系。我们通过一个例子，直观了解下这个“从属”关系：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">kind: ReplicaSet
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  annotations:
+</span></span><span class="line"><span class="cl">    deployment.kubernetes.io/desired-replicas: &#34;2&#34;
+</span></span><span class="line"><span class="cl">    deployment.kubernetes.io/max-replicas: &#34;3&#34;
+</span></span><span class="line"><span class="cl">    deployment.kubernetes.io/revision: &#34;1&#34;
+</span></span><span class="line"><span class="cl">  creationTimestamp: &#34;2020-09-03T07:22:35Z&#34;
+</span></span><span class="line"><span class="cl">  generation: 1
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">    k8s-app: kube-dns
+</span></span><span class="line"><span class="cl">    pod-template-hash: 5644d7b6d9
+</span></span><span class="line"><span class="cl">  name: coredns-5644d7b6d9
+</span></span><span class="line"><span class="cl">  namespace: kube-system
+</span></span><span class="line"><span class="cl">  ownerReferences:
+</span></span><span class="line"><span class="cl">  - apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">    blockOwnerDeletion: true
+</span></span><span class="line"><span class="cl">    controller: true
+</span></span><span class="line"><span class="cl">    kind: Deployment
+</span></span><span class="line"><span class="cl">    name: coredns
+</span></span><span class="line"><span class="cl">    uid: 37ae660a-dba8-4ff9-a152-7d6f420e624d
+</span></span><span class="line"><span class="cl">  resourceVersion: &#34;1542272&#34;
+</span></span><span class="line"><span class="cl">  selfLink: /apis/apps/v1/namespaces/kube-system/replicasets/coredns-5644d7b6d9
+</span></span><span class="line"><span class="cl">  uid: fa3d9859-43d4-484b-9716-7536243acd0f
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  replicas: 2
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">status:
+</span></span><span class="line"><span class="cl">  ...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里我截取了一个 ReplicaSet 中的 metadata 的部分。注意看这个 ReplicaSet 的ownerReferences字段标识了一个名为 coredns 的 Deployment 对象。</p>
+<p>同样，我们来看看该 ReplicaSet 管理的 Pod。这里 ReplicaSet 的副本数是 2，我们任意选择其中一个 Pod：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">apiVersion: v1
+</span></span><span class="line"><span class="cl">kind: Pod
+</span></span><span class="line"><span class="cl">metadata:
+</span></span><span class="line"><span class="cl">  creationTimestamp: &#34;2020-09-03T07:22:35Z&#34;
+</span></span><span class="line"><span class="cl">  generateName: coredns-5644d7b6d9-
+</span></span><span class="line"><span class="cl">  labels:
+</span></span><span class="line"><span class="cl">    k8s-app: kube-dns
+</span></span><span class="line"><span class="cl">    pod-template-hash: 5644d7b6d9
+</span></span><span class="line"><span class="cl">  name: coredns-5644d7b6d9-sz4qj
+</span></span><span class="line"><span class="cl">  namespace: kube-system
+</span></span><span class="line"><span class="cl">  ownerReferences:
+</span></span><span class="line"><span class="cl">  - apiVersion: apps/v1
+</span></span><span class="line"><span class="cl">    blockOwnerDeletion: true
+</span></span><span class="line"><span class="cl">    controller: true
+</span></span><span class="line"><span class="cl">    kind: ReplicaSet
+</span></span><span class="line"><span class="cl">    name: coredns-5644d7b6d9
+</span></span><span class="line"><span class="cl">    uid: fa3d9859-43d4-484b-9716-7536243acd0f
+</span></span><span class="line"><span class="cl">  resourceVersion: &#34;1542270&#34;
+</span></span><span class="line"><span class="cl">  selfLink: /api/v1/namespaces/kube-system/pods/coredns-5644d7b6d9-sz4qj
+</span></span><span class="line"><span class="cl">  uid: c52d630b-1840-4502-88d1-b67bed2dd625
+</span></span><span class="line"><span class="cl">spec:
+</span></span><span class="line"><span class="cl">  ...
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>可以看到该 Pod 的ownerReferences指向刚才的 ReplicaSet，名字和 UID 都与之相对应。</p>
+<p>至此通过观察这几个对象中的ownerReferences的信息，我们可以建立起如下的“从属关系”，即：</p>
+<p>Deployment（owner）—&gt; ReplicaSet (dependent)；</p>
+<p>ReplicaSet (owner) —&gt; Pod (dependent)。</p>
+<p>了解了如上从属关系，我们后续就可以进行 GC 了。比如当你想彻底删除一个 Deployment 的时候，这时候 Kubernetes 会自动帮你把相关联的 ReplicaSet、Pod 等也一并删除掉，那么这种删除行为也称之为级联删除（Cascading Deletion），这也是 Kubernetes 默认的删除行为。</p>
+<p>对于级联删除，Kubernetes 提供了两种模式，分别为后台（Background）模式和前台（Foreground）模式。</p>
+<p>我们以后台级联删除 Deployment 为例。直观的体验就是，当你使用后台模式删除时，发送完请求，Kuberentes 会立即删除主对象，比如 Deployment，之后 Kubernetes 会在后台 GC 其附属的对象，比如 ReplicaSet。</p>
+<p>而对于前台级联删除，会先删除其所属的对象，然后再删除主对象。依然以 Deployment 为例，这时候主对象 Deployment 首先进入“删除中”的状态，虽然你依然能够通过 REST API 看到该 Deployment，但是该对象的deletionTimestamp字段被设置非空即“删除中”。</p>
+<p>同时该对象的 metadata.finalizers 字段为 foregroundDeletion，有了这个 fianlizer 的存在，该对象就不会被删除，并会一直处于“删除中”的状态。</p>
+<p>然后开始删除 ReplicaSet。关联的 ReplicaSet 都被删除以后，主对象 Deployment 中metadata.finalizers 字段会移除 foregroundDeletion 这个 finalizer。这时候主对象就可以被删除掉了。你也许注意到了 ownerReference 字段中的 blockOwnerDeletion，只有这个字段设置为了 true，才会组织删除主对象。</p>
+<p>当然如果你删除对象的时候，并不想自动删除其附属对象，那么这些附属对象就“孤立”存在了，即孤立对象（Orphaned）。比如删除 Deployment 的时候，并不想删除其关联的 ReplicaSet。</p>
+<p>我们可以通过 deleteOptions.propagationPolicy 这个字段，来控制删除的策略，取值包括上面提到的三种方式，即 Orphan、Foreground 或者 Background。</p>
+<p>如果我们使用 kubectl 进行后台删除的时候，可以通过如下命令进行操作：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl proxy --port=8080
+</span></span><span class="line"><span class="cl">$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/replicasets/my-replicaset \
+</span></span><span class="line"><span class="cl">  -d &#39;{&#34;kind&#34;:&#34;DeleteOptions&#34;,&#34;apiVersion&#34;:&#34;v1&#34;,&#34;propagationPolicy&#34;:&#34;Background&#34;}&#39; \
+</span></span><span class="line"><span class="cl">  -H &#34;Content-Type: application/json&#34;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当然如果你使用的是 client-go 这类的库，也可以通过库中提供的函数，通过设置 DeleteOption 进行后台删除。同样，我们也可以通过如下命令进行前台级联删除：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl proxy --port=8080
+</span></span><span class="line"><span class="cl">$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/replicasets/my-replicaset \
+</span></span><span class="line"><span class="cl">  -d &#39;{&#34;kind&#34;:&#34;DeleteOptions&#34;,&#34;apiVersion&#34;:&#34;v1&#34;,&#34;propagationPolicy&#34;:&#34;Foreground&#34;}&#39; \
+</span></span><span class="line"><span class="cl">  -H &#34;Content-Type: application/json&#34;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里如果你只想删除 ReplicaSet，但是并不像删除其关联的 Pod，你可以这么操作：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl proxy --port=8080
+</span></span><span class="line"><span class="cl">$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/replicasets/my-repset \
+</span></span><span class="line"><span class="cl">  -d &#39;{&#34;kind&#34;:&#34;DeleteOptions&#34;,&#34;apiVersion&#34;:&#34;v1&#34;,&#34;propagationPolicy&#34;:&#34;Orphan&#34;}&#39; \
+</span></span><span class="line"><span class="cl">  -H &#34;Content-Type: application/json&#34;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>kubectl 命令行在删除操作的时候，默认是进行级联删除的，如果你不想级联删除，可以这么操作：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ kubectl delete replicaset my-repset --cascade=false
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>写在最后</p>
+<p>Kubernetes 默认开启了 GC 的能力，不管是对于内部的各种 API 对象，还是对于 kubelet 节点上的冗余镜像以及退出的容器。这些默认的配置，已经基本上满足我们绝大多数的使用需要，不需要额外配置。当然你也可以通过调整一些参数和策略，实现自己的业务场景和逻辑。</p>
+<p>到这里这节课就结束了，如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p>
+<p>-&ndash; ### 精选评论 ##### **元： &gt; 如果要GC调整这些值，我们在哪个文件当中进行配置？ ######     讲师回复： &gt;     <a href="https://kubernetes.io/zh/docs/concepts/cluster-administration/kubelet-garbage-collection/">https://kubernetes.io/zh/docs/concepts/cluster-administration/kubelet-garbage-collection/</a></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kubernetes%E5%8E%9F%E7%90%86%E5%89%96%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E5%BA%94%E7%94%A8/">Kubernetes原理剖析与实战应用</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/20%E4%B8%AD%E5%9B%BD%E4%BC%9A%E6%8E%A8%E5%87%BA%E6%88%BF%E5%9C%B0%E4%BA%A7%E7%A8%8E%E5%90%97/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">20中国会推出房地产税吗？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E9%9D%A2%E8%AF%95%E5%AE%9D%E5%85%B8/21-%E5%AE%89%E6%8E%92%E4%BC%9A%E8%AE%AE%E5%AE%A4%E5%A6%82%E4%BD%95%E5%88%A9%E7%94%A8%E5%A4%9A%E7%A7%8D%E6%96%B9%E6%B3%95%E5%AE%89%E6%8E%92%E4%BC%9A%E8%AE%AE%E5%AE%A4/">
+            <span class="next-text nav-default">21 安排会议室：如何利用多种方法安排会议室？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

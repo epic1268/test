@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>22__进程空间管理：项目组还可以自行布置会议室 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="上两节，我们讲了内存管理的三个方面，虚拟内存空间的管理、物理内存的管理以及内存映射。你现在对进程内存空间的整体布局应该有了一个大致的了解。今天我们就来详细看看第一个方面，进程的虚拟内存空间是如何管理的。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/22__%E8%BF%9B%E7%A8%8B%E7%A9%BA%E9%97%B4%E7%AE%A1%E7%90%86%E9%A1%B9%E7%9B%AE%E7%BB%84%E8%BF%98%E5%8F%AF%E4%BB%A5%E8%87%AA%E8%A1%8C%E5%B8%83%E7%BD%AE%E4%BC%9A%E8%AE%AE%E5%AE%A4/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/22__%E8%BF%9B%E7%A8%8B%E7%A9%BA%E9%97%B4%E7%AE%A1%E7%90%86%E9%A1%B9%E7%9B%AE%E7%BB%84%E8%BF%98%E5%8F%AF%E4%BB%A5%E8%87%AA%E8%A1%8C%E5%B8%83%E7%BD%AE%E4%BC%9A%E8%AE%AE%E5%AE%A4/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="22__进程空间管理：项目组还可以自行布置会议室">
+  <meta property="og:description" content="上两节，我们讲了内存管理的三个方面，虚拟内存空间的管理、物理内存的管理以及内存映射。你现在对进程内存空间的整体布局应该有了一个大致的了解。今天我们就来详细看看第一个方面，进程的虚拟内存空间是如何管理的。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="趣谈Linux操作系统">
+
+  <meta itemprop="name" content="22__进程空间管理：项目组还可以自行布置会议室">
+  <meta itemprop="description" content="上两节，我们讲了内存管理的三个方面，虚拟内存空间的管理、物理内存的管理以及内存映射。你现在对进程内存空间的整体布局应该有了一个大致的了解。今天我们就来详细看看第一个方面，进程的虚拟内存空间是如何管理的。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6295">
+  <meta itemprop="keywords" content="趣谈Linux操作系统">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="22__进程空间管理：项目组还可以自行布置会议室">
+  <meta name="twitter:description" content="上两节，我们讲了内存管理的三个方面，虚拟内存空间的管理、物理内存的管理以及内存映射。你现在对进程内存空间的整体布局应该有了一个大致的了解。今天我们就来详细看看第一个方面，进程的虚拟内存空间是如何管理的。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">22__进程空间管理：项目组还可以自行布置会议室</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6295 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#用户态和内核态的划分">用户态和内核态的划分</a></li>
+        <li><a href="#用户态布局">用户态布局</a></li>
+        <li><a href="#内核态的布局">内核态的布局</a></li>
+        <li><a href="#总结时刻">总结时刻</a></li>
+        <li><a href="#课堂练习">课堂练习</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>上两节，我们讲了内存管理的三个方面，虚拟内存空间的管理、物理内存的管理以及内存映射。你现在对进程内存空间的整体布局应该有了一个大致的了解。今天我们就来详细看看第一个方面，进程的虚拟内存空间是如何管理的。</p>
+<p>32 位系统和 64 位系统的内存布局有的地方相似，有的地方差别比较大，接下来介绍的时候，请你注意区分。好，我们现在正式开始！</p>
+<h2 id="用户态和内核态的划分">用户态和内核态的划分</h2>
+<p>进程的虚拟地址空间，其实就是站在项目组的角度来看内存，所以我们就从 task_struct 出发来看。这里面有一个 struct mm_struct 结构来管理内存。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct mm_struct		*mm;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 struct mm_struct 里面，有这样一个成员变量：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long task_size;		/* size of task vm space */
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们之前讲过，整个虚拟内存空间要一分为二，一部分是用户态地址空间，一部分是内核态地址空间，那这两部分的分界线在哪里呢？这就要 task_size 来定义。</p>
+<p>对于 32 位的系统，内核里面是这样定义 TASK_SIZE 的：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#ifdef CONFIG_X86_32
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * User space process size: 3GB (default).
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define TASK_SIZE		PAGE_OFFSET
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define TASK_SIZE_MAX		TASK_SIZE
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">config PAGE_OFFSET
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        hex
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        default 0xC0000000
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        depends on X86_32
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * User space process size. 47bits minus one guard page.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">*/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define TASK_SIZE_MAX	((1UL &lt;&lt; 47) - PAGE_SIZE)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define TASK_SIZE		(test_thread_flag(TIF_ADDR32) ? \
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					IA32_PAGE_OFFSET : TASK_SIZE_MAX)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>当执行一个新的进程的时候，会做以下的设置：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">current-&gt;mm-&gt;task_size = TASK_SIZE;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>对于 32 位系统，最大能够寻址 2^32=4G，其中用户态虚拟地址空间是 3G，内核态是 1G。</p>
+<p>对于 64 位系统，虚拟地址只使用了 48 位。就像代码里面写的一样，1 左移了 47 位，就相当于 48 位地址空间一半的位置，0x0000800000000000，然后减去一个页，就是 0x00007FFFFFFFF000，共 128T。同样，内核空间也是 128T。内核空间和用户空间之间隔着很大的空隙，以此来进行隔离。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/bd0529599cdca2c85716e756ba733864.png" alt=""></p>
+<h2 id="用户态布局">用户态布局</h2>
+<p>我们先来看用户态虚拟空间的布局。</p>
+<p>之前我们讲了用户态虚拟空间里面有几类数据，例如代码、全局变量、堆、栈、内存映射区等。在 struct mm_struct 里面，有下面这些变量定义了这些区域的统计信息和位置。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long mmap_base;	/* base of mmap area */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long total_vm;		/* Total pages mapped */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long locked_vm;	/* Pages that have PG_mlocked set */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long pinned_vm;	/* Refcount permanently increased */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long data_vm;		/* VM_WRITE &amp; ~VM_SHARED &amp; ~VM_STACK */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long exec_vm;		/* VM_EXEC &amp; ~VM_WRITE &amp; ~VM_STACK */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long stack_vm;		/* VM_STACK */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long start_code, end_code, start_data, end_data;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long start_brk, brk, start_stack;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">unsigned long arg_start, arg_end, env_start, env_end;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>其中，total_vm 是总共映射的页的数目。我们知道，这么大的虚拟地址空间，不可能都有真实内存对应，所以这里是映射的数目。当内存吃紧的时候，有些页可以换出到硬盘上，有的页因为比较重要，不能换出。locked_vm 就是被锁定不能换出，pinned_vm 是不能换出，也不能移动。</p>
+<p>data_vm 是存放数据的页的数目，exec_vm 是存放可执行文件的页的数目，stack_vm 是栈所占的页的数目。</p>
+<p>start_code 和 end_code 表示可执行代码的开始和结束位置，start_data 和 end_data 表示已初始化数据的开始位置和结束位置。</p>
+<p>start_brk 是堆的起始位置，brk 是堆当前的结束位置。前面咱们讲过 malloc 申请一小块内存的话，就是通过改变 brk 位置实现的。</p>
+<p>start_stack 是栈的起始位置，栈的结束位置在寄存器的栈顶指针中。</p>
+<p>arg_start 和 arg_end 是参数列表的位置，env_start 和 env_end 是环境变量的位置。它们都位于栈中最高地址的地方。</p>
+<p>mmap_base 表示虚拟地址空间中用于内存映射的起始地址。一般情况下，这个空间是从高地址到低地址增长的。前面咱们讲 malloc 申请一大块内存的时候，就是通过 mmap 在这里映射一块区域到物理内存。咱们加载动态链接库 so 文件，也是在这个区域里面，映射一块区域到 so 文件。</p>
+<p>这下所有用户态的区域的位置基本上都描述清楚了。整个布局就像下面这张图这样。虽然 32 位和 64 位的空间相差很大，但是区域的类别和布局是相似的。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/14049d6b03cdcaec7bd8918e039a5e99.png" alt=""></p>
+<p>除了位置信息之外，struct mm_struct 里面还专门有一个结构 vm_area_struct，来描述这些区域的属性。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct vm_area_struct *mmap;		/* list of VMAs */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct rb_root mm_rb;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里面一个是单链表，用于将这些区域串起来。另外还有一个红黑树。又是这个数据结构，在进程调度的时候我们用的也是红黑树。它的好处就是查找和修改都很快。这里用红黑树，就是为了快速查找一个内存区域，并在需要改变的时候，能够快速修改。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">struct</span> <span class="n">vm_area_struct</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">/*</span> <span class="n">The</span> <span class="n">first</span> <span class="n">cache</span> <span class="n">line</span> <span class="n">has</span> <span class="n">the</span> <span class="n">info</span> <span class="k">for</span> <span class="n">VMA</span> <span class="n">tree</span> <span class="n">walking</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">unsigned</span> <span class="n">long</span> <span class="n">vm_start</span><span class="p">;</span>		<span class="o">/*</span> <span class="n">Our</span> <span class="n">start</span> <span class="n">address</span> <span class="n">within</span> <span class="n">vm_mm</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">unsigned</span> <span class="n">long</span> <span class="n">vm_end</span><span class="p">;</span>		<span class="o">/*</span> <span class="n">The</span> <span class="n">first</span> <span class="n">byte</span> <span class="n">after</span> <span class="n">our</span> <span class="n">end</span> <span class="n">address</span> <span class="n">within</span> <span class="n">vm_mm</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">/*</span> <span class="n">linked</span> <span class="n">list</span> <span class="n">of</span> <span class="n">VM</span> <span class="n">areas</span> <span class="n">per</span> <span class="n">task</span><span class="p">,</span> <span class="n">sorted</span> <span class="n">by</span> <span class="n">address</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">vm_area_struct</span> <span class="o">*</span><span class="n">vm_next</span><span class="p">,</span> <span class="o">*</span><span class="n">vm_prev</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">rb_node</span> <span class="n">vm_rb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">mm_struct</span> <span class="o">*</span><span class="n">vm_mm</span><span class="p">;</span>	<span class="o">/*</span> <span class="n">The</span> <span class="n">address</span> <span class="n">space</span> <span class="n">we</span> <span class="n">belong</span> <span class="n">to</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">list_head</span> <span class="n">anon_vma_chain</span><span class="p">;</span> <span class="o">/*</span> <span class="n">Serialized</span> <span class="n">by</span> <span class="n">mmap_sem</span> <span class="o">&amp;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					  <span class="o">*</span> <span class="n">page_table_lock</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">anon_vma</span> <span class="o">*</span><span class="n">anon_vma</span><span class="p">;</span>	<span class="o">/*</span> <span class="n">Serialized</span> <span class="n">by</span> <span class="n">page_table_lock</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="o">/*</span> <span class="n">Function</span> <span class="n">pointers</span> <span class="n">to</span> <span class="n">deal</span> <span class="n">with</span> <span class="n">this</span> <span class="n">struct</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">struct</span> <span class="n">vm_operations_struct</span> <span class="o">*</span><span class="n">vm_ops</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">file</span> <span class="o">*</span> <span class="n">vm_file</span><span class="p">;</span>		<span class="o">/*</span> <span class="ne">File</span> <span class="n">we</span> <span class="n">map</span> <span class="n">to</span> <span class="p">(</span><span class="n">can</span> <span class="n">be</span> <span class="n">NULL</span><span class="p">)</span><span class="o">.</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">void</span> <span class="o">*</span> <span class="n">vm_private_data</span><span class="p">;</span>		<span class="o">/*</span> <span class="n">was</span> <span class="n">vm_pte</span> <span class="p">(</span><span class="n">shared</span> <span class="n">mem</span><span class="p">)</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span> <span class="n">__randomize_layout</span><span class="p">;</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>vm_start 和 vm_end 指定了该区域在用户空间中的起始和结束地址。vm_next 和 vm_prev 将这个区域串在链表上。vm_rb 将这个区域放在红黑树上。vm_ops 里面是对这个内存区域可以做的操作的定义。</p>
+<p>虚拟内存区域可以映射到物理内存，也可以映射到文件，映射到物理内存的时候称为匿名映射，anon_vma 中，anoy 就是 anonymous，匿名的意思，映射到文件就需要有 vm_file 指定被映射的文件。</p>
+<p>那这些 vm_area_struct 是如何和上面的内存区域关联的呢？</p>
+<p>这个事情是在 load_elf_binary 里面实现的。没错，就是它。加载内核的是它，启动第一个用户态进程 init 的是它，fork 完了以后，调用 exec 运行一个二进制程序的也是它。</p>
+<p>当 exec 运行一个二进制程序的时候，除了解析 ELF 的格式之外，另外一个重要的事情就是建立内存映射。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">load_elf_binary</span><span class="p">(</span><span class="n">struct</span> <span class="n">linux_binprm</span> <span class="o">*</span><span class="n">bprm</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">setup_new_exec</span><span class="p">(</span><span class="n">bprm</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">retval</span> <span class="o">=</span> <span class="n">setup_arg_pages</span><span class="p">(</span><span class="n">bprm</span><span class="p">,</span> <span class="n">randomize_stack_top</span><span class="p">(</span><span class="n">STACK_TOP</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				 <span class="n">executable_stack</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">error</span> <span class="o">=</span> <span class="n">elf_map</span><span class="p">(</span><span class="n">bprm</span><span class="o">-&gt;</span><span class="n">file</span><span class="p">,</span> <span class="n">load_bias</span> <span class="o">+</span> <span class="n">vaddr</span><span class="p">,</span> <span class="n">elf_ppnt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="n">elf_prot</span><span class="p">,</span> <span class="n">elf_flags</span><span class="p">,</span> <span class="n">total_size</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">retval</span> <span class="o">=</span> <span class="n">set_brk</span><span class="p">(</span><span class="n">elf_bss</span><span class="p">,</span> <span class="n">elf_brk</span><span class="p">,</span> <span class="n">bss_prot</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">elf_entry</span> <span class="o">=</span> <span class="n">load_elf_interp</span><span class="p">(</span><span class="o">&amp;</span><span class="n">loc</span><span class="o">-&gt;</span><span class="n">interp_elf_ex</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					    <span class="n">interpreter</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					    <span class="o">&amp;</span><span class="n">interp_map_addr</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					    <span class="n">load_bias</span><span class="p">,</span> <span class="n">interp_elf_phdata</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current</span><span class="o">-&gt;</span><span class="n">mm</span><span class="o">-&gt;</span><span class="n">end_code</span> <span class="o">=</span> <span class="n">end_code</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current</span><span class="o">-&gt;</span><span class="n">mm</span><span class="o">-&gt;</span><span class="n">start_code</span> <span class="o">=</span> <span class="n">start_code</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current</span><span class="o">-&gt;</span><span class="n">mm</span><span class="o">-&gt;</span><span class="n">start_data</span> <span class="o">=</span> <span class="n">start_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current</span><span class="o">-&gt;</span><span class="n">mm</span><span class="o">-&gt;</span><span class="n">end_data</span> <span class="o">=</span> <span class="n">end_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current</span><span class="o">-&gt;</span><span class="n">mm</span><span class="o">-&gt;</span><span class="n">start_stack</span> <span class="o">=</span> <span class="n">bprm</span><span class="o">-&gt;</span><span class="n">p</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>load_elf_binary 会完成以下的事情：</p>
+<ul>
+<li>调用 setup_new_exec，设置内存映射区 mmap_base；</li>
+<li>调用 setup_arg_pages，设置栈的 vm_area_struct，这里面设置了 mm-&gt;arg_start 是指向栈底的，current-&gt;mm-&gt;start_stack 就是栈底；</li>
+<li>elf_map 会将 ELF 文件中的代码部分映射到内存中来；</li>
+<li>set_brk 设置了堆的 vm_area_struct，这里面设置了 current-&gt;mm-&gt;start_brk = current-&gt;mm-&gt;brk，也即堆里面还是空的；</li>
+<li>load_elf_interp 将依赖的 so 映射到内存中的内存映射区域。</li>
+</ul>
+<p>最终就形成下面这个内存映射图。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/9910a2c254da2ca65fe32b77c1a3537d.png" alt=""></p>
+<p>映射完毕后，什么情况下会修改呢？</p>
+<p>第一种情况是函数的调用，涉及函数栈的改变，主要是改变栈顶指针。</p>
+<p>第二种情况是通过 malloc 申请一个堆内的空间，当然底层要么执行 brk，要么执行 mmap。关于内存映射的部分，我们后面的章节讲，这里我们重点看一下 brk 是怎么做的。</p>
+<p>brk 系统调用实现的入口是 sys_brk 函数，就像下面代码定义的一样。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">SYSCALL_DEFINE1(brk, unsigned long, brk)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned long retval;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned long newbrk, oldbrk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct mm_struct *mm = current-&gt;mm;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct vm_area_struct *next;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	newbrk = PAGE_ALIGN(brk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	oldbrk = PAGE_ALIGN(mm-&gt;brk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (oldbrk == newbrk)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto set_brk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	/* Always allow shrinking brk. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (brk &lt;= mm-&gt;brk) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (!do_munmap(mm, newbrk, oldbrk-newbrk, &amp;uf))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			goto set_brk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	/* Check against existing mmap mappings. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	next = find_vma(mm, oldbrk);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (next &amp;&amp; newbrk + PAGE_SIZE &gt; vm_start_gap(next))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	/* Ok, looks good - let it rip. */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (do_brk(oldbrk, newbrk-oldbrk, &amp;uf) &lt; 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  set_brk:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	mm-&gt;brk = brk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return brk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">out:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	retval = mm-&gt;brk;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return retval
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>前面我们讲过了，堆是从低地址向高地址增长的，sys_brk 函数的参数 brk 是新的堆顶位置，而当前的 mm-&gt;brk 是原来堆顶的位置。</p>
+<p>首先要做的第一个事情，将原来的堆顶和现在的堆顶，都按照页对齐地址，然后比较大小。如果两者相同，说明这次增加的堆的量很小，还在一个页里面，不需要另行分配页，直接跳到 set_brk 那里，设置 mm-&gt;brk 为新的 brk 就可以了。</p>
+<p>如果发现新旧堆顶不在一个页里面，麻烦了，这下要跨页了。如果发现新堆顶小于旧堆顶，这说明不是新分配内存了，而是释放内存了，释放的还不小，至少释放了一页，于是调用 do_munmap 将这一页的内存映射去掉。</p>
+<p>如果堆将要扩大，就要调用 find_vma。如果打开这个函数，看到的是对红黑树的查找，找到的是原堆顶所在的 vm_area_struct 的下一个 vm_area_struct，看当前的堆顶和下一个 vm_area_struct 之间还能不能分配一个完整的页。如果不能，没办法只好直接退出返回，内存空间都被占满了。</p>
+<p>如果还有空间，就调用 do_brk 进一步分配堆空间，从旧堆顶开始，分配计算出的新旧堆顶之间的页数。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static int do_brk(unsigned long addr, unsigned long len, struct list_head *uf)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return do_brk_flags(addr, len, 0, uf);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  static int do_brk_flags(unsigned long addr, unsigned long request, unsigned long flags, struct list_head *uf)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct mm_struct *mm = current-&gt;mm;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct vm_area_struct *vma, *prev;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned long len;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct rb_node **rb_link, *rb_parent;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	pgoff_t pgoff = addr &gt;&gt; PAGE_SHIFT;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	int error;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	len = PAGE_ALIGN(request);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	find_vma_links(mm, addr, addr + len, &amp;prev, &amp;rb_link,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      &amp;rb_parent);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma = vma_merge(mm, prev, addr, addr + len, flags,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			NULL, NULL, pgoff, NULL, NULL_VM_UFFD_CTX);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (vma)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma = kmem_cache_zalloc(vm_area_cachep, GFP_KERNEL);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	INIT_LIST_HEAD(&amp;vma-&gt;anon_vma_chain);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_mm = mm;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_start = addr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_end = addr + len;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_pgoff = pgoff;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_flags = flags;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_page_prot = vm_get_page_prot(flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma_link(mm, vma, prev, rb_link, rb_parent);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">out:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	perf_event_mmap(vma);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	mm-&gt;total_vm += len &gt;&gt; PAGE_SHIFT;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	mm-&gt;data_vm += len &gt;&gt; PAGE_SHIFT;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (flags &amp; VM_LOCKED)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		mm-&gt;locked_vm += (len &gt;&gt; PAGE_SHIFT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	vma-&gt;vm_flags |= VM_SOFTDIRTY;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return 0;
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 do_brk 中，调用 find_vma_links 找到将来的 vm_area_struct 节点在红黑树的位置，找到它的父节点、前序节点。接下来调用 vma_merge，看这个新节点是否能够和现有树中的节点合并。如果地址是连着的，能够合并，则不用创建新的 vm_area_struct 了，直接跳到 out，更新统计值即可；如果不能合并，则创建新的 vm_area_struct，既加到 anon_vma_chain 链表中，也加到红黑树中。</p>
+<h2 id="内核态的布局">内核态的布局</h2>
+<p>用户态虚拟空间分析完毕，接下来我们分析内核态虚拟空间。</p>
+<p>内核态的虚拟空间和某一个进程没有关系，所有进程通过系统调用进入到内核之后，看到的虚拟地址空间都是一样的。</p>
+<p>这里强调一下，千万别以为到了内核里面，咱们就会直接使用物理内存地址了，想当然地认为下面讨论的都是物理内存地址，不是的，这里讨论的还是虚拟内存地址，但是由于内核总是涉及管理物理内存，因而总是隐隐约约发生关系，所以这里必须思路清晰，分清楚物理内存地址和虚拟内存地址。</p>
+<p>在内核态，32 位和 64 位的布局差别比较大，主要是因为 32 位内核态空间太小了。</p>
+<p>我们来看 32 位的内核态的布局。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/a0e55375c12d059e33e7a64dc00753d3.png" alt=""></p>
+<p>32 位的内核态虚拟地址空间一共就 1G，占绝大部分的前 896M，我们称为<strong>直接映射区</strong>。</p>
+<p>所谓的直接映射区，就是这一块空间是连续的，和物理内存是非常简单的映射关系，其实就是虚拟内存地址减去 3G，就得到物理内存的位置。</p>
+<p>在内核里面，有两个宏：</p>
+<ul>
+<li>__pa(vaddr) 返回与虚拟地址 vaddr 相关的物理地址；</li>
+<li>__va(paddr) 则计算出对应于物理地址 paddr 的虚拟地址。</li>
+</ul>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #define __pa(x)		__phys_addr((unsigned long)(x))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #define __phys_addr(x)		__phys_addr_nodebug(x)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    #define __phys_addr_nodebug(x)	((x) - PAGE_OFFSET)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>但是你要注意，这里虚拟地址和物理地址发生了关联关系，在物理内存的开始的 896M 的空间，会被直接映射到 3G 至 3G+896M 的虚拟地址，这样容易给你一种感觉，是这些内存访问起来和物理内存差不多，别这样想，在大部分情况下，对于这一段内存的访问，在内核中，还是会使用虚拟地址的，并且将来也会为这一段空间建设页表，对这段地址的访问也会走上一节我们讲的分页地址的流程，只不过页表里面比较简单，是直接的一一对应而已。</p>
+<p>这 896M 还需要仔细分解。在系统启动的时候，物理内存的前 1M 已经被占用了，从 1M 开始加载内核代码段，然后就是内核的全局变量、BSS 等，也是 ELF 里面涵盖的。这样内核的代码段，全局变量，BSS 也就会被映射到 3G 后的虚拟地址空间里面。具体的物理内存布局可以查看 /proc/iomem。</p>
+<p>在内核运行的过程中，如果碰到系统调用创建进程，会创建 task_struct 这样的实例，内核的进程管理代码会将实例创建在 3G 至 3G+896M 的虚拟空间中，当然也会被放在物理内存里面的前 896M 里面，相应的页表也会被创建。</p>
+<p>在内核运行的过程中，会涉及内核栈的分配，内核的进程管理的代码会将内核栈创建在 3G 至 3G+896M 的虚拟空间中，当然也就会被放在物理内存里面的前 896M 里面，相应的页表也会被创建。</p>
+<p>896M 这个值在内核中被定义为 high_memory，在此之上常称为“高端内存”。这是个很笼统的说法，到底是虚拟内存的 3G+896M 以上的是高端内存，还是物理内存 896M 以上的是高端内存呢？</p>
+<p>这里仍然需要辨析一下，高端内存是物理内存的概念。它仅仅是内核中的内存管理模块看待物理内存的时候的概念。前面我们也说过，在内核中，除了内存管理模块直接操作物理地址之外，内核的其他模块，仍然要操作虚拟地址，而虚拟地址是需要内存管理模块分配和映射好的。</p>
+<p>假设咱们的电脑有 2G 内存，现在如果内核的其他模块想要访问物理内存 1.5G 的地方，应该怎么办呢？如果你觉得，我有 32 位的总线，访问个 2G 还不小菜一碟，这就错了。</p>
+<p>首先，你不能使用物理地址。你需要使用内存管理模块给你分配的虚拟地址，但是虚拟地址的 0 到 3G 已经被用户态进程占用去了，你作为内核不能使用。因为你写 1.5G 的虚拟内存位置，一方面你不知道应该根据哪个进程的页表进行映射；另一方面，就算映射了也不是你真正想访问的物理内存的地方，所以你发现你作为内核，能够使用的虚拟内存地址，只剩下 1G 减去 896M 的空间了。</p>
+<p>于是，我们可以将剩下的虚拟内存地址分成下面这几个部分。</p>
+<ul>
+<li>在 896M 到 VMALLOC_START 之间有 8M 的空间。</li>
+<li>VMALLOC_START 到 VMALLOC_END 之间称为内核动态映射空间，也即内核想像用户态进程一样 malloc 申请内存，在内核里面可以使用 vmalloc。假设物理内存里面，896M 到 1.5G 之间已经被用户态进程占用了，并且映射关系放在了进程的页表中，内核 vmalloc 的时候，只能从分配物理内存 1.5G 开始，就需要使用这一段的虚拟地址进行映射，映射关系放在专门给内核自己用的页表里面。</li>
+<li>PKMAP_BASE 到 FIXADDR_START 的空间称为持久内核映射。使用 alloc_pages() 函数的时候，在物理内存的高端内存得到 struct page 结构，可以调用 kmap 将其在映射到这个区域。</li>
+<li>FIXADDR_START 到 FIXADDR_TOP(0xFFFF F000) 的空间，称为固定映射区域，主要用于满足特殊需求。</li>
+<li>在最后一个区域可以通过 kmap_atomic 实现临时内核映射。假设用户态的进程要映射一个文件到内存中，先要映射用户态进程空间的一段虚拟地址到物理内存，然后将文件内容写入这个物理内存供用户态进程访问。给用户态进程分配物理内存页可以通过 alloc_pages()，分配完毕后，按说将用户态进程虚拟地址和物理内存的映射关系放在用户态进程的页表中，就完事大吉了。这个时候，用户态进程可以通过用户态的虚拟地址，也即 0 至 3G 的部分，经过页表映射后访问物理内存，并不需要内核态的虚拟地址里面也划出一块来，映射到这个物理内存页。但是如果要把文件内容写入物理内存，这件事情要内核来干了，这就只好通过 kmap_atomic 做一个临时映射，写入物理内存完毕后，再 kunmap_atomic 来解映射即可。</li>
+</ul>
+<p>32 位的内核态布局我们看完了，接下来我们再来看 64 位的内核布局。</p>
+<p>其实 64 位的内核布局反而简单，因为虚拟空间实在是太大了，根本不需要所谓的高端内存，因为内核是 128T，根本不可能有物理内存超过这个值。</p>
+<p>64 位的内存布局如图所示。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/eff85f177eeeba7b164d9bc2fd5d47de.png" alt=""></p>
+<p>64 位的内核主要包含以下几个部分。</p>
+<p>从 0xffff800000000000 开始就是内核的部分，只不过一开始有 8T 的空档区域。</p>
+<p>从 __PAGE_OFFSET_BASE(0xffff880000000000) 开始的 64T 的虚拟地址空间是直接映射区域，也就是减去 PAGE_OFFSET 就是物理地址。虚拟地址和物理地址之间的映射在大部分情况下还是会通过建立页表的方式进行映射。</p>
+<p>从 VMALLOC_START（0xffffc90000000000）开始到 VMALLOC_END（0xffffe90000000000）的 32T 的空间是给 vmalloc 的。</p>
+<p>从 VMEMMAP_START（0xffffea0000000000）开始的 1T 空间用于存放物理页面的描述结构 struct page 的。</p>
+<p>从 __START_KERNEL_map（0xffffffff80000000）开始的 512M 用于存放内核代码段、全局变量、BSS 等。这里对应到物理内存开始的位置，减去 __START_KERNEL_map 就能得到物理内存的地址。这里和直接映射区有点像，但是不矛盾，因为直接映射区之前有 8T 的空当区域，早就过了内核代码在物理内存中加载的位置。</p>
+<p>到这里内核中虚拟空间的布局就介绍完了。</p>
+<h2 id="总结时刻">总结时刻</h2>
+<p>还记得咱们上一节咱们收集项目组需求的时候，我们知道一个进程要运行起来需要以下的内存结构。</p>
+<p>用户态：</p>
+<ul>
+<li>代码段、全局变量、BSS</li>
+<li>函数栈</li>
+<li>堆</li>
+<li>内存映射区</li>
+</ul>
+<p>内核态：</p>
+<ul>
+<li>内核的代码、全局变量、BSS</li>
+<li>内核数据结构例如 task_struct</li>
+<li>内核栈</li>
+<li>内核中动态分配的内存</li>
+</ul>
+<p>现在这些是不是已经都有了着落？</p>
+<p>我画了一个图，总结一下进程运行状态在 32 位下对应关系。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/7614d6eb7a24d33f021a7f28abc9a133.png" alt=""></p>
+<p>对于 64 位的对应关系，只是稍有区别，我这里也画了一个图，方便你对比理解。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/2fcb2a87bcac53ae1a87283cf85dc44f.png" alt=""></p>
+<h2 id="课堂练习">课堂练习</h2>
+<p>请通过命令行工具查看进程虚拟内存的布局和物理内存的布局，对照着这一节讲的内容，看一下各部分的位置。</p>
+<p>欢迎留言和我分享你的疑惑和见解，也欢迎你收藏本节内容，反复研读。你也可以把今天的内容分享给你的朋友，和他一起学习、进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/1a5564dd4e1c9f25d4772c7f844ca84a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/">趣谈Linux操作系统</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E4%B8%9A%E5%8A%A1%E5%BC%80%E5%8F%91%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF100%E4%BE%8B/22__%E6%8E%A5%E5%8F%A3%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F%E9%97%B4%E5%AF%B9%E8%AF%9D%E7%9A%84%E8%AF%AD%E8%A8%80%E4%B8%80%E5%AE%9A%E8%A6%81%E7%BB%9F%E4%B8%80/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">22__接口设计：系统间对话的语言，一定要统一</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E4%B9%94%E6%96%B0%E4%BA%AE%E7%9A%84cto%E6%88%90%E9%95%BF%E5%A4%8D%E7%9B%98/22__%E6%89%A9%E5%B1%95%E6%80%A7%E8%AE%BE%E8%AE%A1%E7%9C%8B%E9%80%8F%E4%B8%9A%E5%8A%A1%E7%9A%84%E6%9C%AC%E8%B4%A8/">
+            <span class="next-text nav-default">22__扩展性设计，看透业务的本质</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

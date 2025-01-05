@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>1410｜存储模块如何用Redis解决推荐系统特征的存储问题 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="10｜存储模块：如何用Redis解决推荐系统特征的存储问题？
+你好，我是王喆。今天，我们来解决系统特征的存储问题。
+在特征工程篇我们说过，在推荐系统这个大饭馆中，特征工程就是负责配料和食材的厨师，那我们上堂课搭建的推荐服务器就是准备做菜的大厨。配料和食材准备好了，做菜的大厨也已经开火热锅了，这时候我们得把食材及时传到大厨那啊。这个传菜的过程就是推荐系统特征的存储和获取过程。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%98/1410%E5%AD%98%E5%82%A8%E6%A8%A1%E5%9D%97%E5%A6%82%E4%BD%95%E7%94%A8redis%E8%A7%A3%E5%86%B3%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E7%89%B9%E5%BE%81%E7%9A%84%E5%AD%98%E5%82%A8%E9%97%AE%E9%A2%98/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%98/1410%E5%AD%98%E5%82%A8%E6%A8%A1%E5%9D%97%E5%A6%82%E4%BD%95%E7%94%A8redis%E8%A7%A3%E5%86%B3%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E7%89%B9%E5%BE%81%E7%9A%84%E5%AD%98%E5%82%A8%E9%97%AE%E9%A2%98/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="1410｜存储模块如何用Redis解决推荐系统特征的存储问题">
+  <meta property="og:description" content="10｜存储模块：如何用Redis解决推荐系统特征的存储问题？
+你好，我是王喆。今天，我们来解决系统特征的存储问题。
+在特征工程篇我们说过，在推荐系统这个大饭馆中，特征工程就是负责配料和食材的厨师，那我们上堂课搭建的推荐服务器就是准备做菜的大厨。配料和食材准备好了，做菜的大厨也已经开火热锅了，这时候我们得把食材及时传到大厨那啊。这个传菜的过程就是推荐系统特征的存储和获取过程。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深度学习推荐系统实战">
+
+  <meta itemprop="name" content="1410｜存储模块如何用Redis解决推荐系统特征的存储问题">
+  <meta itemprop="description" content="10｜存储模块：如何用Redis解决推荐系统特征的存储问题？
+你好，我是王喆。今天，我们来解决系统特征的存储问题。
+在特征工程篇我们说过，在推荐系统这个大饭馆中，特征工程就是负责配料和食材的厨师，那我们上堂课搭建的推荐服务器就是准备做菜的大厨。配料和食材准备好了，做菜的大厨也已经开火热锅了，这时候我们得把食材及时传到大厨那啊。这个传菜的过程就是推荐系统特征的存储和获取过程。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4378">
+  <meta itemprop="keywords" content="深度学习推荐系统实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="1410｜存储模块如何用Redis解决推荐系统特征的存储问题">
+  <meta name="twitter:description" content="10｜存储模块：如何用Redis解决推荐系统特征的存储问题？
+你好，我是王喆。今天，我们来解决系统特征的存储问题。
+在特征工程篇我们说过，在推荐系统这个大饭馆中，特征工程就是负责配料和食材的厨师，那我们上堂课搭建的推荐服务器就是准备做菜的大厨。配料和食材准备好了，做菜的大厨也已经开火热锅了，这时候我们得把食材及时传到大厨那啊。这个传菜的过程就是推荐系统特征的存储和获取过程。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">1410｜存储模块如何用Redis解决推荐系统特征的存储问题</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4378 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>10｜存储模块：如何用Redis解决推荐系统特征的存储问题？</p>
+<p>你好，我是王喆。今天，我们来解决系统特征的存储问题。</p>
+<p>在特征工程篇我们说过，在推荐系统这个大饭馆中，特征工程就是负责配料和食材的厨师，那我们上堂课搭建的推荐服务器就是准备做菜的大厨。配料和食材准备好了，做菜的大厨也已经开火热锅了，这时候我们得把食材及时传到大厨那啊。这个传菜的过程就是推荐系统特征的存储和获取过程。</p>
+<p>可是我们知道，类似 Embedding 这样的特征是在离线环境下生成的，而推荐服务器是在线上环境中运行的，那这些离线的特征数据是如何导入到线上让推荐服务器使用的呢？</p>
+<p>今天，我们先以 Netflix 的推荐系统架构为例，来讲一讲存储模块在整个系统中的位置，再详细来讲推荐系统存储方案的设计原则，最后以 Redis 为核心搭建起 SparrowRecsys 的存储模块。</p>
+<p>推荐系统存储模块的设计原则</p>
+<p>你还记得，我曾在第 1 节的课后题中贴出过 Netflix 推荐系统的架构图（如图 1）吗？Netflix 采用了非常经典的 Offline、Nearline、Online 三层推荐系统架构。架构图中最核心的位置就是我在图中用红框标出的部分，它们是三个数据库 Cassandra、MySQL 和 EVcache，这三个数据库就是 Netflix 解决特征和模型参数存储问题的钥匙。</p>
+<p>图1 Netflix推荐系统架构中的特征与模型数据库</p>
+<p>你可能会觉得，存储推荐特征和模型这件事情一点儿都不难啊。不就是找一个数据库把离线的特征存起来，然后再给推荐服务器写几个 SQL 让它取出来用不就行了吗？为什么还要像 Netflix 这样兴师动众地搞三个数据库呢？</p>
+<p>想要搞明白这个问题，我们就得搞清楚设计推荐系统存储模块的原则。对于推荐服务器来说，由于线上的 QPS 压力巨大，每次有推荐请求到来，推荐服务器都需要把相关的特征取出。这就要求推荐服务器一定要“快”。</p>
+<p>不仅如此，对于一个成熟的互联网应用来说，它的用户数和物品数一定是巨大的，几千万上亿的规模是十分常见的。所以对于存储模块来说，这么多用户和物品特征所需的存储量会特别大。这个时候，事情就很难办了，又要存储量大，又要查询快，还要面对高 QPS 的压力。很不幸，没有一个独立的数据库能经济又高效地单独完成这样复杂的任务。</p>
+<p>因此，几乎所有的工业级推荐系统都会做一件事情，就是把特征的存储做成分级存储，把越频繁访问的数据放到越快的数据库甚至缓存中，把海量的全量数据放到便宜但是查询速度较慢的数据库中。</p>
+<p>举个不恰当的例子，如果你把特征数据放到基于 HDFS 的 HBase 中，虽然你可以轻松放下所有的特征数据，但要让你的推荐服务器直接访问 HBase 进行特征查询，等到查询完成，这边用户的请求早就超时中断了。而 Netflix 的三个数据库正好满足了这样分级存储的需求。</p>
+<p>图2 分级存储的设计</p>
+<p>比如说，Netflix 使用的 Cassandra，它作为流行的 NoSQL 数据库，具备大数据存储的能力，但为支持推荐服务器高 QPS 的需求，我们还需要把最常用的特征和模型参数存入 EVcache 这类内存数据库。而对于更常用的数据，我们可以把它们存储在 Guava Cache 等服务器内部缓存，甚至是服务器的内存中。总之，对于一个工程师来说，我们经常需要做出技术上的权衡，达成一个在花销和效果上平衡最优的技术方案。</p>
+<p>而对于 MySQL 来说，由于它是一个强一致性的关系型数据库，一般存储的是比较关键的要求强一致性的信息，比如物品是否可以被推荐这种控制类的信息，物品分类的层级关系，用户的注册信息等等。这类信息一般是由推荐服务器进行阶段性的拉取，或者利用分级缓存进行阶段性的更新，避免因为过于频繁的访问压垮 MySQL。</p>
+<p>总的来说，推荐系统存储模块的设计原则就是“分级存储，把越频繁访问的数据放到越快的数据库甚至缓存中，把海量的全量数据放到廉价但是查询速度较慢的数据库中”。</p>
+<p>SparrowRecsys 的存储系统方案</p>
+<p>那在我们要实现的 SparrowRecsys 中，存储模块的设计原则又是怎么应用的呢？</p>
+<p>在 SparrowRecsys 中，我们把存储模块的设计问题进行了一些简化，避免由于系统设计得过于复杂导致你不易上手。</p>
+<p>我们使用基础的文件系统保存全量的离线特征和模型数据，用 Redis 保存线上所需特征和模型数据，使用服务器内存缓存频繁访问的特征。</p>
+<p>在实现技术方案之前，对于问题的整体分析永远都是重要的。我们需要先确定具体的存储方案，这个方案必须精确到哪级存储对应哪些具体特征和模型数据。</p>
+<p>存储的工具已经知道了，那特征和模型数据分别是什么呢？这里，我们直接应用特征工程篇为 SparrowRecsys 准备好的一些特征就可以了。我把它们的具体含义和数据量级整理成了表格，如下：</p>
+<p>图3 特征和模型数据</p>
+<p>根据上面的特征数据，我们一起做一个初步的分析。首先，用户特征的总数比较大，它们很难全部载入到服务器内存中，所以我们把用户特征载入到 Redis 之类的内存数据库中是合理的。其次，物品特征的总数比较小，而且每次用户请求，一般只会用到一个用户的特征，但为了物品排序，推荐服务器需要访问几乎所有候选物品的特征。针对这个特点，我们完全可以把所有物品特征阶段性地载入到服务器内存中，大大减少 Redis 的线上压力。</p>
+<p>最后，我们还要找一个地方去存储特征历史数据、样本数据等体量比较大，但不要求实时获取的数据。这个时候分布式文件系统（单机环境下以本机文件系统为例）往往是最好的选择，由于类似 HDFS 之类的分布式文件系统具有近乎无限的存储空间，我们可以把每次处理的全量特征，每次训练的 Embedding 全部保存到分布式文件系统中，方便离线评估时使用。</p>
+<p>经过上面的分析，我们就得到了具体的存储方案，如下表：</p>
+<p>图4 SparrowRecsys的存储方案</p>
+<p>此外，文件系统的存储操作非常简单，在 SparrowRecsys 中就是利用 Spark 的输出功能实现的，我们就不再重点介绍了。而服务器内部的存储操作主要是跟 Redis 进行交互，所以接下来我们重点介绍 Redis 的特性以及写入和读取方法。</p>
+<p>你需要知道的 Redis 基础知识</p>
+<p>Redis 是当今业界最主流的内存数据库，那在使用它之前，我们应该清楚 Redis 的两个主要特点。</p>
+<p>一是所有的数据都以 Key-value 的形式存储。 其中，Key 只能是字符串，value 可支持的数据结构包括 string(字符串)、list(链表)、set(集合)、zset(有序集合) 和 hash(哈希)。这个特点决定了 Redis 的使用方式，无论是存储还是获取，都应该以键值对的形式进行，并且根据你的数据特点，设计值的数据结构。</p>
+<p>二是所有的数据都存储在内存中，磁盘只在持久化备份或恢复数据时起作用。这个特点决定了 Redis 的特性，一是 QPS 峰值可以很高，二是数据易丢失，所以我们在维护 Redis 时要充分考虑数据的备份问题，或者说，不应该把关键的业务数据唯一地放到 Redis 中。但对于可恢复，不关乎关键业务逻辑的推荐特征数据，就非常适合利用 Redis 提供高效的存储和查询服务。</p>
+<p>在实际的 SparrowRecsys 的 Redis 部分中，我们用到了 Redis 最基本的操作，SET、GET 和 KEYS，value 的数据类型用到了 string。</p>
+<p>SparrowRecsys 中的 Redis 部分的实践流程</p>
+<p>Redis 的实践流程还是符合我们“把大象装冰箱”的三部曲，只不过，这三步变成了安装 Redis，把数据写进去，把数据读出来。下面，我们来逐一来讲。</p>
+<p>首先是安装 Redis。 Redis 的安装过程在 linux/Unix 环境下非常简单，你参照官方网站的步骤依次执行就好。而 Windows 环境下的安装过程稍复杂一些，你可以参考这篇文章进行安装。</p>
+<p>在启动 Redis 之后，如果没有特殊的设置，Redis 服务会默认运行在 6379 端口，没有特殊情况保留这个默认的设置就可以了，因为我们的 SparrowRecSys 也是默认从 6379 端口存储和读取 Redis 数据的。</p>
+<p>然后是运行离线程序，通过 jedis 客户端写入 Redis。 在 Redis 运行起来之后，我们就可以在离线 Spark 环境下把特征数据写入 Redis。这里我们以第 8 节课中生成的 Embedding 数据为例，来实现 Redis 的特征存储过程。</p>
+<p>实际的过程非常简单，首先我们利用最常用的 Redis Java 客户端 Jedis 生成 redisClient，然后遍历训练好的 Embedding 向量，将 Embedding 向量以字符串的形式存入 Redis，并设置过期时间（ttl）。具体实现请参考下面的代码（代码参考 com.wzhe.sparrowrecsys.offline.spark.featureeng.Embedding 中的 trainItem2vec 函数）：</p>
+<p><code>if (saveToRedis) {  //创建redis client  val redisClient = new Jedis(redisEndpoint, redisPort)  val params = SetParams.setParams()  //设置ttl为24小时  params.ex(60 \* 60 \* 24)  //遍历存储embedding向量  for (movieId &lt;- model.getVectors.keys) {    //key的形式为前缀+movieId，例如i2vEmb:361    //value的形式是由Embedding向量生成的字符串，例如 &quot;0.1693846 0.2964318 -0.13044095 0.37574086 0.55175656 0.03217995 1.327348 -0.81346786 0.45146862 0.49406642&quot;    redisClient.set(redisKeyPrefix + &quot;:&quot; + movieId, model.getVectors(movieId).mkString(&quot; &quot;), params)  }  //关闭客户端连接  redisClient.close()}</code></p>
+<p>最后是在推荐服务器中把 Redis 数据读取出来。</p>
+<p>在服务器端，根据刚才梳理出的存储方案，我们希望服务器能够把所有物品 Embedding 阶段性地全部缓存在服务器内部，用户 Embedding 则进行实时查询。这里，我把缓存物品 Embedding 的代码放在了下面。</p>
+<p>你可以看到，它的实现的过程也并不复杂，就是先用 keys 操作把所有物品 Embedding 前缀的键找出，然后依次将 Embedding 载入内存。</p>
+<p><code>//创建redis clientJedis redisClient = new Jedis(REDIS\_END\_POINT, REDIS\_PORT);//查询出所有以embKey为前缀的数据Set&lt;String&gt; movieEmbKeys = redisClient.keys(embKey + &quot;\*&quot;);int validEmbCount = 0;//遍历查出的keyfor (String movieEmbKey : movieEmbKeys){    String movieId = movieEmbKey.split(&quot;:&quot;)\[1\];    Movie m = getMovieById(Integer.parseInt(movieId));    if (null == m) {        continue;    }    //用redisClient的get方法查询出key对应的value，再set到内存中的movie结构中    m.setEmb(parseEmbStr(redisClient.get(movieEmbKey)));    validEmbCount++;}redisClient.close();</code></p>
+<p>这样一来，在具体为用户推荐的过程中，我们再利用相似的接口查询出用户的 Embedding，与内存中的 Embedding 进行相似度的计算，就可以得到最终的推荐列表了。</p>
+<p>如果你已经安装好了 Redis，我非常推荐你运行 SparrowRecsys 中 offline 部分 Embedding 主函数，先把物品和用户 Embedding 生成并且插入 Redis（注意把 saveToRedis 变量改为 true）。然后再运行 online 部分的 RecSysServer，看一下推荐服务器有没有正确地从 Redis 中读出物品和用户 Embedding 并产生正确的推荐结果（注意，记得要把 util.Config 中的 EMB_DATA_SOURCE 配置改为 DATA_SOURCE_REDIS）。</p>
+<p>当然，除了 Redis，我们还提到了多种不同的缓存和数据库，如 Cassandra、EVcache、GuavaCache 等等，它们都是业界非常流行的存储特征的工具，你有兴趣的话也可以在课后查阅相关资料进行进一步的学习。在掌握了我们特征存储的基本原则之后，你也可以在业余时间尝试思考一下每个数据库的不同和它们最合适的应用场景。</p>
+<p>小结</p>
+<p>今天我们学习了推荐系统存储模块的设计原则和具体的解决方案，并且利用 SparrowRecsys 进行了实战。</p>
+<p>在设计推荐系统存储方案时，我们一般要遵循“分级存储”的原则，在开销和性能之间取得权衡。在 SparrowRecsys 的实战中，我们安装并操作了内存数据库 Redis，你要记住 Redis 的特点“Key-value 形式存储”和“纯内存数据库”。在具体的特征存取过程中，我们应该熟悉利用 jedis 执行 SET，GET 等 Redis 常用操作的方法。</p>
+<p>最后，我也把重要的知识点总结在了文稿中，你可以再回顾一下。</p>
+<p>对于搭建一套完整的推荐服务来说，我们已经迈过了两大难关，分别是用 Jetty Server 搭建推荐服务器问题，以及用 Redis 解决特征存储的问题。下节课，我们会一起来挑战线上服务召回层的设计。</p>
+<p>课后思考</p>
+<p>你觉得课程中存储 Embedding 的方式还有优化的空间吗？除了 string，我们是不是还可以用其他 Redis value 的数据结构存储 Embedding 数据，那从效率的角度考虑，使用 string 和使用其他数据结构的优缺点有哪些？为什么？</p>
+<p>欢迎把你的思考和答案写在留言区，也欢迎你把这节课分享给你的朋友，我们下节课见！</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E5%AE%9E%E6%88%98/">深度学习推荐系统实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/python%E8%87%AA%E5%8A%A8%E5%8C%96%E5%8A%9E%E5%85%AC%E5%AE%9E%E6%88%98%E8%AF%BE/1409%E6%89%A9%E5%B1%95%E6%90%9C%E7%B4%A2%E5%A6%82%E4%BD%95%E5%BF%AB%E9%80%9F%E6%89%BE%E5%88%B0%E6%83%B3%E8%A6%81%E7%9A%84%E6%96%87%E4%BB%B6/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">1409｜扩展搜索如何快速找到想要的文件</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/sql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/1413%E4%B8%A8%E4%BB%80%E4%B9%88%E6%98%AF%E5%AD%98%E5%82%A8%E8%BF%87%E7%A8%8B%E5%9C%A8%E5%AE%9E%E9%99%85%E9%A1%B9%E7%9B%AE%E4%B8%AD%E7%94%A8%E5%BE%97%E5%A4%9A%E4%B9%88/">
+            <span class="next-text nav-default">1413丨什么是存储过程在实际项目中用得多么</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

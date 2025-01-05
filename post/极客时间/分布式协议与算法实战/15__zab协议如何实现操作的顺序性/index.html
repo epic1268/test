@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>15__ZAB协议：如何实现操作的顺序性？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是韩健。
+很多同学应该使用过 ZooKeeper，它是一个开源的分布式协调服务，比如你可以使用它进行配置管理、名字服务等等。在 ZooKeeper 中，数据是以节点的形式存储的。如果你要用 ZooKeeper 做配置管理，那么就需要在里面创建指定配置，假设创建节点&quot;/geekbang&quot;和&quot;/geekbang/time&quot;，步骤如下：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/15__zab%E5%8D%8F%E8%AE%AE%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%93%8D%E4%BD%9C%E7%9A%84%E9%A1%BA%E5%BA%8F%E6%80%A7/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/15__zab%E5%8D%8F%E8%AE%AE%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%93%8D%E4%BD%9C%E7%9A%84%E9%A1%BA%E5%BA%8F%E6%80%A7/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="15__ZAB协议：如何实现操作的顺序性？">
+  <meta property="og:description" content="你好，我是韩健。
+很多同学应该使用过 ZooKeeper，它是一个开源的分布式协调服务，比如你可以使用它进行配置管理、名字服务等等。在 ZooKeeper 中，数据是以节点的形式存储的。如果你要用 ZooKeeper 做配置管理，那么就需要在里面创建指定配置，假设创建节点&#34;/geekbang&#34;和&#34;/geekbang/time&#34;，步骤如下：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="分布式协议与算法实战">
+
+  <meta itemprop="name" content="15__ZAB协议：如何实现操作的顺序性？">
+  <meta itemprop="description" content="你好，我是韩健。
+很多同学应该使用过 ZooKeeper，它是一个开源的分布式协调服务，比如你可以使用它进行配置管理、名字服务等等。在 ZooKeeper 中，数据是以节点的形式存储的。如果你要用 ZooKeeper 做配置管理，那么就需要在里面创建指定配置，假设创建节点&#34;/geekbang&#34;和&#34;/geekbang/time&#34;，步骤如下：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3927">
+  <meta itemprop="keywords" content="分布式协议与算法实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="15__ZAB协议：如何实现操作的顺序性？">
+  <meta name="twitter:description" content="你好，我是韩健。
+很多同学应该使用过 ZooKeeper，它是一个开源的分布式协调服务，比如你可以使用它进行配置管理、名字服务等等。在 ZooKeeper 中，数据是以节点的形式存储的。如果你要用 ZooKeeper 做配置管理，那么就需要在里面创建指定配置，假设创建节点&#34;/geekbang&#34;和&#34;/geekbang/time&#34;，步骤如下：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">15__ZAB协议：如何实现操作的顺序性？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3927 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#为什么-multi-paxos-无法实现操作顺序性">为什么 Multi-Paxos 无法实现操作顺序性？</a></li>
+        <li><a href="#zab-是如何保证操作的顺序性的">ZAB 是如何保证操作的顺序性的？</a>
+          <ul>
+            <li><a href="#什么是状态机">什么是状态机？</a></li>
+            <li><a href="#如何实现操作的顺序性">如何实现操作的顺序性？</a></li>
+          </ul>
+        </li>
+        <li><a href="#内容小结">内容小结</a></li>
+        <li><a href="#课堂思考">课堂思考</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是韩健。</p>
+<p>很多同学应该使用过 ZooKeeper，它是一个开源的分布式协调服务，比如你可以使用它进行配置管理、名字服务等等。在 ZooKeeper 中，数据是以节点的形式存储的。如果你要用 ZooKeeper 做配置管理，那么就需要在里面创建指定配置，假设创建节点&quot;/geekbang&quot;和&quot;/geekbang/time&quot;，步骤如下：</p>
+<p>[zk: localhost:2181(CONNECTED) 7] create /geekbang 123    <br>
+Created /geekbang<br>
+[zk: localhost:2181(CONNECTED) 8] create /geekbang/time 456<br>
+Created /geekbang/time</p>
+<p>我们分别创建了配置&quot;/geekbang&quot; 和&quot;/geekbang/time&quot;，对应的值分别为 123 和 456。那么在这里我提个问题：你觉得在 ZooKeeper 中，能用兰伯特的 Multi-Paxos 实现各节点数据的共识和一致吗？</p>
+<p>当然不行。因为兰伯特的 Multi-Paxos，虽然能保证达成共识后的值不再改变，但它不管关心达成共识的值是什么，也无法保证各值（也就是操作）的顺序性。这是为什么呢？这个问题是 ZAB 协议着力解决的，也是理解 ZAB 协议的关键。</p>
+<p>不过，虽然大家都在提 ZAB 协议，但是在我看来，ZAB 协议和 ZooKeeper 代码耦合在一起，也就是说，你是无法单独使用 ZAB 协议的，所以一般而言，只需要理解 ZAB 协议的架构和基础原理就可以了，不需要对代码和细节做太多的深究。所以，我会从 ZAB 协议的最核心设计目标（如何实现操作的顺序性）出发，带你了解它的基础原理。</p>
+<h2 id="为什么-multi-paxos-无法实现操作顺序性">为什么 Multi-Paxos 无法实现操作顺序性？</h2>
+<p>兰伯特的 Multi-Paxos 解决的是一系列值如何达成共识的问题，它关心的是，对于指定序号的位置，最多只有一个指令（Command）会被选定，但它不关心选定的是哪个指令，也就是说，它不关心指令的顺序性（也就是操作的顺序性）。</p>
+<p>这么说可能比较抽象，为了方便你理解，我举个具体的例子演示一下（一个 3 节点的 Multi-Paxos 集群），为了演示方便，我们假设当前所有节点被选定的指令的最大序号为 100，也就是说，新提议的指令对应的序号将为 101。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/e5ed2a592c91aa0d9b2765334f281005.png" alt=""></p>
+<p>图 1</p>
+<p>首先节点 A 是领导者，提议了指令 X、Y，但是因为网络故障，指令只成功复制到了节点 A。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/c80231c37282839b4dfc187078afce38.png" alt=""></p>
+<p>图 2</p>
+<p>假设这时节点 A 故障了，新当选的领导者为节点 B。节点 B 当选领导者后，需要先作为学习者了解目前已被选定的指令。节点 B 学习之后，发现当前被选定指令的最大序号为 100（因为节点 A 故障了，它被选定指令的最大序号 102，无法被节点 B 发现），那么它可以从序号 101 开始提议新的指令。这时它接收到客户端请求，并提议了指令 Z，指令 Z 被成功复制到节点 B、C。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/44c3fd726608cc9f111a3da1886fb7fc.png" alt=""></p>
+<p>图 3</p>
+<p>这时节点 B 故障了，节点 A 恢复了，选举出领导者 C 后，节点 B 故障也恢复了。节点 C 当选领导者后，需要先作为学习者，了解目前已被选定的指令，这时它执行 Basic Paxos 的准备阶段，就会发现之前选定的值（比如 Z、Y），然后发送接受请求，最终在序号 101、102 处达成共识的指令是 Z、Y。就像下图的样子。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/a3907181bcbb73e1d2d81a5d95416af9.png" alt=""></p>
+<p>图 4</p>
+<p>在这里，你可以看到，原本预期的指令是 X、Y，最后变成了 Z、Y，也就是说，虽然 Multi-Paxos 能就一系列值达成共识，但它不关心达成共识后的值是什么，这显然不是我们想要的结果。</p>
+<p>比如，假设在 ZooKeeper 中直接使用了兰伯特的 Multi-Paxos，这时咱们创建节点&quot;/geekbang&quot;和&quot;/geekbang/time&quot;，那么就可能出现，系统先创建了节点&quot;/geekbang/time&quot;，这样肯定就出错了：</p>
+<p>[zk: localhost:2181(CONNECTED) 6] create /geekbang/time 456<br>
+Node does not exist: /geekbang/time</p>
+<p>因为创建节点&quot;/geekbang/time&quot;时，找不到节点&quot;/geekbang&quot;，所以就会创建失败。</p>
+<p>在这里我多说几句，兰伯特有很多关于分布式的理论，这些理论都很经典（比如拜占庭将军问题、Paxos），但也因为太早了，与实际场景结合的不多，所以后续的众多算法是在这个基础之上做了大量的改进（比如，PBFT、Raft 等）。关于这一点，我在13 讲也强调过，你需要注意。</p>
+<p>另外我还想补充一下，在我看来，在ZAB 论文中，关于 Paxos 问题（Figure 1 ​​​​）的分析是有争议的。因为 ZooKeeper 当时应该考虑的是 Multi-Paxos，而不是有多个提议者的 Basic Paxos。对于 Multi-Paxos 而言，领导者作为唯一提议者，不存在同时多个提议者的情况。也就是说，Multi-Paxos 无法保证操作的顺序性的问题是存在的，但原因不是文中演示的原因，<strong>本质上是因为 Multi-Paxos 实现的是一系列值的共识，不关心最终达成共识的值是什么，不关心各值的顺序。</strong></p>
+<p>既然 Multi-Paxos 不行，ZooKeeper 怎么实现操作的顺序性的呢？答案是它实现了 ZAB 协议。</p>
+<p>你可能会说了：Multi-Paxos 无法实现操作的顺序性，但 Raft 可以啊，为什么 ZooKeeper 不用 Raft 呢？这个问题其实比较简单，因为 Raft 出来的比较晚，直到 2013 年才正式提出，在 2007 年开发 ZooKeeper 的时候，还没有 Raft 呢。</p>
+<h2 id="zab-是如何保证操作的顺序性的">ZAB 是如何保证操作的顺序性的？</h2>
+<p>与兰伯特的 Multi-Paxos 不同，ZAB 不是共识算法，不基于状态机，而是基于主备模式的原子广播协议，最终实现了操作的顺序性。</p>
+<p>这里我说的主备，就是 Master-Slave 模型，一个主节点和多个备份节点，所有副本的数据都以主节点为准，主节点采用二阶段提交，向备份节点同步数据，如果主节点发生故障，数据最完备的节点将当选主节点。而原子广播协议，你可以理解成广播一组消息，消息的顺序是固定的。</p>
+<p>需要你注意的是，ZAB 在这里做了个优化，为了实现分区容错能力，将数据复制到大多数节点后（也就是如果大多数节点准备好了），领导者就会进入提交执行阶段，通知备份节点执行提交操作。<strong>在这一点上，Raft 和 ZAB 是类似的，我建议你可以对比着 Raft 算法来理解 ZAB。</strong></p>
+<p>讲到这儿我再多说一句，前面几讲的留言中有同学问状态机的事情：在 Multi-Paxos、Raft 中为什么需要状态机？这是一个很棒的问题，为你的深入思考点个赞！所以咱们先来看一下这个问题。</p>
+<h3 id="什么是状态机">什么是状态机？</h3>
+<p>本质上来说，状态机指的是有限状态机，它是一个数学模型。你可以这么理解：状态机是一个功能模块，用来处理一系列请求，最大的特点就是确定性，也就是说，对于相同的输入，不管重复运行多少次，最终的内部状态和输出都是相同的。</p>
+<p>就像你敲击键盘，在 Word 文档上打字一样，你敲击键盘的顺序决定了 Word 文档上的文字，你按照相同的顺序敲击键盘，一定能敲出相同的文字，这就是一个现实版的状态机。</p>
+<p>那么为什么在 Multi-Paxos、Raft 中需要状态机呢？</p>
+<p>你想一下，Multi-Paxos、Raft 都是共识算法，而共识算法是就一系列值达成共识的，达成共识后，这个值就不能改了。但有时候我们是需要更改数据的值的，比如 KV 存储，我们肯定需要更改指定 key（比如 X）对应的值，这时我们就可以通过状态机来解决这个问题。</p>
+<p>比如，如果你想把 X 的值改为 7，那你可以提议一个新的指令“SET X = 7”，当这个指令被达成共识并提交到状态机后，你查询到的值就是 7 了，也就成功修改了 X 的值。</p>
+<p>讲到这儿，你应该理解什么是状态机，为什共识算法需要状态机了吧？在解决这个问题之后，咱们说回刚刚的话题：ZAB 协议如何保证操作的顺序性？</p>
+<h3 id="如何实现操作的顺序性">如何实现操作的顺序性？</h3>
+<p>首先，ZAB 实现了主备模式，也就是所有的数据都以主节点为准：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/d40df8ddf7f33ee36d08ee73b1f5659e.png" alt=""></p>
+<p>图 5</p>
+<p>其次，ZAB 实现了 FIFO 队列，保证消息处理的顺序性。</p>
+<p>另外，ZAB 还实现了当主节点崩溃后，只有日志最完备的节点才能当选主节点，因为日志最完备的节点包含了所有已经提交的日志，所以这样就能保证提交的日志不会再改变。</p>
+<p>你看，ZAB 协议通过这几个特性就能保证后来的操作不会比当前的操作先执行，也就能保证节点&quot;/geekbang&quot;会在节点&quot;/geekbang/time&quot;之前创建。</p>
+<p>学到这里，想必你已经发现了，这些特性好像和 Raft 很像。是的，因为在前面几讲，我们已经学习了 Raft 算法，所以你可以类比 Raft 来理解，在 Raft 中：</p>
+<ol>
+<li>所有日志以领导者的为准；</li>
+<li>领导者接收到客户端请求后，会基于请求中的指令，创建日志项，并将日志项缓存在本地，然后按照顺序，复制到其他节点和提交 ;</li>
+<li>在 Raft 中，也是日志最完备的节点才能当选领导者。</li>
+</ol>
+<h2 id="内容小结">内容小结</h2>
+<p>本节课我主要带你了解了状态机、为什么 Multi-Paxos 无法实现操作的顺序性，以及 ZAB 协议如何保证操作的顺序性。我希望你明确这样几个重点。</p>
+<ol>
+<li>状态机最大的特点是确定性，对于相同的输入不管运行多少次，最终的内部状态和输出都是相同的。需要你注意的是，在共识算法中，我们可以通过提议新的指令，达成共识后，提交给状态机执行，来达到修改指定内容的效果，比如修改 KV 存储中指定 key 对应的值。</li>
+<li>ZAB 是通过“一切以领导者为准”的强领导者模型和严格按照顺序提交日志，来实现操作的顺序性的，这一点和 Raft 是一样的。</li>
+</ol>
+<p>最后我想说的是，兰伯特的 Multi-Paxos 只考虑了如何实现共识，也就是，如何就一系列值达成共识，未考虑如何实现各值（也就是操作）的顺序性。最终 ZooKeeper 实现了基于主备模式的原子广播协议，保证了操作的顺序性，而且，ZAB 协议的实现，影响到了后来的共识算法，也就是 Raft 算法，Raft 除了能就一些值达成共识，还能保证各值的顺序性。</p>
+<p>学习完本讲内容后，你可以看到，Raft 算法和 ZAB 协议很类似，比如主备模式（也就是领导者、跟随者模型）、日志必须是连续的、以领导者的日志为准是日志一致等等。你可以想一下，那为什么它们会比较类似呢？</p>
+<p>我的看法是，“英雄所见略同”。比如 ZAB 协议要实现操作的顺序性，而 Raft 的设计目标，不仅仅是操作的顺序性，而是线性一致性，这两个目标，都决定了它们不能允许日志不连续，要按照顺序提交日志，那么，它们就要通过上面的方法实现日志的顺序性，并保证达成共识（也就是提交）后的日志不会再改变。</p>
+<h2 id="课堂思考">课堂思考</h2>
+<p>我提到在 ZAB 中，写操作必须在主节点上执行，主节点是通过简化版的二阶段提交向备份节点同步数据。那么如果读操作访问的是备份节点，能保证每次都能读到最新的数据吗？为什么呢？欢迎在留言区分享你的看法，与我一同讨论。</p>
+<p>最后，感谢你的阅读，如果这篇文章让你有所收获，也欢迎你将它分享给更多的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F%E5%8D%8F%E8%AE%AE%E4%B8%8E%E7%AE%97%E6%B3%95%E5%AE%9E%E6%88%98/">分布式协议与算法实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spring%E7%BC%96%E7%A8%8B%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF50%E4%BE%8B/15__spring_security_%E5%B8%B8%E8%A7%81%E9%94%99%E8%AF%AF/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">15__Spring_Security_常见错误</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/ddd%E5%AE%9E%E6%88%98%E8%AF%BE/15__%E8%BE%B9%E7%95%8C%E5%BE%AE%E6%9C%8D%E5%8A%A1%E7%9A%84%E5%90%84%E7%A7%8D%E8%BE%B9%E7%95%8C%E5%9C%A8%E6%9E%B6%E6%9E%84%E6%BC%94%E8%BF%9B%E4%B8%AD%E7%9A%84%E4%BD%9C%E7%94%A8/">
+            <span class="next-text nav-default">15__边界：微服务的各种边界在架构演进中的作用？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

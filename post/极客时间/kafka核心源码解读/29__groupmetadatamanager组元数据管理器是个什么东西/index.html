@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>29__GroupMetadataManager：组元数据管理器是个什么东西？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是胡夕。今天，我们学习 GroupMetadataManager 类的源码。从名字上来看，它是组元数据管理器，但是，从它提供的功能来看，我更愿意将它称作消费者组管理器，因为它定义的方法，提供的都是添加消费者组、移除组、查询组这样组级别的基础功能。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/29__groupmetadatamanager%E7%BB%84%E5%85%83%E6%95%B0%E6%8D%AE%E7%AE%A1%E7%90%86%E5%99%A8%E6%98%AF%E4%B8%AA%E4%BB%80%E4%B9%88%E4%B8%9C%E8%A5%BF/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/29__groupmetadatamanager%E7%BB%84%E5%85%83%E6%95%B0%E6%8D%AE%E7%AE%A1%E7%90%86%E5%99%A8%E6%98%AF%E4%B8%AA%E4%BB%80%E4%B9%88%E4%B8%9C%E8%A5%BF/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="29__GroupMetadataManager：组元数据管理器是个什么东西？">
+  <meta property="og:description" content="你好，我是胡夕。今天，我们学习 GroupMetadataManager 类的源码。从名字上来看，它是组元数据管理器，但是，从它提供的功能来看，我更愿意将它称作消费者组管理器，因为它定义的方法，提供的都是添加消费者组、移除组、查询组这样组级别的基础功能。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kafka核心源码解读">
+
+  <meta itemprop="name" content="29__GroupMetadataManager：组元数据管理器是个什么东西？">
+  <meta itemprop="description" content="你好，我是胡夕。今天，我们学习 GroupMetadataManager 类的源码。从名字上来看，它是组元数据管理器，但是，从它提供的功能来看，我更愿意将它称作消费者组管理器，因为它定义的方法，提供的都是添加消费者组、移除组、查询组这样组级别的基础功能。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7053">
+  <meta itemprop="keywords" content="Kafka核心源码解读">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="29__GroupMetadataManager：组元数据管理器是个什么东西？">
+  <meta name="twitter:description" content="你好，我是胡夕。今天，我们学习 GroupMetadataManager 类的源码。从名字上来看，它是组元数据管理器，但是，从它提供的功能来看，我更愿意将它称作消费者组管理器，因为它定义的方法，提供的都是添加消费者组、移除组、查询组这样组级别的基础功能。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">29__GroupMetadataManager：组元数据管理器是个什么东西？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7053 字 </span>
+          <span class="more-meta"> 预计阅读 15 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#类定义与字段">类定义与字段</a></li>
+    <li><a href="#重要方法">重要方法</a>
+      <ul>
+        <li><a href="#消费者组元数据管理">消费者组元数据管理</a>
+          <ul>
+            <li><a href="#查询获取消费者组元数据">查询获取消费者组元数据</a></li>
+            <li><a href="#移除消费者组元数据">移除消费者组元数据</a></li>
+            <li><a href="#添加消费者组元数据">添加消费者组元数据</a></li>
+            <li><a href="#加载消费者组元数据">加载消费者组元数据</a></li>
+          </ul>
+        </li>
+        <li><a href="#消费者组位移管理">消费者组位移管理</a>
+          <ul>
+            <li><a href="#保存消费者组位移">保存消费者组位移</a></li>
+            <li><a href="#查询消费者组位移">查询消费者组位移</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#课后讨论">课后讨论</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是胡夕。今天，我们学习 GroupMetadataManager 类的源码。从名字上来看，它是组元数据管理器，但是，从它提供的功能来看，我更愿意将它称作消费者组管理器，因为它定义的方法，提供的都是添加消费者组、移除组、查询组这样组级别的基础功能。</p>
+<p>不过，这个类的知名度不像 KafkaController、GroupCoordinator 那么高，你之前可能都没有听说过它。但是，它其实是非常重要的消费者组管理类。</p>
+<p>GroupMetadataManager 类是在消费者组 Coordinator 组件被创建时被实例化的。这就是说，每个 Broker 在启动过程中，都会创建并维持一个 GroupMetadataManager 实例，以实现对该 Broker 负责的消费者组进行管理。更重要的是，生产环境输出日志中的与消费者组相关的大多数信息，都和它息息相关。</p>
+<p>我举一个简单的例子。你应该见过这样的日志输出：</p>
+<p>Removed ××× expired offsets in ××× milliseconds.</p>
+<p>这条日志每 10 分钟打印一次。你有没有想过，它为什么要这么操作呢？其实，这是由 GroupMetadataManager 类创建的定时任务引发的。如果你不清楚 GroupMetadataManager 的原理，虽然暂时不会影响你使用，但是，一旦你在实际环境中看到了有关消费者组的错误日志，仅凭日志输出，你是无法定位错误原因的。要解决这个问题，就只有一个办法：<strong>通过阅读源码，彻底搞懂底层实现原理，做到以不变应万变</strong>。</p>
+<p>关于这个类，最重要的就是要掌握它是如何管理消费者组的，以及它对内部位移主题的操作方法。这两个都是重磅功能，我们必须要吃透它们的原理，这也是我们这三节课的学习重点。今天，我们先学习它的类定义和管理消费者组的方法。</p>
+<h1 id="类定义与字段">类定义与字段</h1>
+<p>GroupMetadataManager 类定义在 coordinator.group 包下的同名 scala 文件中。这个类的代码将近 1000 行，逐行分析的话，显然效率不高，也没有必要。所以，我从类定义和字段、重要方法两个维度给出主要逻辑的代码分析。下面的代码是该类的定义，以及我选取的重要字段信息。</p>
+<p>// brokerId：所在 Broker 的 Id<br>
+// interBrokerProtocolVersion：Broker 端参数 inter.broker.protocol.version 值<br>
+// config: 内部位移主题配置类<br>
+// replicaManager: 副本管理器类<br>
+// zkClient: ZooKeeper 客户端<br>
+class GroupMetadataManager(<br>
+brokerId: Int,<br>
+interBrokerProtocolVersion: ApiVersion,<br>
+config: OffsetConfig,<br>
+replicaManager: ReplicaManager,<br>
+zkClient: KafkaZkClient,<br>
+time: Time,<br>
+metrics: Metrics) extends Logging with KafkaMetricsGroup {<br>
+// 压缩器类型。向位移主题写入消息时执行压缩操作<br>
+private val compressionType: CompressionType = CompressionType.forId(config.offsetsTopicCompressionCodec.codec)<br>
+// 消费者组元数据容器，保存 Broker 管理的所有消费者组的数据<br>
+private val groupMetadataCache = new Pool[String, GroupMetadata]<br>
+// 位移主题下正在执行加载操作的分区<br>
+private val loadingPartitions: mutable.Set[Int] = mutable.Set()<br>
+// 位移主题下完成加载操作的分区<br>
+private val ownedPartitions: mutable.Set[Int] = mutable.Set()<br>
+// 位移主题总分区数<br>
+private val groupMetadataTopicPartitionCount = getGroupMetadataTopicPartitionCount<br>
+&hellip;&hellip;<br>
+}</p>
+<p>这个类的构造函数需要 7 个参数，后面的 time 和 metrics 只是起辅助作用，因此，我重点解释一下前 5 个参数的含义。</p>
+<ol>
+<li>brokerId：这个参数我们已经无比熟悉了。它是所在 Broker 的 ID 值，也就是 broker.id 参数值。</li>
+<li>interBrokerProtocolVersion：保存 Broker 间通讯使用的请求版本。它是 Broker 端参数 inter.broker.protocol.version 值。这个参数的主要用途是<strong>确定位移主题消息格式的版本</strong>。</li>
+<li>config：这是一个 OffsetConfig 类型。该类型定义了与位移管理相关的重要参数，比如位移主题日志段大小设置、位移主题备份因子、位移主题分区数配置等。</li>
+<li>replicaManager：副本管理器类。GroupMetadataManager 类使用该字段实现获取分区对象、日志对象以及写入分区消息的目的。</li>
+<li>zkClient：ZooKeeper 客户端。该类中的此字段只有一个目的：从 ZooKeeper 中获取位移主题的分区数。</li>
+</ol>
+<p>除了构造函数所需的字段，该类还定义了其他关键字段，我给你介绍几个非常重要的。</p>
+<p><strong>1.compressionType</strong></p>
+<p><strong>压缩器类型</strong>。Kafka 向位移主题写入消息前，可以选择对消息执行压缩操作。是否压缩，取决于 Broker 端参数 offsets.topic.compression.codec 值，默认是不进行压缩。如果你的位移主题占用的磁盘空间比较多的话，可以考虑启用压缩，以节省资源。</p>
+<p><strong>2.groupMetadataCache</strong></p>
+<p><strong>该字段是 GroupMetadataManager 类上最重要的属性，它</strong> **保存这个 Broker 上 GroupCoordinator 组件管理的所有消费者组元数据。**它的 Key 是消费者组名称，Value 是消费者组元数据，也就是 GroupMetadata。源码通过该字段实现对消费者组的添加、删除和遍历操作。</p>
+<p><strong>3.loadingPartitions</strong></p>
+<p><strong>位移主题下正在执行加载操作的分区号集合</strong>。这里需要注意两点：首先，这些分区都是位移主题分区，也就是 __consumer_offsets 主题下的分区；其次，所谓的加载，是指读取位移主题消息数据，填充 GroupMetadataCache 字段的操作。</p>
+<p><strong>4.ownedPartitions</strong></p>
+<p><strong>位移主题下完成加载操作的分区号集合</strong>。与 loadingPartitions 类似的是，该字段保存的分区也是位移主题下的分区。和 loadingPartitions 不同的是，它保存的分区都是<strong>已经完成加载操作</strong>的分区。</p>
+<p><strong>5.groupMetadataTopicPartitionCount</strong></p>
+<p><strong>位移主题的分区数</strong>。它是 Broker 端参数 offsets.topic.num.partitions 的值，默认是 50 个分区。若要修改分区数，除了变更该参数值之外，你也可以手动创建位移主题，并指定不同的分区数。</p>
+<p>在这些字段中，groupMetadataCache 是最重要的，GroupMetadataManager 类大量使用该字段实现对消费者组的管理。接下来，我们就重点学习一下该类是如何管理消费者组的。</p>
+<h1 id="重要方法">重要方法</h1>
+<p>管理消费者组包含两个方面，对消费者组元数据的管理以及对消费者组位移的管理。组元数据和组位移都是 Coordinator 端重要的消费者组管理对象。</p>
+<h2 id="消费者组元数据管理">消费者组元数据管理</h2>
+<p>消费者组元数据管理分为查询获取组信息、添加组、移除组和加载组信息。从代码复杂度来讲，查询获取、移除和添加的逻辑相对简单，加载的过程稍微费事些。我们先说说查询获取。</p>
+<h3 id="查询获取消费者组元数据">查询获取消费者组元数据</h3>
+<p>GroupMetadataManager 类中查询及获取组数据的方法有很多。大多逻辑简单，你一看就能明白，比如下面的 getGroup 方法和 getOrMaybeCreateGroup 方法：</p>
+<p>// getGroup 方法：返回给定消费者组的元数据信息。<br>
+// 若该组信息不存在，返回 None<br>
+def getGroup(groupId: String): Option[GroupMetadata] = {<br>
+Option(groupMetadataCache.get(groupId))<br>
+}<br>
+// getOrMaybeCreateGroup 方法：返回给定消费者组的元数据信息。<br>
+// 若不存在，则视 createIfNotExist 参数值决定是否需要添加该消费者组<br>
+def getOrMaybeCreateGroup(groupId: String, createIfNotExist: Boolean): Option[GroupMetadata] = {<br>
+if (createIfNotExist)<br>
+// 若不存在且允许添加，则添加一个状态是 Empty 的消费者组元数据对象<br>
+Option(groupMetadataCache.getAndMaybePut(groupId, new GroupMetadata(groupId, Empty, time)))<br>
+else<br>
+Option(groupMetadataCache.get(groupId))<br>
+}</p>
+<p>GroupMetadataManager 类的上层组件 GroupCoordinator 会大量使用这两个方法来获取给定消费者组的数据。这两个方法都会返回给定消费者组的元数据信息，但是它们之间是有区别的。</p>
+<p>对于 getGroup 方法而言，如果该组信息不存在，就返回 None，而这通常表明，消费者组确实不存在，或者是，该组对应的 Coordinator 组件变更到其他 Broker 上了。</p>
+<p>而对于 getOrMaybeCreateGroup 方法而言，若组信息不存在，就根据 createIfNotExist 参数值决定是否需要添加该消费者组。而且，getOrMaybeCreateGroup 方法是在消费者组第一个成员加入组时被调用的，用于把组创建出来。</p>
+<p>在 GroupMetadataManager 类中，还有一些地方也散落着组查询获取的逻辑。不过它们与这两个方法中的代码大同小异，很容易理解，课下你可以自己阅读下。</p>
+<h3 id="移除消费者组元数据">移除消费者组元数据</h3>
+<p>接下来，我们看下如何移除消费者组信息。当 Broker 卸任某些消费者组的 Coordinator 角色时，它需要将这些消费者组从 groupMetadataCache 中全部移除掉，这就是 removeGroupsForPartition 方法要做的事情。我们看下它的源码：</p>
+<p>def removeGroupsForPartition(offsetsPartition: Int,<br>
+onGroupUnloaded: GroupMetadata =&gt; Unit): Unit = {<br>
+// 位移主题分区<br>
+val topicPartition = new TopicPartition(Topic.GROUP_METADATA_TOPIC_NAME, offsetsPartition)<br>
+info(s&quot;Scheduling unloading of offsets and group metadata from $topicPartition&quot;)<br>
+// 创建异步任务，移除组信息和位移信息<br>
+scheduler.schedule(topicPartition.toString, () =&gt; removeGroupsAndOffsets)<br>
+// 内部方法，用于移除组信息和位移信息<br>
+def removeGroupsAndOffsets(): Unit = {<br>
+var numOffsetsRemoved = 0<br>
+var numGroupsRemoved = 0<br>
+inLock(partitionLock) {<br>
+// 移除 ownedPartitions 中特定位移主题分区记录<br>
+ownedPartitions.remove(offsetsPartition)<br>
+// 遍历所有消费者组信息<br>
+for (group &lt;- groupMetadataCache.values) {<br>
+// 如果该组信息保存在特定位移主题分区中<br>
+if (partitionFor(group.groupId) == offsetsPartition) {<br>
+// 执行组卸载逻辑<br>
+onGroupUnloaded(group)<br>
+// 关键步骤！将组信息从 groupMetadataCache 中移除<br>
+groupMetadataCache.remove(group.groupId, group)<br>
+// 把消费者组从 producer 对应的组集合中移除<br>
+removeGroupFromAllProducers(group.groupId)<br>
+// 更新已移除组计数器<br>
+numGroupsRemoved += 1<br>
+// 更新已移除位移值计数器<br>
+numOffsetsRemoved += group.numOffsets<br>
+}<br>
+}<br>
+}<br>
+info(s&quot;Finished unloading $topicPartition. Removed $numOffsetsRemoved cached offsets &quot; +<br>
+s&quot;and $numGroupsRemoved cached groups.&quot;)<br>
+}<br>
+}</p>
+<p>该方法的主要逻辑是，先定义一个内部方法 removeGroupsAndOffsets，然后创建一个异步任务，调用该方法来执行移除消费者组信息和位移信息。</p>
+<p>那么，怎么判断要移除哪些消费者组呢？这里的依据就是<strong>传入的位移主题分区</strong>。每个消费者组及其位移的数据，都只会保存在位移主题的一个分区下。一旦给定了位移主题分区，那么，元数据保存在这个位移主题分区下的消费者组就要被移除掉。removeGroupsForPartition 方法传入的 offsetsPartition 参数，表示 Leader 发生变更的位移主题分区，因此，这些分区保存的消费者组都要从该 Broker 上移除掉。</p>
+<p>具体的执行逻辑是什么呢？我来解释一下。</p>
+<p>首先，异步任务从 ownedPartitions 中移除给定位移主题分区。</p>
+<p>其次，遍历消费者组元数据缓存中的所有消费者组对象，如果消费者组正是在给定位移主题分区下保存的，就依次执行下面的步骤。</p>
+<ol>
+<li>第 1 步，调用 onGroupUnloaded 方法执行组卸载逻辑。这个方法的逻辑是上层组件 GroupCoordinator 传过来的。它主要做两件事情：将消费者组状态变更到 Dead 状态；封装异常表示 Coordinator 已发生变更，然后调用回调函数返回。</li>
+<li>第 2 步，把消费者组信息从 groupMetadataCache 中移除。这一步非常关键，目的是彻底清除掉该组的“痕迹”。</li>
+<li>第 3 步，把消费者组从 producer 对应的组集合中移除。这里的 producer，是给 Kafka 事务用的。</li>
+<li>第 4 步，增加已移除组计数器。</li>
+<li>第 5 步，更新已移除位移值计数器。</li>
+</ol>
+<p>到这里，方法结束。</p>
+<h3 id="添加消费者组元数据">添加消费者组元数据</h3>
+<p>下面，我们学习添加消费者组的管理方法，即 addGroup。它特别简单，仅仅是调用 putIfNotExists 将给定组添加进 groupMetadataCache 中而已。代码如下：</p>
+<p>def addGroup(group: GroupMetadata): GroupMetadata = {<br>
+val currentGroup = groupMetadataCache.putIfNotExists(group.groupId, group)<br>
+if (currentGroup != null) {<br>
+currentGroup<br>
+} else {<br>
+group<br>
+}<br>
+}</p>
+<h3 id="加载消费者组元数据">加载消费者组元数据</h3>
+<p>现在轮到相对复杂的加载消费者组了。GroupMetadataManager 类中定义了一个 loadGroup 方法执行对应的加载过程。</p>
+<p>private def loadGroup(<br>
+group: GroupMetadata, offsets: Map[TopicPartition, CommitRecordMetadataAndOffset],<br>
+pendingTransactionalOffsets: Map[Long, mutable.Map[TopicPartition, CommitRecordMetadataAndOffset]]): Unit = {<br>
+trace(s&quot;Initialized offsets $offsets for group ${group.groupId}&quot;)<br>
+// 初始化消费者组的位移信息<br>
+group.initializeOffsets(offsets, pendingTransactionalOffsets.toMap)<br>
+// 调用 addGroup 方法添加消费者组<br>
+val currentGroup = addGroup(group)<br>
+if (group != currentGroup)<br>
+debug(s&quot;Attempt to load group ${group.groupId} from log with generation ${group.generationId} failed &quot; +<br>
+s&quot;because there is already a cached group with generation ${currentGroup.generationId}&quot;)<br>
+}</p>
+<p>该方法的逻辑有两步。</p>
+<p>第 1 步，通过 initializeOffsets 方法，将位移值添加到 offsets 字段标识的消费者组提交位移元数据中，实现加载消费者组订阅分区提交位移的目的。</p>
+<p>第 2 步，调用 addGroup 方法，将该消费者组元数据对象添加进消费者组元数据缓存，实现加载消费者组元数据的目的。</p>
+<h2 id="消费者组位移管理">消费者组位移管理</h2>
+<p>除了消费者组的管理，GroupMetadataManager 类的另一大类功能，是提供消费者组位移的管理，主要包括位移数据的保存和查询。我们总说，位移主题是保存消费者组位移信息的地方。实际上，<strong>当消费者组程序在查询位移时，Kafka 总是从内存中的位移缓存数据查询，而不会直接读取底层的位移主题数据。</strong></p>
+<h3 id="保存消费者组位移">保存消费者组位移</h3>
+<p>storeOffsets 方法负责保存消费者组位移。该方法的代码很长，我先画一张图来展示下它的完整流程，帮助你建立起对这个方法的整体认知。接下来，我们再从它的方法签名和具体代码两个维度，来具体了解一下它的执行逻辑。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/cceb798ce8e23486b2a44d60a3af8694.png" alt=""></p>
+<p>我先给你解释一下保存消费者组位移的全部流程。</p>
+<p><strong>首先</strong>，storeOffsets 方法要过滤出满足特定条件的待保存位移信息。是否满足特定条件，要看 validateOffsetMetadataLength 方法的返回值。这里的特定条件，是指位移提交记录中的自定义数据大小，要小于 Broker 端参数 offset.metadata.max.bytes 的值，默认值是 4KB。</p>
+<p>如果没有一个分区满足条件，就构造 OFFSET_METADATA_TOO_LARGE 异常，并调用回调函数。这里的回调函数执行发送位移提交 Response 的动作。</p>
+<p>倘若有分区满足了条件，<strong>接下来</strong>，方法会判断当前 Broker 是不是该消费者组的 Coordinator，如果不是的话，就构造 NOT_COORDINATOR 异常，并提交给回调函数；如果是的话，就构造位移主题消息，并将消息写入进位移主题下。</p>
+<p><strong>然后</strong>，调用一个名为 putCacheCallback 的内置方法，填充 groupMetadataCache 中各个消费者组元数据中的位移值，<strong>最后</strong>，调用回调函数返回。</p>
+<p>接下来，我们结合代码来查看下 storeOffsets 方法的实现逻辑。</p>
+<p>首先我们看下它的方法签名。既然是保存消费者组提交位移的，那么，我们就要知道上层调用方都给这个方法传入了哪些参数。</p>
+<p>// group：消费者组元数据<br>
+// consumerId：消费者组成员 ID<br>
+// offsetMetadata：待保存的位移值，按照分区分组<br>
+// responseCallback：处理完成后的回调函数<br>
+// producerId：事务型 Producer ID<br>
+// producerEpoch：事务型 Producer Epoch 值<br>
+def storeOffsets(<br>
+group: GroupMetadata,<br>
+consumerId: String,<br>
+offsetMetadata: immutable.Map[TopicPartition, OffsetAndMetadata],<br>
+responseCallback: immutable.Map[TopicPartition, Errors] =&gt; Unit,<br>
+producerId: Long = RecordBatch.NO_PRODUCER_ID,<br>
+producerEpoch: Short = RecordBatch.NO_PRODUCER_EPOCH): Unit = {<br>
+&hellip;&hellip;<br>
+}</p>
+<p>这个方法接收 6 个参数，它们的含义我都用注释的方式标注出来了。producerId 和 producerEpoch 这两个参数是与 Kafka 事务相关的，你简单了解下就行。我们要重点掌握前面 4 个参数的含义。</p>
+<ol>
+<li>group：消费者组元数据信息。该字段的类型就是我们之前学到的 GroupMetadata 类。</li>
+<li>consumerId：消费者组成员 ID，仅用于 DEBUG 调试。</li>
+<li>offsetMetadata：待保存的位移值，按照分区分组。</li>
+<li>responseCallback：位移保存完成后需要执行的回调函数。</li>
+</ol>
+<p>接下来，我们看下 storeOffsets 的代码。为了便于你理解，我删除了与 Kafka 事务操作相关的部分。</p>
+<p>// 过滤出满足特定条件的待保存位移数据<br>
+val filteredOffsetMetadata = offsetMetadata.filter { case (_, offsetAndMetadata) =&gt;<br>
+validateOffsetMetadataLength(offsetAndMetadata.metadata)<br>
+}<br>
+&hellip;&hellip;<br>
+val isTxnOffsetCommit = producerId != RecordBatch.NO_PRODUCER_ID<br>
+// 如果没有任何分区的待保存位移满足特定条件<br>
+if (filteredOffsetMetadata.isEmpty) {<br>
+// 构造 OFFSET_METADATA_TOO_LARGE 异常并调用 responseCallback 返回<br>
+val commitStatus = offsetMetadata.map { case (k, _) =&gt; k -&gt; Errors.OFFSET_METADATA_TOO_LARGE }<br>
+responseCallback(commitStatus)<br>
+None<br>
+} else {<br>
+// 查看当前 Broker 是否为给定消费者组的 Coordinator<br>
+getMagic(partitionFor(group.groupId)) match {<br>
+// 如果是 Coordinator<br>
+case Some(magicValue) =&gt;<br>
+val timestampType = TimestampType.CREATE_TIME<br>
+val timestamp = time.milliseconds()<br>
+// 构造位移主题的位移提交消息<br>
+val records = filteredOffsetMetadata.map { case (topicPartition, offsetAndMetadata) =&gt;<br>
+val key = GroupMetadataManager.offsetCommitKey(group.groupId, topicPartition)<br>
+val value = GroupMetadataManager.offsetCommitValue(offsetAndMetadata, interBrokerProtocolVersion)<br>
+new SimpleRecord(timestamp, key, value)<br>
+}<br>
+val offsetTopicPartition = new TopicPartition(Topic.GROUP_METADATA_TOPIC_NAME, partitionFor(group.groupId))<br>
+// 为写入消息创建内存 Buffer<br>
+val buffer = ByteBuffer.allocate(AbstractRecords.estimateSizeInBytes(magicValue, compressionType, records.asJava))<br>
+if (isTxnOffsetCommit &amp;&amp; magicValue &lt; RecordBatch.MAGIC_VALUE_V2)<br>
+throw Errors.UNSUPPORTED_FOR_MESSAGE_FORMAT.exception(&ldquo;Attempting to make a transaction offset commit with an invalid magic: &quot; + magicValue)<br>
+val builder = MemoryRecords.builder(buffer, magicValue, compressionType, timestampType, 0L, time.milliseconds(),<br>
+producerId, producerEpoch, 0, isTxnOffsetCommit, RecordBatch.NO_PARTITION_LEADER_EPOCH)<br>
+records.foreach(builder.append)<br>
+val entries = Map(offsetTopicPartition -&gt; builder.build())<br>
+// putCacheCallback 函数定义&hellip;&hellip;<br>
+if (isTxnOffsetCommit) {<br>
+&hellip;&hellip;<br>
+} else {<br>
+group.inLock {<br>
+group.prepareOffsetCommit(offsetMetadata)<br>
+}<br>
+}<br>
+// 写入消息到位移主题，同时调用 putCacheCallback 方法更新消费者元数据<br>
+appendForGroup(group, entries, putCacheCallback)<br>
+// 如果是 Coordinator<br>
+case None =&gt;<br>
+// 构造 NOT_COORDINATOR 异常并提交给 responseCallback 方法<br>
+val commitStatus = offsetMetadata.map {<br>
+case (topicPartition, _) =&gt;<br>
+(topicPartition, Errors.NOT_COORDINATOR)<br>
+}<br>
+responseCallback(commitStatus)<br>
+None<br>
+}<br>
+}</p>
+<p>我为方法的关键步骤都标注了注释，具体流程前面我也介绍过了，应该很容易理解。不过，这里还需要注意两点，也就是 appendForGroup 和 putCacheCallback 方法。前者是向位移主题写入消息；后者是填充元数据缓存的。我们结合代码来学习下。</p>
+<p>appendForGroup 方法负责写入消息到位移主题，同时传入 putCacheCallback 方法，更新消费者元数据。以下是它的代码：</p>
+<p>private def appendForGroup(<br>
+group: GroupMetadata,<br>
+records: Map[TopicPartition, MemoryRecords],<br>
+callback: Map[TopicPartition, PartitionResponse] =&gt; Unit): Unit = {<br>
+replicaManager.appendRecords(<br>
+timeout = config.offsetCommitTimeoutMs.toLong,<br>
+requiredAcks = config.offsetCommitRequiredAcks,<br>
+internalTopicsAllowed = true,<br>
+origin = AppendOrigin.Coordinator,<br>
+entriesPerPartition = records,<br>
+delayedProduceLock = Some(group.lock),<br>
+responseCallback = callback)<br>
+}</p>
+<p>可以看到，该方法就是调用 ReplicaManager 的 appendRecords 方法，将消息写入到位移主题中。</p>
+<p>下面，我们再关注一下 putCacheCallback 方法的实现，也就是将写入的位移值填充到缓存中。我先画一张图来展示下 putCacheCallback 的逻辑。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/6ecc85692ed8a4d549bed5e1b90250e0.png" alt=""></p>
+<p>现在，我们结合代码，学习下它的逻辑实现。</p>
+<p>def putCacheCallback(responseStatus: Map[TopicPartition, PartitionResponse]): Unit = {<br>
+// 确保消息写入到指定位移主题分区，否则抛出异常<br>
+if (responseStatus.size != 1 || !responseStatus.contains(offsetTopicPartition))<br>
+throw new IllegalStateException(&ldquo;Append status %s should only have one partition %s&rdquo;<br>
+.format(responseStatus, offsetTopicPartition))<br>
+// 更新已提交位移数指标<br>
+offsetCommitsSensor.record(records.size)<br>
+val status = responseStatus(offsetTopicPartition)<br>
+val responseError = group.inLock {<br>
+// 写入结果没有错误<br>
+if (status.error == Errors.NONE) {<br>
+// 如果不是 Dead 状态<br>
+if (!group.is(Dead)) {<br>
+filteredOffsetMetadata.foreach { case (topicPartition, offsetAndMetadata) =&gt;<br>
+if (isTxnOffsetCommit)<br>
+&hellip;&hellip;<br>
+else<br>
+// 调用 GroupMetadata 的 onOffsetCommitAppend 方法填充元数据<br>
+group.onOffsetCommitAppend(topicPartition, CommitRecordMetadataAndOffset(Some(status.baseOffset), offsetAndMetadata))<br>
+}<br>
+}<br>
+Errors.NONE<br>
+// 写入结果有错误<br>
+} else {<br>
+if (!group.is(Dead)) {<br>
+&hellip;&hellip;<br>
+filteredOffsetMetadata.foreach { case (topicPartition, offsetAndMetadata) =&gt;<br>
+if (isTxnOffsetCommit)<br>
+group.failPendingTxnOffsetCommit(producerId, topicPartition)<br>
+else<br>
+// 取消未完成的位移消息写入<br>
+group.failPendingOffsetWrite(topicPartition, offsetAndMetadata)<br>
+}<br>
+}<br>
+&hellip;&hellip;<br>
+// 确认异常类型<br>
+status.error match {<br>
+case Errors.UNKNOWN_TOPIC_OR_PARTITION<br>
+| Errors.NOT_ENOUGH_REPLICAS<br>
+| Errors.NOT_ENOUGH_REPLICAS_AFTER_APPEND =&gt;<br>
+Errors.COORDINATOR_NOT_AVAILABLE</p>
+<pre><code>    case Errors.NOT_LEADER_FOR_PARTITION  
+         | Errors.KAFKA_STORAGE_ERROR =&gt;  
+      Errors.NOT_COORDINATOR  
+
+    case Errors.MESSAGE_TOO_LARGE  
+         | Errors.RECORD_LIST_TOO_LARGE  
+         | Errors.INVALID_FETCH_SIZE =&gt;  
+      Errors.INVALID_COMMIT_OFFSET_SIZE  
+    case other =&gt; other  
+  }  
+}  
+</code></pre>
+<p>}<br>
+// 利用异常类型构建提交返回状态<br>
+val commitStatus = offsetMetadata.map { case (topicPartition, offsetAndMetadata) =&gt;<br>
+if (validateOffsetMetadataLength(offsetAndMetadata.metadata))<br>
+(topicPartition, responseError)<br>
+else<br>
+(topicPartition, Errors.OFFSET_METADATA_TOO_LARGE)<br>
+}<br>
+// 调用回调函数<br>
+responseCallback(commitStatus)<br>
+}</p>
+<p>putCacheCallback 方法的主要目的，是将多个消费者组位移值填充到 GroupMetadata 的 offsets 元数据缓存中。</p>
+<p><strong>首先</strong>，该方法要确保位移消息写入到指定位移主题分区，否则就抛出异常。</p>
+<p><strong>之后</strong>，更新已提交位移数指标，然后判断写入结果是否有错误。</p>
+<p>如果没有错误，只要组状态不是 Dead 状态，就调用 GroupMetadata 的 onOffsetCommitAppend 方法填充元数据。onOffsetCommitAppend 方法的主体逻辑，是将消费者组订阅分区的位移值写入到 offsets 字段保存的集合中。当然，如果状态是 Dead，则什么都不做。</p>
+<p>如果刚才的写入结果有错误，那么，就通过 failPendingOffsetWrite 方法取消未完成的位移消息写入。</p>
+<p><strong>接下来</strong>，代码要将日志写入的异常类型转换成表征提交状态错误的异常类型。具体来说，就是将 UNKNOWN_TOPIC_OR_PARTITION、NOT_LEADER_FOR_PARTITION 和 MESSAGE_TOO_LARGE 这样的异常，转换到 COORDINATOR_NOT_AVAILABLE 和 NOT_COORDINATOR 这样的异常。之后，再将这些转换后的异常封装进 commitStatus 字段中传给回调函数。</p>
+<p><strong>最后</strong>，调用回调函数返回。至此，方法结束。</p>
+<p>好了，保存消费者组位移信息的 storeOffsets 方法，我们就学完了，它的关键逻辑，是构造位移主题消息并写入到位移主题，然后将位移值填充到消费者组元数据中。</p>
+<h3 id="查询消费者组位移">查询消费者组位移</h3>
+<p>现在，我再说说查询消费者组位移，也就是 getOffsets 方法的代码实现。比起 storeOffsets，这个方法要更容易理解。我们看下它的源码：</p>
+<p>def getOffsets(<br>
+groupId: String,<br>
+requireStable: Boolean,<br>
+topicPartitionsOpt: Option[Seq[TopicPartition]]): Map[TopicPartition, PartitionData] = {<br>
+&hellip;&hellip;<br>
+// 从 groupMetadataCache 字段中获取指定消费者组的元数据<br>
+val group = groupMetadataCache.get(groupId)<br>
+// 如果没有组数据，返回空数据<br>
+if (group == null) {<br>
+topicPartitionsOpt.getOrElse(Seq.empty[TopicPartition]).map { topicPartition =&gt;<br>
+val partitionData = new PartitionData(OffsetFetchResponse.INVALID_OFFSET,<br>
+Optional.empty(), &ldquo;&rdquo;, Errors.NONE)<br>
+topicPartition -&gt; partitionData<br>
+}.toMap<br>
+// 如果存在组数据<br>
+} else {<br>
+group.inLock {<br>
+// 如果组处于 Dead 状态，则返回空数据<br>
+if (group.is(Dead)) {<br>
+topicPartitionsOpt.getOrElse(Seq.empty[TopicPartition]).map { topicPartition =&gt;<br>
+val partitionData = new PartitionData(OffsetFetchResponse.INVALID_OFFSET,<br>
+Optional.empty(), &ldquo;&rdquo;, Errors.NONE)<br>
+topicPartition -&gt; partitionData<br>
+}.toMap<br>
+} else {<br>
+val topicPartitions = topicPartitionsOpt.getOrElse(group.allOffsets.keySet)<br>
+topicPartitions.map { topicPartition =&gt;<br>
+if (requireStable &amp;&amp; group.hasPendingOffsetCommitsForTopicPartition(topicPartition)) {<br>
+topicPartition -&gt; new PartitionData(OffsetFetchResponse.INVALID_OFFSET,<br>
+Optional.empty(), &ldquo;&rdquo;, Errors.UNSTABLE_OFFSET_COMMIT)<br>
+} else {<br>
+val partitionData = group.offset(topicPartition) match {<br>
+// 如果没有该分区位移数据，返回空数据<br>
+case None =&gt;<br>
+new PartitionData(OffsetFetchResponse.INVALID_OFFSET,<br>
+Optional.empty(), &ldquo;&rdquo;, Errors.NONE)<br>
+// 从消费者组元数据中返回指定分区的位移数据<br>
+case Some(offsetAndMetadata) =&gt;<br>
+new PartitionData(offsetAndMetadata.offset,<br>
+offsetAndMetadata.leaderEpoch, offsetAndMetadata.metadata, Errors.NONE)<br>
+}<br>
+topicPartition -&gt; partitionData<br>
+}<br>
+}.toMap<br>
+}<br>
+}<br>
+}<br>
+}</p>
+<p>getOffsets 方法首先会读取 groupMetadataCache 中的组元数据，如果不存在对应的记录，则返回空数据集，如果存在，就接着判断组是否处于 Dead 状态。</p>
+<p>如果是 Dead 状态，就说明消费者组已经被销毁了，位移数据也被视为不可用了，依然返回空数据集；若状态不是 Dead，就提取出消费者组订阅的分区信息，再依次为它们获取对应的位移数据并返回。至此，方法结束。</p>
+<h1 id="总结">总结</h1>
+<p>今天，我们学习了 GroupMetadataManager 类的源码。作为消费者组管理器，它负责管理消费者组的方方面面。其中，非常重要的两个管理功能是消费者组元数据管理和消费者组位移管理，分别包括查询获取、移除、添加和加载消费者组元数据，以及保存和查询消费者组位移，这些方法是上层组件 GroupCoordinator 倚重的重量级功能载体，你一定要彻底掌握它们。</p>
+<p>我画了一张思维导图，帮助你复习一下今天的重点内容。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/5b40755ca328b0c448e8c367296bffd0.png" alt=""></p>
+<p>实际上，GroupMetadataManager 类的地位举足轻重。虽然它在 Coordinator 组件中不显山不露水，但却是一些线上问题的根源所在。</p>
+<p>我再跟你分享一个小案例。</p>
+<p>之前，我碰到过一个问题：在消费者组成员超多的情况下，无法完成位移加载，这导致 Consumer 端总是接收到 Marking the coordinator dead 的错误。</p>
+<p>当时，我查遍各种资料，都无法定位问题，最终，还是通过阅读源码，发现是这个类的 doLoadGroupsAndOffsets 方法中创建的 buffer 过小导致的。后来，通过调大 offsets.load.buffer.size 参数值，我们顺利地解决了问题。</p>
+<p>试想一下，如果当时没有阅读这部分的源码，仅凭日志，我们肯定无法解决这个问题。因此，我们花三节课的时间，专门阅读 GroupMetadataManager 类源码，是非常值得的。下节课，我将带你继续研读 GroupMetadataManager 源码，去探寻有关位移主题的那些代码片段。</p>
+<h1 id="课后讨论">课后讨论</h1>
+<p>请思考这样一个问题：在什么场景下，需要移除 GroupMetadataManager 中保存的消费者组记录？</p>
+<p>欢迎在留言区写下你的思考和答案，跟我交流讨论，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">Kafka核心源码解读</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/29__copy-on-write%E6%A8%A1%E5%BC%8F%E4%B8%8D%E6%98%AF%E5%BB%B6%E6%97%B6%E7%AD%96%E7%95%A5%E7%9A%84cow/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">29__Copy-on-Write模式：不是延时策略的COW</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B5%8F%E8%A7%88%E5%99%A8%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/29__http_1http%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/">
+            <span class="next-text nav-default">29__HTTP_1：HTTP性能优化</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>16采样设计：资源有限，如何实现数据的低损耗、高收集？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。
+但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/16%E9%87%87%E6%A0%B7%E8%AE%BE%E8%AE%A1%E8%B5%84%E6%BA%90%E6%9C%89%E9%99%90%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%95%B0%E6%8D%AE%E7%9A%84%E4%BD%8E%E6%8D%9F%E8%80%97%E9%AB%98%E6%94%B6%E9%9B%86/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/16%E9%87%87%E6%A0%B7%E8%AE%BE%E8%AE%A1%E8%B5%84%E6%BA%90%E6%9C%89%E9%99%90%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E6%95%B0%E6%8D%AE%E7%9A%84%E4%BD%8E%E6%8D%9F%E8%80%97%E9%AB%98%E6%94%B6%E9%9B%86/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="16采样设计：资源有限，如何实现数据的低损耗、高收集？">
+  <meta property="og:description" content="我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。
+但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="应用性能分析实战">
+
+  <meta itemprop="name" content="16采样设计：资源有限，如何实现数据的低损耗、高收集？">
+  <meta itemprop="description" content="我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。
+但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="3758">
+  <meta itemprop="keywords" content="应用性能分析实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="16采样设计：资源有限，如何实现数据的低损耗、高收集？">
+  <meta name="twitter:description" content="我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。
+但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">16采样设计：资源有限，如何实现数据的低损耗、高收集？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 3758 字 </span>
+          <span class="more-meta"> 预计阅读 8 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents"></nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。</p>
+<p>但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。</p>
+<p>那如何平衡采样、数据、资源的关系呢？这时候就需要我们来设计采样策略。今天我会分享以下四种采样策略，通过对课程的学习，让你在建设 APM 的数据时，可以尽最大可能地收集到用户想要的数据。</p>
+<p>百分比采样策略</p>
+<p>百分比采样策略是最常见的采样策略。高负载项目产生的 APM 数据过多，监控压力过大时，默认的止损策略就会对这些高负载项目开启百分比采样。</p>
+<p>策略的实现也非常简单。明细数据中的分布式链路数据，我们可以根据 TraceId 进行哈希方法的运算，从而得到 hashCode；然后将 hashCode 与 100 取余，获取 0<del>99 的任意整数。例如，我们的采样百分比为 10%，当生成 TraceId 或是发送监控数据时，通过放行 0</del>9 的取余数据，即可实现百分比采样策略。</p>
+<p>这里需要注意的是采样时机。</p>
+<p>如果在生成 TraceId 时进行采样，可能需要线程本地变量将任务线程标识为丢弃的数据。这样不仅可以减低服务端的负载，还可以减轻客户端的负载，但其实现成本相对较高。</p>
+<p>另外如果采样的时机在“发送监控数据”时，这样的采样方案只能对 APM 集群进行减负。</p>
+<p>基于固定的百分比采样策略适用于以下场景。</p>
+<p>第一个场景是针对底层的基础服务</p>
+<p>这些服务属于服务集群的最底层，他们的 APM 监控数据是最多的。通过对底层服务设置百分比采样策略，可以极大减轻监控集群的负载；而且底层服务的监控数据由于采样被丢弃，基本不会影响定位问题的效率。</p>
+<p>比如底层服务的链路数据丢失，链路视图只会缺少最底层的链路节点监控数据，不会造成整个分布式链路的“断链”。所以你的监控集群出现负载压力时，建议对底层服务配置百分比采样率为 0%~10%。</p>
+<p>第二个场景是上线前的压测报告</p>
+<p>RD 在上线需求功能前，会进行压测报告的制定。根据对“11 | 资源节点树：通过 Sentinel 无侵入实现流量链生成规则”的学习，我们得知目前市场上的 APM 系统的侵入度越来越低，以至只有线上和集成环境才会部署 APM 监控，而本地的开发是无感知的。所以当我们开发一些高性能功能代码，如使用多线程、事件总线等高阶技术时，我们需要进行不同维度的百分比采样策略的压测方案，以证明 APM 系统对高阶技术的支持情况。</p>
+<p>这里我建议百分比采样的三个维度是 0%、20%、100%。</p>
+<p>第三个场景是大促场景</p>
+<p>在春节投放广告、双十一大促等场景，为了尽全力释放出集群的能力，并且屏蔽在极端流量下 APM 系统对应用服务集群可能带来的影响，通过关闭部分监控功能，实现 0% 的百分比采样策略。</p>
+<p>链路特征采样策略</p>
+<p>百分比采样策略因为有极强的鲁棒性，所以配置策略后，很可能造成数据无法收集这一问题。为了解决这一问题，我们可以在不了解业务的情况下，针对链路的特征设置采样配置。</p>
+<p>关于设计链路的标签，我们可以从几个维度去进行标签的规划。</p>
+<p>Span 的耗时时间：通过耗时时间，可以判断应用服务内部是否存在执行时间过长的代码块，进而反映是否存在任务线程执行过长的情况。</p>
+<p>Span 的类型和数量：对 Span 的类型和数量打标记。</p>
+<p>Span 是否存在异常：顾名思义，就是检查链路中的所有 Span 是否存在异常。</p>
+<p>通过对以上三个标签策略的组合采样，就可以将百分比采样的效果进行优化。</p>
+<p>基于链路特征的采样策略，适用于以下场景。</p>
+<p>慢查链路场景</p>
+<p>通过检查链路中是否存在查询 DB 时间过长的 Span 的采样策略，就可以实现 100% 收集慢查询数据。在数据上报到收集端后，通过 TopN 的采样存储模计算，就可以完成数据的报警和展示。</p>
+<p>链路优化场景</p>
+<p>可以设计一个监控数据的 Span 数量超过一定数量时，就必须上报到后端收集器，比如链路数据中存在超过 200 的调用远端的 Span。因为当一个任务线程存在调用远端的次数非常多时，就需要考虑是否存在循环调用的场景，可以通过批量接口进行优化。</p>
+<p>异常链路场景通过全部采集链路数据中存在异常的 Span 的监控数据，当数据发送到收集端，就可以完成报警和稳定性数据精准计算。</p>
+<p>业务特征采样策略</p>
+<p>链路特征采样策略乍看起来很不错，不用理解业务，就可以实现问题链路的全量数据采集。但现实远非这么简单，就比如要实现新上线功能的监控数据全部采集，链路特征都是基于应用服务集群中的单个应用设置采样策略，所以无法做到采集新功能的监控设计。</p>
+<p>这时就需要设计业务特征采样策略，来解决这些更偏向于业务的监控采样难题了。</p>
+<p>业务特征相对于链路特征更加具象化，让原本使用抽象的链路特征描述监控数据，转化为更具体、更易理解的业务特征来描述监控数据。</p>
+<p>好处显而易见，即最大程度地将采样策略赋能于一线开发人员，让所有采集规则都有兜底策略，这也是企业落地采样策略的关键所在。毕竟企业级产品要解决的是面面俱到的问题，确保当前有限的通用采样策略无法满足时，可以通过业务特征的采样策略保证 APM 监控数据顺利采集。</p>
+<p>【如何通过技术框架提取业务特征？】</p>
+<p>那如何提取业务特征呢？可以通过驱动业务开展的四大技术框架进行设计和落地。</p>
+<p>实现与用户交互需求的HTTP 调用框架</p>
+<p>在服务集群中实现应用服务之间实时调用功能的RPC 调用框架</p>
+<p>实现发布-订阅功能的消息队列框架</p>
+<p>实现定时执行任务功能的任务调度框架</p>
+<p>基于业务特征的采样策略是根据业务流量的特征进行采样，如我们使用最多的 HTTP 调用框架，业务特征是从用户操作浏览器页面生成的请求信息中获取，筛选特征方式可以是 request.path（用户请求路径）或是 request.header.attribute（请求头中的埋点属性）等。</p>
+<p>通过匹配新功能的用户请求路径，如采集用户在交易场景中的下单接口的请求路径。当链路满足以上业务特征时，可以优先全量采集。</p>
+<p>其余 RPC 调用框架、消息队列框架、任务调度框架也可以根据以上方案去实现。</p>
+<p>需要注意的是，要实现集群维度的全量采集，需要在链路传输上将“强制采用字段”这一设置开启。以 SkyWalking 的链路传输协议为例，协议中的第一个属性为采样标记，将采样标记设置开启后，此任务线程引起下游的所有监控数据都会被最高优先级的采集到后端存储。</p>
+<p>基于业务特征采样策略适用于如下场景：</p>
+<p>链路特征采样策略无法满足的采样场景；</p>
+<p>新功能上线后，建议新功能最下游的应用服务或是面向用户交互的应用服务，开启新功能强制采样 15 天；</p>
+<p>老功能重构，初步梳理上游依赖。</p>
+<p>前面三种最常见的采样策略我们学习完了，你可能会发现一个问题：那就是一旦系统出现问题，已有的采样策略是无法保证，采集到全部记录着问题的 APM 数据的。</p>
+<p>动态异常采样策略</p>
+<p>这时就需要使用动态异常采样策略，来尽可能收集到全部的异常数据。</p>
+<p>如下图所示，我们先看正常的应用服务监控架构。</p>
+<p>整体上看，服务集群处理用户请求；</p>
+<p>在集群内部，服务 A 负责响应用户请求，然后调用服务 B 来完整地处理用户请求；</p>
+<p>服务 A 和服务 B 都接入了 APM 系统，将数据发送给 APM 收集器。</p>
+<p>试想如果请求量很大，服务 AB 都开启了采样，这时如果服务 B 在执行过程中出现异常，使用异常收集的链路特征采样策略，确保了服务 B 执行过程中，出现异常可以收集异常的 APM 监控数据；可是服务无法通知下游服务 A 收集相关的数据。</p>
+<p>这也是刚讲的前三个采样模型的共同难点，就是上游服务发生异常，无法告知下游服务进行采集相关联的监控数据。</p>
+<p>为了解决这个问题，需要是扩展跨语言交互协议和引入 APM 配置中心来解决这个问题。</p>
+<p>以 SkyWalking 为例，协议中入口服务（entryApplicationInstanceId）和入口服务方法（entryOperationName）属性，当服务 B 发生异常时，将异常关联的入口服务和入口方法上报给 APM 配置中心，配置中心下发配置到各个应用服务节点。</p>
+<p>这样一来，此分布式链路请求经过各个服务节点时，就会强制采集了。开启动态异常采用策略，可以极可能少地丢弃与上述问题相关的监控数据。</p>
+<p>总结与思考</p>
+<p>今天的课程，我带你回顾了四种采样策略。</p>
+<p>两种通用的固定采样策略：百分比采样策略、链路特征采样策略，这两个策略可以由复杂 APM 集群建设的 RD 统一配置；</p>
+<p>之后讲述了业务特征采样策略，这是企业级落地过程中的兜底策略；</p>
+<p>最后讲述了动态异常采样策略，这个策略可以极大地确保整体集群采集异常监控数据的采集率。</p>
+<p>那你在工作中使用过或是设计过哪些采样策略呢？解决了什么问题？效果怎么样呢？欢迎在评论区写下你的思考，期待与你的讨论。</p>
+<p>-&ndash; ### 精选评论 ##### **聪： &gt; 百分比采样策略因为有这极强的鲁棒性，所以是配置策略后 。 这句写的有问题吧。啥叫鲁棒性 ######     讲师回复： &gt;     感谢指错，此句话已更改。鲁棒性，就是简单且稳定的策略。想要详细了解鲁棒性，可以百度一下哦 ##### **2498： &gt; 老师，你好，针对动态异常采样策略那里我有三点疑惑:1、用户请求服务A，然后服务A调用服务B,那对于服务B来说，服务A不应该是属于上游吗？文章里说是下游。2、当服务A调用服务B时，如果是异步调用，当服务B发生异常上报配置中心，然后配置中心下发通知到服务A之前，服务A是否早已将数据上报或已丢弃了呢?3、关于动态异常采样策略这个方案，skywalking目前是已经落地了还是需要业务方自己实现呢？ ######     讲师回复： &gt;     1 按照提供服务的方向梳理上下游 2 即使是同步接了配置中心也不能保证，A节点数据被强制采集，A强制采集的时机为接收配置中心配置时间，在资源有限的情况下，采集率是逐步升级策略维度，永远达不到必踩。 3 需要自己实现</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E5%BA%94%E7%94%A8%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98/">应用性能分析实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java-%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E5%AE%9E%E6%88%9821%E8%AE%B2/16%E6%A1%88%E4%BE%8B%E5%88%86%E6%9E%90%E5%B8%B8%E8%A7%81java%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96%E6%B3%95%E5%88%99/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">16案例分析：常见Java代码优化法则</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%A7%A3%E8%AF%BB%E4%BD%A0%E8%BA%AB%E8%BE%B9%E7%9A%84%E7%BB%8F%E6%B5%8E%E5%AD%A6/16%E6%88%BF%E5%B1%8B%E4%B9%B0%E5%8D%96%E8%AF%B7%E5%8A%A1%E5%BF%85%E9%87%8D%E8%A7%86%E6%9C%BA%E4%BC%9A%E6%88%90%E6%9C%AC/">
+            <span class="next-text nav-default">16房屋买卖：请务必重视机会成本</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

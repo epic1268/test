@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>29__基准测试框架JMH（下） - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="今天我们来继续学习基准测试框架 JMH。
+@Fork 和 @BenchmarkMode 在上一篇的末尾，我们已经运行过由 JMH 项目编译生成的 jar 包了。下面是它的输出结果：
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 $ java -jar target/benchmarks.jar ... # JMH version: 1.21 # VM version: JDK 10.0.2, Java HotSpot(TM) 64-Bit Server VM, 10.0.2&#43;13 # VM invoker: /Library/Java/JavaVirtualMachines/jdk-10.0.2.jdk/Contents/Home/bin/java # VM options: &lt;none&gt; # Warmup: 5 iterations, 10 s each # Measurement: 5 iterations, 10 s each # Timeout: 10 min per iteration # Threads: 1 thread, will synchronize iterations # Benchmark mode: Throughput, ops/time # Benchmark: org.sample.MyBenchmark.testMethod # Run progress: 0,00% complete, ETA 00:08:20 # Fork: 1 of 5 # Warmup Iteration 1: 1023500,647 ops/s # Warmup Iteration 2: 1030767,909 ops/s # Warmup Iteration 3: 1018212,559 ops/s # Warmup Iteration 4: 1002045,519 ops/s # Warmup Iteration 5: 1004210,056 ops/s Iteration 1: 1010251,342 ops/s Iteration 2: 1005717,344 ops/s Iteration 3: 1004751,523 ops/s Iteration 4: 1003034,640 ops/s Iteration 5: 997003,830 ops/s # Run progress: 20,00% complete, ETA 00:06:41 # Fork: 2 of 5 ... # Run progress: 80,00% complete, ETA 00:01:40 # Fork: 5 of 5 # Warmup Iteration 1: 988321,959 ops/s # Warmup Iteration 2: 999486,531 ops/s # Warmup Iteration 3: 1004856,886 ops/s # Warmup Iteration 4: 1004810,860 ops/s # Warmup Iteration 5: 1002332,077 ops/s Iteration 1: 1011871,670 ops/s Iteration 2: 1002653,844 ops/s Iteration 3: 1003568,030 ops/s Iteration 4: 1002724,752 ops/s Iteration 5: 1001507,408 ops/s Result &#34;org.sample.MyBenchmark.testMethod&#34;: 1004801,393 ±(99.9%) 4055,462 ops/s [Average] (min, avg, max) = (992193,459, 1004801,393, 1014504,226), stdev = 5413,926 CI (99.9%): [1000745,931, 1008856,856] (assumes normal distribution) # Run complete. Total time: 00:08:22 ... Benchmark Mode Cnt Score Error Units MyBenchmark.testMethod thrpt 25 1004801,393 ± 4055,462 ops/s 在上面这段输出中，我们暂且忽略最开始的 Warning 以及打印出来的配置信息，直接看接下来貌似重复的五段输出。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3java%E8%99%9A%E6%8B%9F%E6%9C%BA/29__%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95%E6%A1%86%E6%9E%B6jmh%E4%B8%8B/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3java%E8%99%9A%E6%8B%9F%E6%9C%BA/29__%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95%E6%A1%86%E6%9E%B6jmh%E4%B8%8B/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="29__基准测试框架JMH（下）">
+  <meta property="og:description" content="今天我们来继续学习基准测试框架 JMH。
+@Fork 和 @BenchmarkMode 在上一篇的末尾，我们已经运行过由 JMH 项目编译生成的 jar 包了。下面是它的输出结果：
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 $ java -jar target/benchmarks.jar ... # JMH version: 1.21 # VM version: JDK 10.0.2, Java HotSpot(TM) 64-Bit Server VM, 10.0.2&#43;13 # VM invoker: /Library/Java/JavaVirtualMachines/jdk-10.0.2.jdk/Contents/Home/bin/java # VM options: &lt;none&gt; # Warmup: 5 iterations, 10 s each # Measurement: 5 iterations, 10 s each # Timeout: 10 min per iteration # Threads: 1 thread, will synchronize iterations # Benchmark mode: Throughput, ops/time # Benchmark: org.sample.MyBenchmark.testMethod # Run progress: 0,00% complete, ETA 00:08:20 # Fork: 1 of 5 # Warmup Iteration 1: 1023500,647 ops/s # Warmup Iteration 2: 1030767,909 ops/s # Warmup Iteration 3: 1018212,559 ops/s # Warmup Iteration 4: 1002045,519 ops/s # Warmup Iteration 5: 1004210,056 ops/s Iteration 1: 1010251,342 ops/s Iteration 2: 1005717,344 ops/s Iteration 3: 1004751,523 ops/s Iteration 4: 1003034,640 ops/s Iteration 5: 997003,830 ops/s # Run progress: 20,00% complete, ETA 00:06:41 # Fork: 2 of 5 ... # Run progress: 80,00% complete, ETA 00:01:40 # Fork: 5 of 5 # Warmup Iteration 1: 988321,959 ops/s # Warmup Iteration 2: 999486,531 ops/s # Warmup Iteration 3: 1004856,886 ops/s # Warmup Iteration 4: 1004810,860 ops/s # Warmup Iteration 5: 1002332,077 ops/s Iteration 1: 1011871,670 ops/s Iteration 2: 1002653,844 ops/s Iteration 3: 1003568,030 ops/s Iteration 4: 1002724,752 ops/s Iteration 5: 1001507,408 ops/s Result &#34;org.sample.MyBenchmark.testMethod&#34;: 1004801,393 ±(99.9%) 4055,462 ops/s [Average] (min, avg, max) = (992193,459, 1004801,393, 1014504,226), stdev = 5413,926 CI (99.9%): [1000745,931, 1008856,856] (assumes normal distribution) # Run complete. Total time: 00:08:22 ... Benchmark Mode Cnt Score Error Units MyBenchmark.testMethod thrpt 25 1004801,393 ± 4055,462 ops/s 在上面这段输出中，我们暂且忽略最开始的 Warning 以及打印出来的配置信息，直接看接下来貌似重复的五段输出。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="深入拆解Java虚拟机">
+
+  <meta itemprop="name" content="29__基准测试框架JMH（下）">
+  <meta itemprop="description" content="今天我们来继续学习基准测试框架 JMH。
+@Fork 和 @BenchmarkMode 在上一篇的末尾，我们已经运行过由 JMH 项目编译生成的 jar 包了。下面是它的输出结果：
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 $ java -jar target/benchmarks.jar ... # JMH version: 1.21 # VM version: JDK 10.0.2, Java HotSpot(TM) 64-Bit Server VM, 10.0.2&#43;13 # VM invoker: /Library/Java/JavaVirtualMachines/jdk-10.0.2.jdk/Contents/Home/bin/java # VM options: &lt;none&gt; # Warmup: 5 iterations, 10 s each # Measurement: 5 iterations, 10 s each # Timeout: 10 min per iteration # Threads: 1 thread, will synchronize iterations # Benchmark mode: Throughput, ops/time # Benchmark: org.sample.MyBenchmark.testMethod # Run progress: 0,00% complete, ETA 00:08:20 # Fork: 1 of 5 # Warmup Iteration 1: 1023500,647 ops/s # Warmup Iteration 2: 1030767,909 ops/s # Warmup Iteration 3: 1018212,559 ops/s # Warmup Iteration 4: 1002045,519 ops/s # Warmup Iteration 5: 1004210,056 ops/s Iteration 1: 1010251,342 ops/s Iteration 2: 1005717,344 ops/s Iteration 3: 1004751,523 ops/s Iteration 4: 1003034,640 ops/s Iteration 5: 997003,830 ops/s # Run progress: 20,00% complete, ETA 00:06:41 # Fork: 2 of 5 ... # Run progress: 80,00% complete, ETA 00:01:40 # Fork: 5 of 5 # Warmup Iteration 1: 988321,959 ops/s # Warmup Iteration 2: 999486,531 ops/s # Warmup Iteration 3: 1004856,886 ops/s # Warmup Iteration 4: 1004810,860 ops/s # Warmup Iteration 5: 1002332,077 ops/s Iteration 1: 1011871,670 ops/s Iteration 2: 1002653,844 ops/s Iteration 3: 1003568,030 ops/s Iteration 4: 1002724,752 ops/s Iteration 5: 1001507,408 ops/s Result &#34;org.sample.MyBenchmark.testMethod&#34;: 1004801,393 ±(99.9%) 4055,462 ops/s [Average] (min, avg, max) = (992193,459, 1004801,393, 1014504,226), stdev = 5413,926 CI (99.9%): [1000745,931, 1008856,856] (assumes normal distribution) # Run complete. Total time: 00:08:22 ... Benchmark Mode Cnt Score Error Units MyBenchmark.testMethod thrpt 25 1004801,393 ± 4055,462 ops/s 在上面这段输出中，我们暂且忽略最开始的 Warning 以及打印出来的配置信息，直接看接下来貌似重复的五段输出。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4071">
+  <meta itemprop="keywords" content="深入拆解Java虚拟机">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="29__基准测试框架JMH（下）">
+  <meta name="twitter:description" content="今天我们来继续学习基准测试框架 JMH。
+@Fork 和 @BenchmarkMode 在上一篇的末尾，我们已经运行过由 JMH 项目编译生成的 jar 包了。下面是它的输出结果：
+1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 $ java -jar target/benchmarks.jar ... # JMH version: 1.21 # VM version: JDK 10.0.2, Java HotSpot(TM) 64-Bit Server VM, 10.0.2&#43;13 # VM invoker: /Library/Java/JavaVirtualMachines/jdk-10.0.2.jdk/Contents/Home/bin/java # VM options: &lt;none&gt; # Warmup: 5 iterations, 10 s each # Measurement: 5 iterations, 10 s each # Timeout: 10 min per iteration # Threads: 1 thread, will synchronize iterations # Benchmark mode: Throughput, ops/time # Benchmark: org.sample.MyBenchmark.testMethod # Run progress: 0,00% complete, ETA 00:08:20 # Fork: 1 of 5 # Warmup Iteration 1: 1023500,647 ops/s # Warmup Iteration 2: 1030767,909 ops/s # Warmup Iteration 3: 1018212,559 ops/s # Warmup Iteration 4: 1002045,519 ops/s # Warmup Iteration 5: 1004210,056 ops/s Iteration 1: 1010251,342 ops/s Iteration 2: 1005717,344 ops/s Iteration 3: 1004751,523 ops/s Iteration 4: 1003034,640 ops/s Iteration 5: 997003,830 ops/s # Run progress: 20,00% complete, ETA 00:06:41 # Fork: 2 of 5 ... # Run progress: 80,00% complete, ETA 00:01:40 # Fork: 5 of 5 # Warmup Iteration 1: 988321,959 ops/s # Warmup Iteration 2: 999486,531 ops/s # Warmup Iteration 3: 1004856,886 ops/s # Warmup Iteration 4: 1004810,860 ops/s # Warmup Iteration 5: 1002332,077 ops/s Iteration 1: 1011871,670 ops/s Iteration 2: 1002653,844 ops/s Iteration 3: 1003568,030 ops/s Iteration 4: 1002724,752 ops/s Iteration 5: 1001507,408 ops/s Result &#34;org.sample.MyBenchmark.testMethod&#34;: 1004801,393 ±(99.9%) 4055,462 ops/s [Average] (min, avg, max) = (992193,459, 1004801,393, 1014504,226), stdev = 5413,926 CI (99.9%): [1000745,931, 1008856,856] (assumes normal distribution) # Run complete. Total time: 00:08:22 ... Benchmark Mode Cnt Score Error Units MyBenchmark.testMethod thrpt 25 1004801,393 ± 4055,462 ops/s 在上面这段输出中，我们暂且忽略最开始的 Warning 以及打印出来的配置信息，直接看接下来貌似重复的五段输出。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">29__基准测试框架JMH（下）</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4071 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#fork-和-benchmarkmode">@Fork 和 @BenchmarkMode</a></li>
+        <li><a href="#warmup-和-measurement">@Warmup 和 @Measurement</a></li>
+        <li><a href="#statesetup-和-teardown">@State、@Setup 和 @TearDown</a></li>
+        <li><a href="#即时编译相关功能">即时编译相关功能</a></li>
+        <li><a href="#总结与实践">总结与实践</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>今天我们来继续学习基准测试框架 JMH。</p>
+<h2 id="fork-和-benchmarkmode">@Fork 和 @BenchmarkMode</h2>
+<p>在上一篇的末尾，我们已经运行过由 JMH 项目编译生成的 jar 包了。下面是它的输出结果：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span><span class="lnt">85
+</span><span class="lnt">86
+</span><span class="lnt">87
+</span><span class="lnt">88
+</span><span class="lnt">89
+</span><span class="lnt">90
+</span><span class="lnt">91
+</span><span class="lnt">92
+</span><span class="lnt">93
+</span><span class="lnt">94
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$ java -jar target/benchmarks.jar
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># JMH version: 1.21
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># VM version: JDK 10.0.2, Java HotSpot(TM) 64-Bit Server VM, 10.0.2+13
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># VM invoker: /Library/Java/JavaVirtualMachines/jdk-10.0.2.jdk/Contents/Home/bin/java
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># VM options: &lt;none&gt;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup: 5 iterations, 10 s each
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Measurement: 5 iterations, 10 s each
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Timeout: 10 min per iteration
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Threads: 1 thread, will synchronize iterations
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Benchmark mode: Throughput, ops/time
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Benchmark: org.sample.MyBenchmark.testMethod
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> # Run progress: 0,00% complete, ETA 00:08:20
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Fork: 1 of 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   1: 1023500,647 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   2: 1030767,909 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   3: 1018212,559 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   4: 1002045,519 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   5: 1004210,056 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   1: 1010251,342 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   2: 1005717,344 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   3: 1004751,523 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   4: 1003034,640 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   5: 997003,830 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> # Run progress: 20,00% complete, ETA 00:06:41
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Fork: 2 of 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> # Run progress: 80,00% complete, ETA 00:01:40
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Fork: 5 of 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   1: 988321,959 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   2: 999486,531 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   3: 1004856,886 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   4: 1004810,860 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   5: 1002332,077 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   1: 1011871,670 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   2: 1002653,844 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   3: 1003568,030 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   4: 1002724,752 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   5: 1001507,408 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  Result &#34;org.sample.MyBenchmark.testMethod&#34;:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  1004801,393 ±(99.9%) 4055,462 ops/s [Average]
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  (min, avg, max) = (992193,459, 1004801,393, 1014504,226), stdev = 5413,926
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  CI (99.9%): [1000745,931, 1008856,856] (assumes normal distribution)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  # Run complete. Total time: 00:08:22
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> Benchmark                Mode  Cnt        Score      Error  Units
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">MyBenchmark.testMethod  thrpt   25  1004801,393 ± 4055,462  ops/s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在上面这段输出中，我们暂且忽略最开始的 Warning 以及打印出来的配置信息，直接看接下来貌似重复的五段输出。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Run progress: 0,00% complete, ETA 00:08:20
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Fork: 1 of 5
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   1: 1023500,647 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   2: 1030767,909 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   3: 1018212,559 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   4: 1002045,519 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"># Warmup Iteration   5: 1004210,056 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   1: 1010251,342 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   2: 1005717,344 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   3: 1004751,523 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   4: 1003034,640 ops/s
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Iteration   5: 997003,830 ops/s
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>你应该已经留意到<code>Fork: 1 of 5</code>的字样。这里指的是 JMH 会 Fork 出一个新的 Java 虚拟机，来运行性能基准测试。</p>
+<p>之所以另外启动一个 Java 虚拟机进行性能基准测试，是为了获得一个相对干净的虚拟机环境。</p>
+<p>在介绍反射的那篇文章中，我就已经演示过因为类型 profile 被污染，而导致无法内联的情况。使用新的虚拟机，将极大地降低被上述情况干扰的可能性，从而保证更加精确的性能数据。</p>
+<p>在介绍虚方法内联的那篇文章中，我讲解过基于类层次分析的完全内联。新启动的 Java 虚拟机，其加载的与测试无关的抽象类子类或接口实现相对较少。因此，具体是否进行完全内联将交由开发人员来决定。</p>
+<p>关于这种情况，JMH 提供了一个性能测试案例 [1]。如果你感兴趣的话，可以下载下来自己跑一遍。</p>
+<p>除了对即时编译器的影响之外，Fork 出新的 Java 虚拟机还会提升性能数据的准确度。</p>
+<p>这主要是因为不少 Java 虚拟机的优化会带来不确定性，例如 TLAB 内存分配（TLAB 的大小会变化），偏向锁、轻量锁算法，并发数据结构等。这些不确定性都可能导致不同 Java 虚拟机中运行的性能测试的结果不同，例如 JMH 这一性能的测试案例 [2]。</p>
+<p>在这种情况下，通过运行更多的 Fork，并将每个 Java 虚拟机的性能测试结果平均起来，可以增强最终数据的可信度，使其误差更小。在 JMH 中，你可以通过<code>@Fork</code>注解来配置，具体如下述代码所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Fork(10)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class MyBenchmark {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>让我们回到刚刚的输出结果。每个 Fork 包含了 5 个预热迭代（warmup iteration，如<code># Warmup Iteration 1: 1023500,647 ops/s</code>）以及 5 个测试迭代（measurement iteration，如<code>Iteration 1: 1010251,342 ops/s</code>）。</p>
+<p>每个迭代后都跟着一个数据，代表本次迭代的吞吐量，也就是每秒运行了多少次操作（operations/s，或 ops/s）。默认情况下，一次操作指的是调用一次测试方法<code>testMethod</code>。</p>
+<p>除了吞吐量之外，我们还可以输出其他格式的性能数据，例如运行一次操作的平均时间。具体的配置方法以及对应参数如下述代码以及下表所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@BenchmarkMode(Mode.AverageTime)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class MyBenchmark {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>一般来说，默认使用的吞吐量已足够满足大多数测试需求了。</p>
+<h2 id="warmup-和-measurement">@Warmup 和 @Measurement</h2>
+<p>之所以区分预热迭代和测试迭代，是为了在记录性能数据之前，将 Java 虚拟机带至一个稳定状态。</p>
+<p>这里的稳定状态，不仅包括测试方法被即时编译成机器码，还包括 Java 虚拟机中各种自适配优化算法能够稳定下来，如前面提到的 TLAB 大小，亦或者是使用传统垃圾回收器时的 Eden 区、Survivor 区和老年代的大小。</p>
+<p>一般来说，预热迭代的数目以及每次预热迭代的时间，需要由你根据所要测试的业务逻辑代码来调配。通常的做法便是在首次运行时配置较多次迭代，并监控性能数据达到稳定状态时的迭代数目。</p>
+<p>不少性能评测框架都会自动检测稳定状态。它们所采用的算法是计算迭代之间的差值，如果连续几个迭代与前一迭代的差值均小于某个值，便将这几个迭代以及之后的迭代当成稳定状态。</p>
+<p>这种做法有一个缺陷，那便是在达到最终稳定状态前，程序可能拥有多个中间稳定状态。例如通过 Java 上的 JavaScript 引擎 Nashorn 运行 JavaScript 代码，便可能出现多个中间稳定状态的情况。（具体可参考 Aleksey Shipilev 的 devoxx 2013 演讲 [3] 的第 21 页。）</p>
+<p>总而言之，开发人员需要自行决定预热迭代的次数以及每次迭代的持续时间。</p>
+<p>通常来说，我会在保持 5-10 个预热迭代的前提下（这样可以看出是否达到稳定状况），将总的预热时间优化至最少，以便节省性能测试的机器时间。（这在持续集成 / 回归测试的硬件资源跟不上代码提交速度的团队中非常重要。）</p>
+<p>当确定了预热迭代的次数以及每次迭代的持续时间之后，我们便可以通过<code>@Warmup</code>注解来进行配置，如下述代码所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Warmup(iterations=10, time=100, timeUnit=TimeUnit.MILLISECONDS, batchSize=10)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class MyBenchmark {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p><code>@Warmup</code>注解有四个参数，分别为预热迭代的次数<code>iterations</code>，每次迭代持续的时间<code>time</code>和<code>timeUnit</code>（前者是数值，后者是单位。例如上面代码代表的是每次迭代持续 100 毫秒），以及每次操作包含多少次对测试方法的调用<code>batchSize</code>。</p>
+<p>测试迭代可通过<code>@Measurement</code>注解来进行配置。它的可配置选项和<code>@Warmup</code>的一致，这里就不再重复了。与预热迭代不同的是，每个 Fork 中测试迭代的数目越多，我们得到的性能数据也就越精确。</p>
+<h2 id="statesetup-和-teardown">@State、@Setup 和 @TearDown</h2>
+<p>通常来说，我们所要测试的业务逻辑只是整个应用程序中的一小部分，例如某个具体的 web app 请求。这要求在每次调用测试方法前，程序处于准备接收请求的状态。</p>
+<p>我们可以把上述场景抽象一下，变成程序从某种状态到另一种状态的转换，而性能测试，便是在收集该转换的性能数据。</p>
+<p>JMH 提供了<code>@State</code>注解，被它标注的类便是程序的状态。由于 JMH 将负责生成这些状态类的实例，因此，它要求状态类必须拥有无参数构造器，以及当状态类为内部类时，该状态类必须是静态的。</p>
+<p>JMH 还将程序状态细分为整个虚拟机的程序状态，线程私有的程序状态，以及线程组私有的程序状态，分别对应<code>@State</code>注解的参数<code>Scope.Benchmark</code>，<code>Scope.Thread</code>和<code>Scope.Group</code>。</p>
+<p>需要注意的是，这里的线程组并非 JDK 中的那个概念，而是 JMH 自己定义的概念。具体可以参考<code>@GroupThreads</code>注解 [4]，以及这个案例 [5]。</p>
+<p><code>@State</code>的配置方法以及状态类的用法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class MyBenchmark {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    @State(Scope.Benchmark)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public static class MyBenchmarkState {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      String message = &#34;exception&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @Benchmark
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void testMethod(MyBenchmarkState state) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        new Exception(state.message);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们可以看到，状态类是通过方法参数的方式传入测试方法之中的。JMH 将负责把所构造的状态类实例传入该方法之中。</p>
+<p>不过，如果<code>MyBenchmark</code>被标注为<code>@State</code>，那么我们可以不用在测试方法中定义额外的参数，而是直接访问<code>MyBenchmark</code>类中的实例变量。</p>
+<p>和 JUnit 测试一样，我们可以在测试前初始化程序状态，在测试后校验程序状态。这两种操作分别对应<code>@Setup</code>和<code>@TearDown</code>注解，被它们标注的方法必须是状态类中的方法。</p>
+<p>而且，JMH 并不限定状态类中<code>@Setup</code>方法以及<code>@TearDown</code>方法的数目。当存在多个<code>@Setup</code>方法或者<code>@TearDown</code>方法时，JMH 将按照定义的先后顺序执行。</p>
+<p>JMH 对<code>@Setup</code>方法以及<code>@TearDown</code>方法的调用时机是可配置的。可供选择的粒度有在整个性能测试前后调用，在每个迭代前后调用，以及在每次调用测试方法前后调用。其中，最后一个粒度将影响测试数据的精度。</p>
+<p>这三种粒度分别对应<code>@Setup</code>和<code>@TearDown</code>注解的参数<code>Level.Trial</code>，<code>Level.Iteration</code>，以及<code>Level.Invocation</code>。具体的用法如下所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public class MyBenchmark {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  @State(Scope.Benchmark)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public static class MyBenchmarkState {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @Setup(Level.Invocation)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void before() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      count = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     @TearDown(Level.Invocation)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    public void after() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // Run with -ea
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      assert count == 1 : &#34;ERROR&#34;;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">   @Benchmark
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  public void testMethod(MyBenchmarkState state) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    state.count++;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="即时编译相关功能">即时编译相关功能</h2>
+<p>JMH 还提供了不少控制即时编译的功能，例如可以控制每个方法内联与否的<code>@CompilerControl</code>注解 [6]。</p>
+<p>另外一个更小粒度的功能则是<code>Blackhole</code>类。它里边的<code>consume</code>方法可以防止即时编译器将所传入的值给优化掉。</p>
+<p>具体的使用方法便是为被<code>@Benchmark</code>注解标注了的测试方法增添一个类型为<code>Blackhole</code>的参数，并且在测试方法的代码中调用其实例方法<code>Blackhole.consume</code>，如下述代码所示：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Benchmark
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public void testMethod(Blackhole bh) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  bh.consume(new Object()); // prevents escape analysis
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>需要注意的是，它并不会阻止对传入值的计算的优化。举个例子，在下面这段代码中，我将<code>3+4</code>的值传入<code>Blackhole.consume</code>方法中。即时编译器仍旧会进行常量折叠，而<code>Blackhole</code>将阻止即时编译器把所得到的常量值 7 给优化消除掉。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">@Benchmark
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">public void testMethod(Blackhole bh) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  bh.consume(3+4);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>除了防止死代码消除的<code>consume</code>之外，<code>Blackhole</code>类还提供了一个静态方法<code>consumeCPU</code>，来消耗 CPU 时间。该方法将接收一个 long 类型的参数，这个参数与所消耗的 CPU 时间呈线性相关。</p>
+<h2 id="总结与实践">总结与实践</h2>
+<p>今天我介绍了基准测试框架 JMH 的进阶功能。我们来回顾一下。</p>
+<ul>
+<li><code>@Fork</code>允许开发人员指定所要 Fork 出的 Java 虚拟机的数目。</li>
+<li><code>@BenchmarkMode</code>允许指定性能数据的格式。</li>
+<li><code>@Warmup</code>和<code>@Measurement</code>允许配置预热迭代或者测试迭代的数目，每个迭代的时间以及每个操作包含多少次对测试方法的调用。</li>
+<li><code>@State</code>允许配置测试程序的状态。测试前对程序状态的初始化以及测试后对程序状态的恢复或者校验可分别通过<code>@Setup</code>和<code>@TearDown</code>来实现。</li>
+</ul>
+<hr>
+<p>今天的实践环节，请逐个运行 JMH 的官方案例 [7]，具体每个案例的意义都在代码注释之中。</p>
+<p>最后给大家推荐一下 Aleksey Shipilev 的 devoxx 2013 演讲（Slides[8]；视频 [9]，请自备梯子）。如果你已经完成本专栏前面两部分，特别是第二部分的学习，那么这个演讲里的绝大部分内容你应该都能理解。</p>
+<p>[1] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F12%5FForking.java">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F12%5FForking.java</a><br>
+[2] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F13%5FRunToRun.java">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F13%5FRunToRun.java</a><br>
+[3] <a href="https://shipilev.net/talks/devoxx-Nov2013-benchmarking.pdf">https://shipilev.net/talks/devoxx-Nov2013-benchmarking.pdf</a><br>
+[4] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-core/src/main/java/org/openjdk/jmh/annotations/GroupThreads.java">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-core/src/main/java/org/openjdk/jmh/annotations/GroupThreads.java</a><br>
+[5] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F15%5FAsymmetric.java">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample%5F15%5FAsymmetric.java</a><br>
+[6] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-core/src/main/java/org/openjdk/jmh/annotations/CompilerControl.java">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-core/src/main/java/org/openjdk/jmh/annotations/CompilerControl.java</a><br>
+[7] <a href="http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples">http://hg.openjdk.java.net/code-tools/jmh/file/3769055ad883/jmh-samples/src/main/java/org/openjdk/jmh/samples</a><br>
+[8] <a href="https://shipilev.net/talks/devoxx-Nov2013-benchmarking.pdf">https://shipilev.net/talks/devoxx-Nov2013-benchmarking.pdf</a><br>
+[9] <a href="https://www.youtube.com/watch?v=VaWgOCDBxYw">https://www.youtube.com/watch?v=VaWgOCDBxYw</a></p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3Java%E8%99%9A%E6%8B%9F%E6%9C%BA/a500044f1e4938fb43719f802cba82d8.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E6%B7%B1%E5%85%A5%E6%8B%86%E8%A7%A3java%E8%99%9A%E6%8B%9F%E6%9C%BA/">深入拆解Java虚拟机</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/flutter%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/29__%E6%B7%B7%E5%90%88%E5%BC%80%E5%8F%91%E8%AF%A5%E7%94%A8%E4%BD%95%E7%A7%8D%E6%96%B9%E6%A1%88%E7%AE%A1%E7%90%86%E5%AF%BC%E8%88%AA%E6%A0%88/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">29__混合开发，该用何种方案管理导航栈？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%81%8C%E5%9C%BA%E6%B1%82%E7%94%9F%E6%94%BB%E7%95%A5/29__%E5%8A%A0%E7%8F%AD%E5%8A%A0%E7%8F%AD%E9%80%83%E4%B8%8D%E8%BF%87%E5%A6%82%E4%BD%95%E7%94%A8%E6%AD%A3%E7%A1%AE%E5%A7%BF%E5%8A%BF%E5%8A%A0%E7%8F%AD/">
+            <span class="next-text nav-default">29__加班：加班逃不过，如何用正确姿势加班？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

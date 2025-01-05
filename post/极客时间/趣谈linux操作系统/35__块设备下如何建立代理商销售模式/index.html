@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>35__块设备（下）：如何建立代理商销售模式？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="在文件系统那一节，我们讲了文件的写入，到了设备驱动这一层，就没有再往下分析。上一节我们又讲了 mount 一个块设备，将 block_device 信息放到了 ext4 文件系统的 super_block 里面，有了这些基础，是时候把整个写入的故事串起来了。
+还记得咱们在文件系统那一节分析写入流程的时候，对于 ext4 文件系统，最后调用的是 ext4_file_write_iter，它将 I/O 的调用分成两种情况：
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/35__%E5%9D%97%E8%AE%BE%E5%A4%87%E4%B8%8B%E5%A6%82%E4%BD%95%E5%BB%BA%E7%AB%8B%E4%BB%A3%E7%90%86%E5%95%86%E9%94%80%E5%94%AE%E6%A8%A1%E5%BC%8F/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/35__%E5%9D%97%E8%AE%BE%E5%A4%87%E4%B8%8B%E5%A6%82%E4%BD%95%E5%BB%BA%E7%AB%8B%E4%BB%A3%E7%90%86%E5%95%86%E9%94%80%E5%94%AE%E6%A8%A1%E5%BC%8F/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="35__块设备（下）：如何建立代理商销售模式？">
+  <meta property="og:description" content="在文件系统那一节，我们讲了文件的写入，到了设备驱动这一层，就没有再往下分析。上一节我们又讲了 mount 一个块设备，将 block_device 信息放到了 ext4 文件系统的 super_block 里面，有了这些基础，是时候把整个写入的故事串起来了。
+还记得咱们在文件系统那一节分析写入流程的时候，对于 ext4 文件系统，最后调用的是 ext4_file_write_iter，它将 I/O 的调用分成两种情况：">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="趣谈Linux操作系统">
+
+  <meta itemprop="name" content="35__块设备（下）：如何建立代理商销售模式？">
+  <meta itemprop="description" content="在文件系统那一节，我们讲了文件的写入，到了设备驱动这一层，就没有再往下分析。上一节我们又讲了 mount 一个块设备，将 block_device 信息放到了 ext4 文件系统的 super_block 里面，有了这些基础，是时候把整个写入的故事串起来了。
+还记得咱们在文件系统那一节分析写入流程的时候，对于 ext4 文件系统，最后调用的是 ext4_file_write_iter，它将 I/O 的调用分成两种情况：">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="7569">
+  <meta itemprop="keywords" content="趣谈Linux操作系统">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="35__块设备（下）：如何建立代理商销售模式？">
+  <meta name="twitter:description" content="在文件系统那一节，我们讲了文件的写入，到了设备驱动这一层，就没有再往下分析。上一节我们又讲了 mount 一个块设备，将 block_device 信息放到了 ext4 文件系统的 super_block 里面，有了这些基础，是时候把整个写入的故事串起来了。
+还记得咱们在文件系统那一节分析写入流程的时候，对于 ext4 文件系统，最后调用的是 ext4_file_write_iter，它将 I/O 的调用分成两种情况：">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">35__块设备（下）：如何建立代理商销售模式？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 7569 字 </span>
+          <span class="more-meta"> 预计阅读 16 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#直接-io-如何访问块设备">直接 I/O 如何访问块设备？</a></li>
+        <li><a href="#缓存-io-如何访问块设备">缓存 I/O 如何访问块设备？</a></li>
+        <li><a href="#如何向块设备层提交请求">如何向块设备层提交请求？</a>
+          <ul>
+            <li><a href="#块设备队列结构">块设备队列结构</a></li>
+            <li><a href="#块设备的初始化">块设备的初始化</a></li>
+            <li><a href="#请求提交与调度">请求提交与调度</a></li>
+            <li><a href="#请求的处理">请求的处理</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结时刻">总结时刻</a></li>
+        <li><a href="#课堂练习">课堂练习</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>在<a href="./97876.md">文件系统</a>那一节，我们讲了文件的写入，到了设备驱动这一层，就没有再往下分析。上一节我们又讲了 mount 一个块设备，将 block_device 信息放到了 ext4 文件系统的 super_block 里面，有了这些基础，是时候把整个写入的故事串起来了。</p>
+<p>还记得咱们在文件系统那一节分析写入流程的时候，对于 ext4 文件系统，最后调用的是 ext4_file_write_iter，它将 I/O 的调用分成两种情况：</p>
+<p>第一是<strong>直接 I/O</strong>。最终我们调用的是 generic_file_direct_write，这里调用的是 mapping-&gt;a_ops-&gt;direct_IO，实际调用的是 ext4_direct_IO，往设备层写入数据。</p>
+<p>第二种是<strong>缓存 I/O</strong>。最终我们会将数据从应用拷贝到内存缓存中，但是这个时候，并不执行真正的 I/O 操作。它们只将整个页或其中部分标记为脏。写操作由一个 timer 触发，那个时候，才调用 wb_workfn 往硬盘写入页面。</p>
+<p>接下来的调用链为：wb_workfn-&gt;wb_do_writeback-&gt;wb_writeback-&gt;writeback_sb_inodes-&gt;__writeback_single_inode-&gt;do_writepages。在 do_writepages 中，我们要调用 mapping-&gt;a_ops-&gt;writepages，但实际调用的是 ext4_writepages，往设备层写入数据。</p>
+<p>这一节，我们就沿着这两种情况分析下去。</p>
+<h2 id="直接-io-如何访问块设备">直接 I/O 如何访问块设备？</h2>
+<p>我们先来看第一种情况，直接 I/O 调用到 ext4_direct_IO。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static ssize_t ext4_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct file *file = iocb-&gt;ki_filp;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inode *inode = file-&gt;f_mapping-&gt;host;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	size_t count = iov_iter_count(iter);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	loff_t offset = iocb-&gt;ki_pos;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ssize_t ret;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ret = ext4_direct_IO_write(iocb, iter);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  static ssize_t ext4_direct_IO_write(struct kiocb *iocb, struct iov_iter *iter)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct file *file = iocb-&gt;ki_filp;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inode *inode = file-&gt;f_mapping-&gt;host;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct ext4_inode_info *ei = EXT4_I(inode);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ssize_t ret;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	loff_t offset = iocb-&gt;ki_pos;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	size_t count = iov_iter_count(iter);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ret = __blockdev_direct_IO(iocb, inode, inode-&gt;i_sb-&gt;s_bdev, iter,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				   get_block_func, ext4_end_io_dio, NULL,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				   dio_flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  ……
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ext4_direct_IO_write 调用 __blockdev_direct_IO，有个参数你需要特别注意一下，那就是 inode-&gt;i_sb-&gt;s_bdev。通过当前文件的 inode，我们可以得到 super_block。这个 super_block 中的 s_bdev，就是咱们上一节填进去的那个 block_device。</p>
+<p>__blockdev_direct_IO 会调用 do_blockdev_direct_IO，在这里面我们要准备一个 struct dio 结构和 struct dio_submit 结构，用来描述将要发生的写入请求。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span><span class="lnt">85
+</span><span class="lnt">86
+</span><span class="lnt">87
+</span><span class="lnt">88
+</span><span class="lnt">89
+</span><span class="lnt">90
+</span><span class="lnt">91
+</span><span class="lnt">92
+</span><span class="lnt">93
+</span><span class="lnt">94
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static inline ssize_t
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">do_blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		      struct block_device *bdev, struct iov_iter *iter,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		      get_block_t get_block, dio_iodone_t end_io,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		      dio_submit_t submit_io, int flags)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned i_blkbits = ACCESS_ONCE(inode-&gt;i_blkbits);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned blkbits = i_blkbits;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned blocksize_mask = (1 &lt;&lt; blkbits) - 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ssize_t retval = -EINVAL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	size_t count = iov_iter_count(iter);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	loff_t offset = iocb-&gt;ki_pos;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	loff_t end = offset + count;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct dio *dio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct dio_submit sdio = { 0, };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct buffer_head map_bh = { 0, };
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio = kmem_cache_alloc(dio_cache, GFP_KERNEL);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio-&gt;flags = flags;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio-&gt;i_size = i_size_read(inode);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio-&gt;inode = inode;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (iov_iter_rw(iter) == WRITE) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		dio-&gt;op = REQ_OP_WRITE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		dio-&gt;op_flags = REQ_SYNC | REQ_IDLE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (iocb-&gt;ki_flags &amp; IOCB_NOWAIT)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			dio-&gt;op_flags |= REQ_NOWAIT;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	} else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		dio-&gt;op = REQ_OP_READ;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.blkbits = blkbits;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.blkfactor = i_blkbits - blkbits;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.block_in_file = offset &gt;&gt; blkbits;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	sdio.get_block = get_block;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio-&gt;end_io = end_io;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.submit_io = submit_io;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.final_block_in_bio = -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.next_block_for_io = -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	dio-&gt;iocb = iocb;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	dio-&gt;refcount = 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	sdio.iter = iter;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.final_block_in_request =
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		(offset + iov_iter_count(iter)) &gt;&gt; blkbits;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdio.pages_in_io += iov_iter_npages(iter, INT_MAX);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	retval = do_direct_IO(dio, &amp;sdio, &amp;map_bh);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">.....
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>do_direct_IO 里面有两层循环，第一层循环是依次处理这次要写入的所有块。对于每一块，取出对应的内存中的页 page，在这一块中，有写入的起始地址 from 和终止地址 to，所以，第二层循环就是依次处理 from 到 to 的数据，调用 submit_page_section，提交到块设备层进行写入。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="ne">int</span> <span class="n">do_direct_IO</span><span class="p">(</span><span class="n">struct</span> <span class="n">dio</span> <span class="o">*</span><span class="n">dio</span><span class="p">,</span> <span class="n">struct</span> <span class="n">dio_submit</span> <span class="o">*</span><span class="n">sdio</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">struct</span> <span class="n">buffer_head</span> <span class="o">*</span><span class="n">map_bh</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">unsigned</span> <span class="n">blkbits</span> <span class="o">=</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">blkbits</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">const</span> <span class="n">unsigned</span> <span class="n">i_blkbits</span> <span class="o">=</span> <span class="n">blkbits</span> <span class="o">+</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">blkfactor</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="ne">int</span> <span class="n">ret</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="k">while</span> <span class="p">(</span><span class="n">sdio</span><span class="o">-&gt;</span><span class="n">block_in_file</span> <span class="o">&lt;</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">final_block_in_request</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">struct</span> <span class="n">page</span> <span class="o">*</span><span class="n">page</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">size_t</span> <span class="n">from</span><span class="p">,</span> <span class="n">to</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  		<span class="n">page</span> <span class="o">=</span> <span class="n">dio_get_page</span><span class="p">(</span><span class="n">dio</span><span class="p">,</span> <span class="n">sdio</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">from</span> <span class="o">=</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">head</span> <span class="err">?</span> <span class="mi">0</span> <span class="p">:</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">from</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">to</span> <span class="o">=</span> <span class="p">(</span><span class="n">sdio</span><span class="o">-&gt;</span><span class="n">head</span> <span class="o">==</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">tail</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="err">?</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">to</span> <span class="p">:</span> <span class="n">PAGE_SIZE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">sdio</span><span class="o">-&gt;</span><span class="n">head</span><span class="o">++</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  		<span class="k">while</span> <span class="p">(</span><span class="n">from</span> <span class="o">&lt;</span> <span class="n">to</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">unsigned</span> <span class="n">this_chunk_bytes</span><span class="p">;</span>	<span class="o">/*</span> <span class="c1"># of bytes mapped */</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">unsigned</span> <span class="n">this_chunk_blocks</span><span class="p">;</span>	<span class="o">/*</span> <span class="c1"># of blocks */</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">ret</span> <span class="o">=</span> <span class="n">submit_page_section</span><span class="p">(</span><span class="n">dio</span><span class="p">,</span> <span class="n">sdio</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						  <span class="n">from</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						  <span class="n">this_chunk_bytes</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						  <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">next_block_for_io</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">						  <span class="n">map_bh</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">sdio</span><span class="o">-&gt;</span><span class="n">next_block_for_io</span> <span class="o">+=</span> <span class="n">this_chunk_blocks</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">sdio</span><span class="o">-&gt;</span><span class="n">block_in_file</span> <span class="o">+=</span> <span class="n">this_chunk_blocks</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">from</span> <span class="o">+=</span> <span class="n">this_chunk_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">dio</span><span class="o">-&gt;</span><span class="n">result</span> <span class="o">+=</span> <span class="n">this_chunk_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="n">sdio</span><span class="o">-&gt;</span><span class="n">blocks_available</span> <span class="o">-=</span> <span class="n">this_chunk_blocks</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="p">(</span><span class="n">sdio</span><span class="o">-&gt;</span><span class="n">block_in_file</span> <span class="o">==</span> <span class="n">sdio</span><span class="o">-&gt;</span><span class="n">final_block_in_request</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>submit_page_section 会调用 dio_bio_submit，进而调用 submit_bio 向块设备层提交数据。其中，参数 struct bio 是将数据传给块设备的通用传输对象。定义如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/**
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * submit_bio - submit a bio to the block device layer for I/O
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * @bio: The &amp;struct bio which describes the I/O
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">blk_qc_t submit_bio(struct bio *bio)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  return generic_make_request(bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="缓存-io-如何访问块设备">缓存 I/O 如何访问块设备？</h2>
+<p>我们再来看第二种情况，缓存 I/O 调用到 ext4_writepages。这个函数比较长，我们这里只截取最重要的部分来讲解。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static int ext4_writepages(struct address_space *mapping,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			   struct writeback_control *wbc)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct mpage_da_data mpd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inode *inode = mapping-&gt;host;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct ext4_sb_info *sbi = EXT4_SB(mapping-&gt;host-&gt;i_sb);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	mpd.do_map = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	mpd.io_submit.io_end = ext4_init_io_end(inode, GFP_KERNEL);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ret = mpage_prepare_extent_to_map(&amp;mpd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* Submit prepared bio */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ext4_io_submit(&amp;mpd.io_submit);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里比较重要的一个数据结构是 struct mpage_da_data。这里面有文件的 inode、要写入的页的偏移量，还有一个重要的 struct ext4_io_submit，里面有通用传输对象 bio。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct mpage_da_data {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct inode *inode;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	pgoff_t first_page;	/* The first page to write */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	pgoff_t next_page;	/* Current page to examine */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	pgoff_t last_page;	/* Last page to examine */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct ext4_map_blocks map;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct ext4_io_submit io_submit;	/* IO submission data */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned int do_map:1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  struct ext4_io_submit {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio		*io_bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	ext4_io_end_t		*io_end;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sector_t		io_next_block;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 ext4_writepages 中，mpage_prepare_extent_to_map 用于初始化这个 struct mpage_da_data 结构。接下来的调用链为：mpage_prepare_extent_to_map-&gt;mpage_process_page_bufs-&gt;mpage_submit_page-&gt;ext4_bio_write_page-&gt;io_submit_add_bh。</p>
+<p>在 io_submit_add_bh 中，此时的 bio 还是空的，因而我们要调用 io_submit_init_bio，初始化 bio。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static int io_submit_init_bio(struct ext4_io_submit *io,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			      struct buffer_head *bh)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio *bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	bio = bio_alloc(GFP_NOIO, BIO_MAX_PAGES);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (!bio)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		return -ENOMEM;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	wbc_init_bio(io-&gt;io_wbc, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	bio-&gt;bi_iter.bi_sector = bh-&gt;b_blocknr * (bh-&gt;b_size &gt;&gt; 9);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	bio-&gt;bi_bdev = bh-&gt;b_bdev;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	bio-&gt;bi_end_io = ext4_end_bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	bio-&gt;bi_private = ext4_get_io_end(io-&gt;io_end);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	io-&gt;io_bio = bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	io-&gt;io_next_block = bh-&gt;b_blocknr;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>我们再回到 ext4_writepages 中。在 bio 初始化完之后，我们要调用 ext4_io_submit，提交 I/O。在这里我们又是调用 submit_bio，向块设备层传输数据。ext4_io_submit 的实现如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">void ext4_io_submit(struct ext4_io_submit *io)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio *bio = io-&gt;io_bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	if (bio) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		int io_op_flags = io-&gt;io_wbc-&gt;sync_mode == WB_SYNC_ALL ?
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				  REQ_SYNC : 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		io-&gt;io_bio-&gt;bi_write_hint = io-&gt;io_end-&gt;inode-&gt;i_write_hint;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		bio_set_op_attrs(io-&gt;io_bio, REQ_OP_WRITE, io_op_flags);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		submit_bio(io-&gt;io_bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	io-&gt;io_bio = NULL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> 
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="如何向块设备层提交请求">如何向块设备层提交请求？</h2>
+<p>既然无论是直接 I/O，还是缓存 I/O，最后都到了 submit_bio 里面，我们就来重点分析一下它。</p>
+<p>submit_bio 会调用 generic_make_request。代码如下：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span><span class="lnt">85
+</span><span class="lnt">86
+</span><span class="lnt">87
+</span><span class="lnt">88
+</span><span class="lnt">89
+</span><span class="lnt">90
+</span><span class="lnt">91
+</span><span class="lnt">92
+</span><span class="lnt">93
+</span><span class="lnt">94
+</span><span class="lnt">95
+</span><span class="lnt">96
+</span><span class="lnt">97
+</span><span class="lnt">98
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">blk_qc_t generic_make_request(struct bio *bio)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * bio_list_on_stack[0] contains bios submitted by the current
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * make_request_fn.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * bio_list_on_stack[1] contains bios that were submitted before
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * the current make_request_fn, but that haven&#39;t been processed
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * yet.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio_list bio_list_on_stack[2];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	blk_qc_t ret = BLK_QC_T_NONE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (current-&gt;bio_list) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		bio_list_add(&amp;current-&gt;bio_list[0], bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	bio_list_init(&amp;bio_list_on_stack[0]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	current-&gt;bio_list = bio_list_on_stack;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	do {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		struct request_queue *q = bdev_get_queue(bio-&gt;bi_bdev);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  		if (likely(blk_queue_enter(q, bio-&gt;bi_opf &amp; REQ_NOWAIT) == 0)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			struct bio_list lower, same;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  			/* Create a fresh bio_list for all subordinate requests */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_on_stack[1] = bio_list_on_stack[0];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_init(&amp;bio_list_on_stack[0]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			ret = q-&gt;make_request_fn(q, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  			blk_queue_exit(q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  			/* sort new bios into those for a lower level
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			 * and those for the same level
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_init(&amp;lower);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_init(&amp;same);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			while ((bio = bio_list_pop(&amp;bio_list_on_stack[0])) != NULL)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				if (q == bdev_get_queue(bio-&gt;bi_bdev))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					bio_list_add(&amp;same, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">				else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					bio_list_add(&amp;lower, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			/* now assemble so we handle the lowest level first */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_merge(&amp;bio_list_on_stack[0], &amp;lower);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_merge(&amp;bio_list_on_stack[0], &amp;same);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			bio_list_merge(&amp;bio_list_on_stack[0], &amp;bio_list_on_stack[1]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		} 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		bio = bio_list_pop(&amp;bio_list_on_stack[0]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	} while (bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	current-&gt;bio_list = NULL; /* deactivate */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">out:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return ret;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的逻辑有点复杂，我们先来看大的逻辑。在 do-while 中，我们先是获取一个请求队列 request_queue，然后调用这个队列的 make_request_fn 函数。</p>
+<h3 id="块设备队列结构">块设备队列结构</h3>
+<p>如果再来看 struct block_device 结构和 struct gendisk 结构，我们会发现，每个块设备都有一个请求队列 struct request_queue，用于处理上层发来的请求。</p>
+<p>在每个块设备的驱动程序初始化的时候，会生成一个 request_queue。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct request_queue {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * Together with queue_head for cacheline sharing
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct list_head	queue_head;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct request		*last_merge;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct elevator_queue	*elevator;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	request_fn_proc		*request_fn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	make_request_fn		*make_request_fn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在请求队列 request_queue 上，首先是有一个链表 list_head，保存请求 request。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct request {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct list_head queuelist;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct request_queue *q;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio *bio;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio *biotail;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>每个 request 包括一个链表的 struct bio，有指针指向一头一尾。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct bio {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio		*bi_next;	/* request queue link */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct block_device	*bi_bdev;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	blk_status_t		bi_status;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct bvec_iter	bi_iter;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned short		bi_vcnt;	/* how many bio_vec&#39;s */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned short		bi_max_vecs;	/* max bvl_vecs we can hold */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	atomic_t		__bi_cnt;	/* pin count */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct bio_vec		*bi_io_vec;	/* the actual vec list */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  struct bio_vec {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct page	*bv_page;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned int	bv_len;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned int	bv_offset;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 bio 中，bi_next 是链表中的下一项，struct bio_vec 指向一组页面。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/f31978676a3ab32a494378221962fc29.png" alt=""></p>
+<p>在请求队列 request_queue 上，还有两个重要的函数，一个是 make_request_fn 函数，用于生成 request；另一个是 request_fn 函数，用于处理 request。</p>
+<h3 id="块设备的初始化">块设备的初始化</h3>
+<p>我们还是以 scsi 驱动为例。在初始化设备驱动的时候，我们会调用 scsi_alloc_queue，把 request_fn 设置为 scsi_request_fn。我们还会调用 blk_init_allocated_queue-&gt;blk_queue_make_request，把 make_request_fn 设置为 blk_queue_bio。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span><span class="lnt">81
+</span><span class="lnt">82
+</span><span class="lnt">83
+</span><span class="lnt">84
+</span><span class="lnt">85
+</span><span class="lnt">86
+</span><span class="lnt">87
+</span><span class="lnt">88
+</span><span class="lnt">89
+</span><span class="lnt">90
+</span><span class="lnt">91
+</span><span class="lnt">92
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">/**
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * scsi_alloc_sdev - allocate and setup a scsi_Device
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * @starget: which target to allocate a &amp;scsi_device for
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * @lun: which lun
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * @hostdata: usually NULL and set by -&gt;slave_alloc instead
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * Description:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *     Allocate, initialize for io, and return a pointer to a scsi_Device.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *     Stores the @shost, @channel, @id, and @lun in the scsi_Device, and
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *     adds scsi_Device to the appropriate list.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> * Return value:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> *     scsi_Device pointer, or NULL on failure.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> **/
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">					   u64 lun, void *hostdata)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct scsi_device *sdev;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdev = kzalloc(sizeof(*sdev) + shost-&gt;transportt-&gt;device_size,
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		       GFP_ATOMIC);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	sdev-&gt;request_queue = scsi_alloc_queue(sdev);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  struct request_queue *scsi_alloc_queue(struct scsi_device *sdev)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct Scsi_Host *shost = sdev-&gt;host;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct request_queue *q;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	q = blk_alloc_queue_node(GFP_KERNEL, NUMA_NO_NODE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (!q)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		return NULL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;cmd_size = sizeof(struct scsi_cmnd) + shost-&gt;hostt-&gt;cmd_size;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;rq_alloc_data = shost;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;request_fn = scsi_request_fn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;init_rq_fn = scsi_init_rq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;exit_rq_fn = scsi_exit_rq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;initialize_rq_fn = scsi_initialize_rq;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      // 调用 blk_queue_make_request(q, blk_queue_bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (blk_init_allocated_queue(q) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		blk_cleanup_queue(q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		return NULL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	__scsi_init_queue(shost, q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return q
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在 blk_init_allocated_queue 中，除了初始化 make_request_fn 函数，我们还要做一件很重要的事情，就是初始化 I/O 的电梯算法。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">int blk_init_allocated_queue(struct request_queue *q)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	q-&gt;fq = blk_alloc_flush_queue(q, NUMA_NO_NODE, q-&gt;cmd_size);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	blk_queue_make_request(q, blk_queue_bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	/* init elevator */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	if (elevator_init(q, NULL)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>电梯算法有很多种类型，定义为 elevator_type。下面我来逐一说一下。</p>
+<ul>
+<li><strong>struct elevator_type elevator_noop</strong></li>
+</ul>
+<p>Noop 调度算法是最简单的 IO 调度算法，它将 IO 请求放入到一个 FIFO 队列中，然后逐个执行这些 IO 请求。</p>
+<ul>
+<li><strong>struct elevator_type iosched_deadline</strong></li>
+</ul>
+<p>Deadline 算法要保证每个 IO 请求在一定的时间内一定要被服务到，以此来避免某个请求饥饿。为了完成这个目标，算法中引入了两类队列，一类队列用来对请求按起始扇区序号进行排序，通过红黑树来组织，我们称为 sort_list，按照此队列传输性能会比较高；另一类队列对请求按它们的生成时间进行排序，由链表来组织，称为 fifo_list，并且每一个请求都有一个期限值。</p>
+<ul>
+<li><strong>struct elevator_type iosched_cfq</strong></li>
+</ul>
+<p>又看到了熟悉的 CFQ 完全公平调度算法。所有的请求会在多个队列中排序。同一个进程的请求，总是在同一队列中处理。时间片会分配到每个队列，通过轮询算法，我们保证了 I/O 带宽，以公平的方式，在不同队列之间进行共享。</p>
+<p>elevator_init 中会根据名称来指定电梯算法，如果没有选择，那就默认使用 iosched_cfq。</p>
+<h3 id="请求提交与调度">请求提交与调度</h3>
+<p>接下来，我们回到 generic_make_request 函数中。调用队列的 make_request_fn 函数，其实就是调用 blk_queue_bio。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static blk_qc_t blk_queue_bio(struct request_queue *q, struct bio *bio)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct request *req, *free;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	unsigned int request_count = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	switch (elv_merge(q, &amp;req, bio)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	case ELEVATOR_BACK_MERGE:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (!bio_attempt_back_merge(q, req, bio))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		elv_bio_merged(q, req, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		free = attempt_back_merge(q, req);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (free)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			__blk_put_request(q, free);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			elv_merged_request(q, req, ELEVATOR_BACK_MERGE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out_unlock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	case ELEVATOR_FRONT_MERGE:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (!bio_attempt_front_merge(q, req, bio))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		elv_bio_merged(q, req, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		free = attempt_front_merge(q, req);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (free)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			__blk_put_request(q, free);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			elv_merged_request(q, req, ELEVATOR_FRONT_MERGE);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		goto out_unlock;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	default:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  get_rq:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	req = get_request(q, bio-&gt;bi_opf, bio, GFP_NOIO);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	blk_init_request_from_bio(req, bio);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	add_acct_request(q, req, where);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	__blk_run_queue(q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">out_unlock:
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return BLK_QC_T_NONE;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>blk_queue_bio 首先做的一件事情是调用 elv_merge 来判断，当前这个 bio 请求是否能够和目前已有的 request 合并起来，成为同一批 I/O 操作，从而提高读取和写入的性能。</p>
+<p>判断标准和 struct bio 的成员 struct bvec_iter 有关，它里面有两个变量，一个是起始磁盘簇 bi_sector，另一个是大小 bi_size。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">enum</span> <span class="n">elv_merge</span> <span class="n">elv_merge</span><span class="p">(</span><span class="n">struct</span> <span class="n">request_queue</span> <span class="o">*</span><span class="n">q</span><span class="p">,</span> <span class="n">struct</span> <span class="n">request</span> <span class="o">**</span><span class="n">req</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">struct</span> <span class="n">bio</span> <span class="o">*</span><span class="n">bio</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">elevator_queue</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">q</span><span class="o">-&gt;</span><span class="n">elevator</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request</span> <span class="o">*</span><span class="n">__rq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">last_merge</span> <span class="o">&amp;&amp;</span> <span class="n">elv_bio_merge_ok</span><span class="p">(</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">last_merge</span><span class="p">,</span> <span class="n">bio</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">enum</span> <span class="n">elv_merge</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">blk_try_merge</span><span class="p">(</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">last_merge</span><span class="p">,</span> <span class="n">bio</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  		<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">!=</span> <span class="n">ELEVATOR_NO_MERGE</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">req</span> <span class="o">=</span> <span class="n">q</span><span class="o">-&gt;</span><span class="n">last_merge</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			<span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">__rq</span> <span class="o">=</span> <span class="n">elv_rqhash_find</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">bio</span><span class="o">-&gt;</span><span class="n">bi_iter</span><span class="o">.</span><span class="n">bi_sector</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">__rq</span> <span class="o">&amp;&amp;</span> <span class="n">elv_bio_merge_ok</span><span class="p">(</span><span class="n">__rq</span><span class="p">,</span> <span class="n">bio</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="o">*</span><span class="n">req</span> <span class="o">=</span> <span class="n">__rq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">ELEVATOR_BACK_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">uses_mq</span> <span class="o">&amp;&amp;</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">.</span><span class="n">mq</span><span class="o">.</span><span class="n">request_merge</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">.</span><span class="n">mq</span><span class="o">.</span><span class="n">request_merge</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">bio</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">uses_mq</span> <span class="o">&amp;&amp;</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">.</span><span class="n">sq</span><span class="o">.</span><span class="n">elevator_merge_fn</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">.</span><span class="n">sq</span><span class="o">.</span><span class="n">elevator_merge_fn</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">bio</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="k">return</span> <span class="n">ELEVATOR_NO_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>elv_merge 尝试了三次合并。</p>
+<p>第一次，它先判断和上一次合并的 request 能不能再次合并，看看能不能赶上马上要走的这部电梯。在 blk_try_merge 主要做了这样的判断：如果 blk_rq_pos(rq) + blk_rq_sectors(rq) == bio-&gt;bi_iter.bi_sector，也就是说这个 request 的起始地址加上它的大小（其实是这个 request 的结束地址），如果和 bio 的起始地址能接得上，那就把 bio 放在 request 的最后，我们称为 ELEVATOR_BACK_MERGE。</p>
+<p>如果 blk_rq_pos(rq) - bio_sectors(bio) == bio-&gt;bi_iter.bi_sector，也就是说，这个 request 的起始地址减去 bio 的大小等于 bio 的起始地址，这说明 bio 放在 request 的最前面能够接得上，那就把 bio 放在 request 的最前面，我们称为 ELEVATOR_FRONT_MERGE。否则，那就不合并，我们称为 ELEVATOR_NO_MERGE。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">enum</span> <span class="n">elv_merge</span> <span class="n">blk_try_merge</span><span class="p">(</span><span class="n">struct</span> <span class="n">request</span> <span class="o">*</span><span class="n">rq</span><span class="p">,</span> <span class="n">struct</span> <span class="n">bio</span> <span class="o">*</span><span class="n">bio</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">......</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">if</span> <span class="p">(</span><span class="n">blk_rq_pos</span><span class="p">(</span><span class="n">rq</span><span class="p">)</span> <span class="o">+</span> <span class="n">blk_rq_sectors</span><span class="p">(</span><span class="n">rq</span><span class="p">)</span> <span class="o">==</span> <span class="n">bio</span><span class="o">-&gt;</span><span class="n">bi_iter</span><span class="o">.</span><span class="n">bi_sector</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">ELEVATOR_BACK_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">blk_rq_pos</span><span class="p">(</span><span class="n">rq</span><span class="p">)</span> <span class="o">-</span> <span class="n">bio_sectors</span><span class="p">(</span><span class="n">bio</span><span class="p">)</span> <span class="o">==</span> <span class="n">bio</span><span class="o">-&gt;</span><span class="n">bi_iter</span><span class="o">.</span><span class="n">bi_sector</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">ELEVATOR_FRONT_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">ELEVATOR_NO_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二次，如果和上一个合并过的 request 无法合并，那我们就调用 elv_rqhash_find。然后按照 bio 的起始地址查找 request，看有没有能够合并的。如果有的话，因为是按照起始地址找的，应该接在人家的后面，所以是 ELEVATOR_BACK_MERGE。</p>
+<p>第三次，调用 elevator_merge_fn 试图合并。对于 iosched_cfq，调用的是 cfq_merge。在这里面，cfq_find_rq_fmerge 会调用 elv_rb_find 函数，里面的参数是 bio 的结束地址。我们还是要看，能不能找到可以合并的。如果有的话，因为是按照结束地址找的，应该接在人家前面，所以是 ELEVATOR_FRONT_MERGE。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="k">enum</span> <span class="n">elv_merge</span> <span class="n">cfq_merge</span><span class="p">(</span><span class="n">struct</span> <span class="n">request_queue</span> <span class="o">*</span><span class="n">q</span><span class="p">,</span> <span class="n">struct</span> <span class="n">request</span> <span class="o">**</span><span class="n">req</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		     <span class="n">struct</span> <span class="n">bio</span> <span class="o">*</span><span class="n">bio</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">cfq_data</span> <span class="o">*</span><span class="n">cfqd</span> <span class="o">=</span> <span class="n">q</span><span class="o">-&gt;</span><span class="n">elevator</span><span class="o">-&gt;</span><span class="n">elevator_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">request</span> <span class="o">*</span><span class="n">__rq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="n">__rq</span> <span class="o">=</span> <span class="n">cfq_find_rq_fmerge</span><span class="p">(</span><span class="n">cfqd</span><span class="p">,</span> <span class="n">bio</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">__rq</span> <span class="o">&amp;&amp;</span> <span class="n">elv_bio_merge_ok</span><span class="p">(</span><span class="n">__rq</span><span class="p">,</span> <span class="n">bio</span><span class="p">))</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="o">*</span><span class="n">req</span> <span class="o">=</span> <span class="n">__rq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">ELEVATOR_FRONT_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="k">return</span> <span class="n">ELEVATOR_NO_MERGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">static</span> <span class="n">struct</span> <span class="n">request</span> <span class="o">*</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">cfq_find_rq_fmerge</span><span class="p">(</span><span class="n">struct</span> <span class="n">cfq_data</span> <span class="o">*</span><span class="n">cfqd</span><span class="p">,</span> <span class="n">struct</span> <span class="n">bio</span> <span class="o">*</span><span class="n">bio</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">tsk</span> <span class="o">=</span> <span class="n">current</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">cfq_io_cq</span> <span class="o">*</span><span class="n">cic</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">struct</span> <span class="n">cfq_queue</span> <span class="o">*</span><span class="n">cfqq</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="n">cic</span> <span class="o">=</span> <span class="n">cfq_cic_lookup</span><span class="p">(</span><span class="n">cfqd</span><span class="p">,</span> <span class="n">tsk</span><span class="o">-&gt;</span><span class="n">io_context</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">cic</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="n">cfqq</span> <span class="o">=</span> <span class="n">cic_to_cfqq</span><span class="p">(</span><span class="n">cic</span><span class="p">,</span> <span class="n">op_is_sync</span><span class="p">(</span><span class="n">bio</span><span class="o">-&gt;</span><span class="n">bi_opf</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">cfqq</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">elv_rb_find</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cfqq</span><span class="o">-&gt;</span><span class="n">sort_list</span><span class="p">,</span> <span class="n">bio_end_sector</span><span class="p">(</span><span class="n">bio</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	<span class="k">return</span> <span class="n">NUL</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>等从 elv_merge 返回 blk_queue_bio 的时候，我们就知道，应该做哪种类型的合并，接着就要进行真的合并。如果没有办法合并，那就调用 get_request，创建一个新的 request，调用 blk_init_request_from_bio，将 bio 放到新的 request 里面，然后调用 add_acct_request，把新的 request 加到 request_queue 队列中。</p>
+<p>至此，我们解析完了 generic_make_request 中最重要的两大逻辑：获取一个请求队列 request_queue 和调用这个队列的 make_request_fn 函数。</p>
+<p>其实，generic_make_request 其他部分也很令人困惑。感觉里面有特别多的 struct bio_list，倒腾过来，倒腾过去的。这是因为，很多块设备是有层次的。</p>
+<p>比如，我们用两块硬盘组成 RAID，两个 RAID 盘组成 LVM，然后我们就可以在 LVM 上创建一个块设备给用户用，我们称接近用户的块设备为<strong>高层次的块设备</strong>，接近底层的块设备为<strong>低层次</strong>（lower）<strong>的块设备</strong>。这样，generic_make_request 把 I/O 请求发送给高层次的块设备的时候，会调用高层块设备的 make_request_fn，高层块设备又要调用 generic_make_request，将请求发送给低层次的块设备。虽然块设备的层次不会太多，但是对于代码 generic_make_request 来讲，这可是递归的调用，一不小心，就会递归过深，无法正常退出，而且内核栈的大小又非常有限，所以要比较小心。</p>
+<p>这里你是否理解了 struct bio_list bio_list_on_stack[2] 的名字为什么叫 stack 呢？其实，将栈的操作变成对于队列的操作，队列不在栈里面，会大很多。每次 generic_make_request 被当前任务调用的时候，将 current-&gt;bio_list 设置为 bio_list_on_stack，并在 generic_make_request 的一开始就判断 current-&gt;bio_list 是否为空。如果不为空，说明已经在 generic_make_request 的调用里面了，就不必调用 make_request_fn 进行递归了，直接把请求加入到 bio_list 里面就可以了，这就实现了递归的及时退出。</p>
+<p>如果 current-&gt;bio_list 为空，那我们就将 current-&gt;bio_list 设置为 bio_list_on_stack 后，进入 do-while 循环，做咱们分析过的 generic_make_request 的两大逻辑。但是，当前的队列调用 make_request_fn 的时候，在 make_request_fn 的具体实现中，会生成新的 bio。调用更底层的块设备，也会生成新的 bio，都会放在 bio_list_on_stack 的队列中，是一个边处理还边创建的过程。</p>
+<p>bio_list_on_stack[1] = bio_list_on_stack[0] 这一句在 make_request_fn 之前，将之前队列里面遗留没有处理的保存下来，接着 bio_list_init 将 bio_list_on_stack[0] 设置为空，然后调用 make_request_fn，在 make_request_fn 里面如果有新的 bio 生成，都会加到 bio_list_on_stack[0] 这个队列里面来。</p>
+<p>make_request_fn 执行完毕后，可以想象 bio_list_on_stack[0] 可能又多了一些 bio 了，接下来的循环中调用 bio_list_pop 将 bio_list_on_stack[0] 积攒的 bio 拿出来，分别放在两个队列 lower 和 same 中，顾名思义，lower 就是更低层次的块设备的 bio，same 是同层次的块设备的 bio。</p>
+<p>接下来我们能将 lower、same 以及 bio_list_on_stack[1] 都取出来，放在 bio_list_on_stack[0] 统一进行处理。当然应该 lower 优先了，因为只有底层的块设备的 I/O 做完了，上层的块设备的 I/O 才能做完。</p>
+<p>到这里，generic_make_request 的逻辑才算解析完毕。对于写入的数据来讲，其实仅仅到将 bio 请求放在请求队列上，设备驱动程序还没往设备里面写呢。</p>
+<h3 id="请求的处理">请求的处理</h3>
+<p>设备驱动程序往设备里面写，调用的是请求队列 request_queue 的另外一个函数 request_fn。对于 scsi 设备来讲，调用的是 scsi_request_fn。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span><span class="lnt">47
+</span><span class="lnt">48
+</span><span class="lnt">49
+</span><span class="lnt">50
+</span><span class="lnt">51
+</span><span class="lnt">52
+</span><span class="lnt">53
+</span><span class="lnt">54
+</span><span class="lnt">55
+</span><span class="lnt">56
+</span><span class="lnt">57
+</span><span class="lnt">58
+</span><span class="lnt">59
+</span><span class="lnt">60
+</span><span class="lnt">61
+</span><span class="lnt">62
+</span><span class="lnt">63
+</span><span class="lnt">64
+</span><span class="lnt">65
+</span><span class="lnt">66
+</span><span class="lnt">67
+</span><span class="lnt">68
+</span><span class="lnt">69
+</span><span class="lnt">70
+</span><span class="lnt">71
+</span><span class="lnt">72
+</span><span class="lnt">73
+</span><span class="lnt">74
+</span><span class="lnt">75
+</span><span class="lnt">76
+</span><span class="lnt">77
+</span><span class="lnt">78
+</span><span class="lnt">79
+</span><span class="lnt">80
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">static void scsi_request_fn(struct request_queue *q)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	__releases(q-&gt;queue_lock)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	__acquires(q-&gt;queue_lock)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">{
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct scsi_device *sdev = q-&gt;queuedata;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct Scsi_Host *shost;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct scsi_cmnd *cmd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	struct request *req;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  	/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * To start with, we keep looping until the queue is empty, or until
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 * the host is no longer able to accept any more requests.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	shost = sdev-&gt;host;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	for (;;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		int rtn;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 * get next queueable request.  We do this early to make sure
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 * that the request is fully prepared even if we cannot
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 * accept it.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		req = blk_peek_request(q);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 * Remove the request from the request list.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		if (!(blk_queue_tagged(q) &amp;&amp; !blk_queue_start_tag(q, req)))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">			blk_start_request(req);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">.....
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		cmd = req-&gt;special;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		/*
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 * Dispatch the command to the low-level driver.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		 */
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		cmd-&gt;scsi_done = scsi_done;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		rtn = scsi_dispatch_cmd(cmd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	return;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">......
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>在这里面是一个 for 无限循环，从 request_queue 中读取 request，然后封装更加底层的指令，给设备控制器下指令，实施真正的 I/O 操作。</p>
+<h2 id="总结时刻">总结时刻</h2>
+<p>这一节我们讲了如何将块设备 I/O 请求送达到外部设备。</p>
+<p>对于块设备的 I/O 操作分为两种，一种是直接 I/O，另一种是缓存 I/O。无论是哪种 I/O，最终都会调用 submit_bio 提交块设备 I/O 请求。</p>
+<p>对于每一种块设备，都有一个 gendisk 表示这个设备，它有一个请求队列，这个队列是一系列的 request 对象。每个 request 对象里面包含多个 BIO 对象，指向 page cache。所谓的写入块设备，I/O 就是将 page cache 里面的数据写入硬盘。</p>
+<p>对于请求队列来讲，还有两个函数，一个函数叫 make_request_fn 函数，用于将请求放入队列。submit_bio 会调用 generic_make_request，然后调用这个函数。</p>
+<p>另一个函数往往在设备驱动程序里实现，我们叫 request_fn 函数，它用于从队列里面取出请求来，写入外部设备。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/b7814cd8c95381bcd891b020a5bebd67.png" alt=""></p>
+<p>至此，整个写入文件的过程才完整结束。这真是个复杂的过程，涉及系统调用、内存管理、文件系统和输入输出。这足以说明，操作系统真的是一个非常复杂的体系，环环相扣，需要分层次层层展开来学习。</p>
+<p>到这里，专栏已经过半了，你应该能发现，很多我之前说“后面会细讲”的东西，现在正在一点一点解释清楚，而文中越来越多出现“前面我们讲过”的字眼，你是否当时学习前面知识的时候，没有在意，导致学习后面的知识产生困惑了呢？没关系，及时倒回去复习，再回过头去看，当初学过的很多知识会变得清晰很多。</p>
+<h2 id="课堂练习">课堂练习</h2>
+<p>你知道如何查看磁盘调度算法、修改磁盘调度算法以及 I/O 队列的长度吗？</p>
+<p>欢迎留言和我分享你的疑惑和见解，也欢迎可以收藏本节内容，反复研读。你也可以把今天的内容分享给你的朋友，和他一起学习和进步。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B6%A3%E8%B0%88Linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/1a5564dd4e1c9f25d4772c7f844ca84a.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E8%B6%A3%E8%B0%88linux%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/">趣谈Linux操作系统</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF%E4%B8%8E%E5%AE%9E%E6%88%98/35__%E8%B7%A8%E9%9B%86%E7%BE%A4%E5%A4%87%E4%BB%BD%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88mirrormaker/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">35__跨集群备份解决方案MirrorMaker</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%9C%B1%E8%B5%9F%E7%9A%84%E6%8A%80%E6%9C%AF%E7%AE%A1%E7%90%86%E8%AF%BE/35__%E7%90%86%E8%A7%A3%E5%B9%B6%E5%BB%BA%E7%AB%8B%E8%87%AA%E5%B7%B1%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%BC%B9%E6%80%A7/">
+            <span class="next-text nav-default">35__理解并建立自己的工作弹性</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

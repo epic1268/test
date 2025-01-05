@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>22__非阻塞I_O：提升性能的加速器 - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是盛延敏，这里是网络编程实战第 22 讲，欢迎回来。
+在性能篇的前两讲中，我分别介绍了 select 和 poll 两种不同的 I/O 多路复用技术。在接下来的这一讲中，我将带大家进入非阻塞 I/O 模式的世界。事实上，非阻塞 I/O 配合 I/O 多路复用，是高性能网络编程中的常见技术。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/22__%E9%9D%9E%E9%98%BB%E5%A1%9Ei_o%E6%8F%90%E5%8D%87%E6%80%A7%E8%83%BD%E7%9A%84%E5%8A%A0%E9%80%9F%E5%99%A8/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/22__%E9%9D%9E%E9%98%BB%E5%A1%9Ei_o%E6%8F%90%E5%8D%87%E6%80%A7%E8%83%BD%E7%9A%84%E5%8A%A0%E9%80%9F%E5%99%A8/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="22__非阻塞I_O：提升性能的加速器">
+  <meta property="og:description" content="你好，我是盛延敏，这里是网络编程实战第 22 讲，欢迎回来。
+在性能篇的前两讲中，我分别介绍了 select 和 poll 两种不同的 I/O 多路复用技术。在接下来的这一讲中，我将带大家进入非阻塞 I/O 模式的世界。事实上，非阻塞 I/O 配合 I/O 多路复用，是高性能网络编程中的常见技术。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="网络编程实战">
+
+  <meta itemprop="name" content="22__非阻塞I_O：提升性能的加速器">
+  <meta itemprop="description" content="你好，我是盛延敏，这里是网络编程实战第 22 讲，欢迎回来。
+在性能篇的前两讲中，我分别介绍了 select 和 poll 两种不同的 I/O 多路复用技术。在接下来的这一讲中，我将带大家进入非阻塞 I/O 模式的世界。事实上，非阻塞 I/O 配合 I/O 多路复用，是高性能网络编程中的常见技术。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4099">
+  <meta itemprop="keywords" content="网络编程实战">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="22__非阻塞I_O：提升性能的加速器">
+  <meta name="twitter:description" content="你好，我是盛延敏，这里是网络编程实战第 22 讲，欢迎回来。
+在性能篇的前两讲中，我分别介绍了 select 和 poll 两种不同的 I/O 多路复用技术。在接下来的这一讲中，我将带大家进入非阻塞 I/O 模式的世界。事实上，非阻塞 I/O 配合 I/O 多路复用，是高性能网络编程中的常见技术。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">22__非阻塞I_O：提升性能的加速器</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4099 字 </span>
+          <span class="more-meta"> 预计阅读 9 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#阻塞-vs-非阻塞">阻塞 VS 非阻塞</a></li>
+        <li><a href="#非阻塞-io">非阻塞 I/O</a>
+          <ul>
+            <li><a href="#读操作">读操作</a></li>
+            <li><a href="#写操作">写操作</a></li>
+            <li><a href="#accept">accept</a></li>
+            <li><a href="#connect">connect</a></li>
+          </ul>
+        </li>
+        <li><a href="#非阻塞-io--select-多路复用">非阻塞 I/O + select 多路复用</a></li>
+        <li><a href="#实验">实验</a></li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#思考题">思考题</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是盛延敏，这里是网络编程实战第 22 讲，欢迎回来。</p>
+<p>在性能篇的前两讲中，我分别介绍了 select 和 poll 两种不同的 I/O 多路复用技术。在接下来的这一讲中，我将带大家进入非阻塞 I/O 模式的世界。事实上，非阻塞 I/O 配合 I/O 多路复用，是高性能网络编程中的常见技术。</p>
+<h2 id="阻塞-vs-非阻塞">阻塞 VS 非阻塞</h2>
+<p>当应用程序调用阻塞 I/O 完成某个操作时，应用程序会被挂起，等待内核完成操作，感觉上应用程序像是被“阻塞”了一样。实际上，内核所做的事情是将 CPU 时间切换给其他有需要的进程，网络应用程序在这种情况下就会得不到 CPU 时间做该做的事情。</p>
+<p>非阻塞 I/O 则不然，当应用程序调用非阻塞 I/O 完成某个操作时，内核立即返回，不会把 CPU 时间切换给其他进程，应用程序在返回后，可以得到足够的 CPU 时间继续完成其他事情。</p>
+<p>如果拿去书店买书举例子，阻塞 I/O 对应什么场景呢？你去了书店，告诉老板（内核）你想要某本书，然后你就一直在那里等着，直到书店老板翻箱倒柜找到你想要的书，有可能还要帮你联系全城其它分店。注意，这个过程中你一直滞留在书店等待老板的回复，好像在书店老板这里&quot;阻塞&quot;住了。</p>
+<p>那么非阻塞 I/O 呢？你去了书店，问老板有没你心仪的那本书，老板查了下电脑，告诉你没有，你就悻悻离开了。一周以后，你又来这个书店，再问这个老板，老板一查，有了，于是你买了这本书。注意，这个过程中，你没有被阻塞，而是在不断轮询。</p>
+<p>但轮询的效率太低了，于是你向老板提议：“老板，到货给我打电话吧，我再来付钱取书。”这就是前面讲到的 I/O 多路复用。</p>
+<p>再进一步，你连去书店取书也想省了，得了，让老板代劳吧，你留下地址，付了书费，让老板到货时寄给你，你直接在家里拿到就可以看了。这就是我们将会在第 30 讲中讲到的异步 I/O。</p>
+<p>这几个 I/O 模型，再加上进程、线程模型，构成了整个网络编程的知识核心。</p>
+<p>按照使用场景，非阻塞 I/O 可以被用到读操作、写操作、接收连接操作和发起连接操作上。接下来，我们对它们一一解读。</p>
+<h2 id="非阻塞-io">非阻塞 I/O</h2>
+<h3 id="读操作">读操作</h3>
+<p>如果套接字对应的接收缓冲区没有数据可读，在非阻塞情况下 read 调用会立即返回，一般返回 EWOULDBLOCK 或 EAGAIN 出错信息。在这种情况下，出错信息是需要小心处理，比如后面再次调用 read 操作，而不是直接作为错误直接返回。这就好像去书店买书没买到离开一样，需要不断进行又一次轮询处理。</p>
+<h3 id="写操作">写操作</h3>
+<p>不知道你有没有注意到，在阻塞 I/O 情况下，write 函数返回的字节数，和输入的参数总是一样的。如果返回值总是和输入的数据大小一样，write 等写入函数还需要定义返回值吗？我不知道你是不是和我一样，刚接触到这一部分知识的时候有这种困惑。</p>
+<p>这里就要引出我们所说的非阻塞 I/O。在非阻塞 I/O 的情况下，如果套接字的发送缓冲区已达到了极限，不能容纳更多的字节，那么操作系统内核会<strong>尽最大可能</strong>从应用程序拷贝数据到发送缓冲区中，并立即从 write 等函数调用中返回。可想而知，在拷贝动作发生的瞬间，有可能一个字符也没拷贝，有可能所有请求字符都被拷贝完成，那么这个时候就需要返回一个数值，告诉应用程序到底有多少数据被成功拷贝到了发送缓冲区中，应用程序需要再次调用 write 函数，以输出未完成拷贝的字节。</p>
+<p>write 等函数是可以同时作用到阻塞 I/O 和非阻塞 I/O 上的，为了复用一个函数，处理非阻塞和阻塞 I/O 多种情况，设计出了写入返回值，并用这个返回值表示实际写入的数据大小。</p>
+<p>也就是说，非阻塞 I/O 和阻塞 I/O 处理的方式是不一样的。</p>
+<p>非阻塞 I/O 需要这样：拷贝→返回→再拷贝→再返回。</p>
+<p>而阻塞 I/O 需要这样：拷贝→直到所有数据拷贝至发送缓冲区完成→返回。</p>
+<p>不过在实战中，你可以不用区别阻塞和非阻塞 I/O，使用循环的方式来写入数据就好了。只不过在阻塞 I/O 的情况下，循环只执行一次就结束了。</p>
+<p>我在前面的章节中已经介绍了类似的方案，你可以在文稿里看到 writen 函数的实现。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span><span class="lnt">46
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">/*</span> <span class="err">向文件描述符</span> <span class="n">fd</span> <span class="err">写入</span> <span class="n">n</span> <span class="err">字节数</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">ssize_t</span> <span class="n">writen</span><span class="p">(</span><span class="ne">int</span> <span class="n">fd</span><span class="p">,</span> <span class="k">const</span> <span class="n">void</span> <span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">n</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">size_t</span>      <span class="n">nleft</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">ssize_t</span>     <span class="n">nwritten</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">const</span> <span class="n">char</span>  <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     <span class="n">ptr</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">nleft</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="o">//</span> <span class="err">如果还有数据没被拷贝完成，就一直循环</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">while</span> <span class="p">(</span><span class="n">nleft</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="k">if</span> <span class="p">(</span> <span class="p">(</span><span class="n">nwritten</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">nleft</span><span class="p">))</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           <span class="o">/*</span> <span class="err">这里</span> <span class="n">EINTR</span> <span class="err">是非阻塞</span> <span class="n">non</span><span class="o">-</span><span class="n">blocking</span> <span class="err">情况下，通知我们再次调用</span> <span class="n">write</span><span class="p">()</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="k">if</span> <span class="p">(</span><span class="n">nwritten</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">errno</span> <span class="o">==</span> <span class="n">EINTR</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                <span class="n">nwritten</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>      
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="k">else</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>         <span class="o">/*</span> <span class="err">出错退出</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         <span class="o">/*</span> <span class="err">指针增大，剩下字节数变小</span> <span class="o">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">nleft</span> <span class="o">-=</span> <span class="n">nwritten</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">ptr</span>   <span class="o">+=</span> <span class="n">nwritten</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">n</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>下面我通过一张表来总结一下 read 和 write 在阻塞模式和非阻塞模式下的不同行为特性：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/d68eff940f9029ddc63586f3c8805ab2.png" alt=""><br>
+关于 read 和 write 还有几个结论，你需要把握住：</p>
+<ol>
+<li>read 总是在接收缓冲区有数据时就立即返回，不是等到应用程序给定的数据充满才返回。当接收缓冲区为空时，阻塞模式会等待，非阻塞模式立即返回 -1，并有 EWOULDBLOCK 或 EAGAIN 错误。</li>
+<li>和 read 不同，阻塞模式下，write 只有在发送缓冲区足以容纳应用程序的输出字节时才返回；而非阻塞模式下，则是能写入多少就写入多少，并返回实际写入的字节数。</li>
+<li>阻塞模式下的 write 有个特例，就是对方主动关闭了套接字，这个时候 write 调用会立即返回，并通过返回值告诉应用程序实际写入的字节数，如果再次对这样的套接字进行 write 操作，就会返回失败。失败是通过返回值 -1 来通知到应用程序的。</li>
+</ol>
+<h3 id="accept">accept</h3>
+<p>当 accept 和 I/O 多路复用 select、poll 等一起配合使用时，如果在监听套接字上触发事件，说明有连接建立完成，此时调用 accept 肯定可以返回已连接套接字。这样看来，似乎把监听套接字设置为非阻塞，没有任何好处。</p>
+<p>为了说明这个问题，我们构建一个客户端程序，其中最关键的是，一旦连接建立，设置 SO_LINGER 套接字选项，把 l_onoff 标志设置为 1，把 l_linger 时间设置为 0。这样，连接被关闭时，TCP 套接字上将会发送一个 RST。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct linger ling;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ling.l_onoff = 1; 
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">ling.l_linger = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">setsockopt(socket_fd, SOL_SOCKET, SO_LINGER, &amp;ling, sizeof(ling));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">close(socket_fd);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>服务器端使用 select I/O 多路复用，不过，监听套接字仍然是 blocking 的。如果监听套接字上有事件发生，休眠 5 秒，以便模拟高并发场景下的情形。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">if (FD_ISSET(listen_fd, &amp;readset)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    printf(&#34;listening socket readable\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    sleep(5);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct sockaddr_storage ss;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    socklen_t slen = sizeof(ss);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int fd = accept(listen_fd, (struct sockaddr *) &amp;ss, &amp;slen);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>这里的休眠时间非常关键，这样，在监听套接字上有可读事件发生时，并没有马上调用 accept。由于客户端发生了 RST 分节，该连接被接收端内核从自己的已完成队列中删除了，此时再调用 accept，由于没有已完成连接（假设没有其他已完成连接），accept 一直阻塞，更为严重的是，该线程再也没有机会对其他 I/O 事件进行分发，相当于该服务器无法对新连接和其他 I/O 进行服务。</p>
+<p>如果我们将监听套接字设为非阻塞，上述的情形就不会再发生。只不过对于 accept 的返回值，需要正确地处理各种看似异常的错误，例如忽略 EWOULDBLOCK、EAGAIN 等。</p>
+<p>这个例子给我们的启发是，一定要将监听套接字设置为非阻塞的，尽管这里休眠时间 5 秒有点夸张，但是在极端情况下处理不当的服务器程序是有可能碰到文稿中例子所阐述的情况，为了让服务器程序在极端情况下工作正常，这点工作还是非常值得的。</p>
+<h3 id="connect">connect</h3>
+<p>在非阻塞 TCP 套接字上调用 connect 函数，会立即返回一个 EINPROGRESS 错误。TCP 三次握手会正常进行，应用程序可以继续做其他初始化的事情。当该连接建立成功或者失败时，通过 I/O 多路复用 select、poll 等可以进行连接的状态检测。</p>
+<h2 id="非阻塞-io--select-多路复用">非阻塞 I/O + select 多路复用</h2>
+<p>文稿中给出了一个非阻塞 I/O 搭配 select 多路复用的例子。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">  1
+</span><span class="lnt">  2
+</span><span class="lnt">  3
+</span><span class="lnt">  4
+</span><span class="lnt">  5
+</span><span class="lnt">  6
+</span><span class="lnt">  7
+</span><span class="lnt">  8
+</span><span class="lnt">  9
+</span><span class="lnt"> 10
+</span><span class="lnt"> 11
+</span><span class="lnt"> 12
+</span><span class="lnt"> 13
+</span><span class="lnt"> 14
+</span><span class="lnt"> 15
+</span><span class="lnt"> 16
+</span><span class="lnt"> 17
+</span><span class="lnt"> 18
+</span><span class="lnt"> 19
+</span><span class="lnt"> 20
+</span><span class="lnt"> 21
+</span><span class="lnt"> 22
+</span><span class="lnt"> 23
+</span><span class="lnt"> 24
+</span><span class="lnt"> 25
+</span><span class="lnt"> 26
+</span><span class="lnt"> 27
+</span><span class="lnt"> 28
+</span><span class="lnt"> 29
+</span><span class="lnt"> 30
+</span><span class="lnt"> 31
+</span><span class="lnt"> 32
+</span><span class="lnt"> 33
+</span><span class="lnt"> 34
+</span><span class="lnt"> 35
+</span><span class="lnt"> 36
+</span><span class="lnt"> 37
+</span><span class="lnt"> 38
+</span><span class="lnt"> 39
+</span><span class="lnt"> 40
+</span><span class="lnt"> 41
+</span><span class="lnt"> 42
+</span><span class="lnt"> 43
+</span><span class="lnt"> 44
+</span><span class="lnt"> 45
+</span><span class="lnt"> 46
+</span><span class="lnt"> 47
+</span><span class="lnt"> 48
+</span><span class="lnt"> 49
+</span><span class="lnt"> 50
+</span><span class="lnt"> 51
+</span><span class="lnt"> 52
+</span><span class="lnt"> 53
+</span><span class="lnt"> 54
+</span><span class="lnt"> 55
+</span><span class="lnt"> 56
+</span><span class="lnt"> 57
+</span><span class="lnt"> 58
+</span><span class="lnt"> 59
+</span><span class="lnt"> 60
+</span><span class="lnt"> 61
+</span><span class="lnt"> 62
+</span><span class="lnt"> 63
+</span><span class="lnt"> 64
+</span><span class="lnt"> 65
+</span><span class="lnt"> 66
+</span><span class="lnt"> 67
+</span><span class="lnt"> 68
+</span><span class="lnt"> 69
+</span><span class="lnt"> 70
+</span><span class="lnt"> 71
+</span><span class="lnt"> 72
+</span><span class="lnt"> 73
+</span><span class="lnt"> 74
+</span><span class="lnt"> 75
+</span><span class="lnt"> 76
+</span><span class="lnt"> 77
+</span><span class="lnt"> 78
+</span><span class="lnt"> 79
+</span><span class="lnt"> 80
+</span><span class="lnt"> 81
+</span><span class="lnt"> 82
+</span><span class="lnt"> 83
+</span><span class="lnt"> 84
+</span><span class="lnt"> 85
+</span><span class="lnt"> 86
+</span><span class="lnt"> 87
+</span><span class="lnt"> 88
+</span><span class="lnt"> 89
+</span><span class="lnt"> 90
+</span><span class="lnt"> 91
+</span><span class="lnt"> 92
+</span><span class="lnt"> 93
+</span><span class="lnt"> 94
+</span><span class="lnt"> 95
+</span><span class="lnt"> 96
+</span><span class="lnt"> 97
+</span><span class="lnt"> 98
+</span><span class="lnt"> 99
+</span><span class="lnt">100
+</span><span class="lnt">101
+</span><span class="lnt">102
+</span><span class="lnt">103
+</span><span class="lnt">104
+</span><span class="lnt">105
+</span><span class="lnt">106
+</span><span class="lnt">107
+</span><span class="lnt">108
+</span><span class="lnt">109
+</span><span class="lnt">110
+</span><span class="lnt">111
+</span><span class="lnt">112
+</span><span class="lnt">113
+</span><span class="lnt">114
+</span><span class="lnt">115
+</span><span class="lnt">116
+</span><span class="lnt">117
+</span><span class="lnt">118
+</span><span class="lnt">119
+</span><span class="lnt">120
+</span><span class="lnt">121
+</span><span class="lnt">122
+</span><span class="lnt">123
+</span><span class="lnt">124
+</span><span class="lnt">125
+</span><span class="lnt">126
+</span><span class="lnt">127
+</span><span class="lnt">128
+</span><span class="lnt">129
+</span><span class="lnt">130
+</span><span class="lnt">131
+</span><span class="lnt">132
+</span><span class="lnt">133
+</span><span class="lnt">134
+</span><span class="lnt">135
+</span><span class="lnt">136
+</span><span class="lnt">137
+</span><span class="lnt">138
+</span><span class="lnt">139
+</span><span class="lnt">140
+</span><span class="lnt">141
+</span><span class="lnt">142
+</span><span class="lnt">143
+</span><span class="lnt">144
+</span><span class="lnt">145
+</span><span class="lnt">146
+</span><span class="lnt">147
+</span><span class="lnt">148
+</span><span class="lnt">149
+</span><span class="lnt">150
+</span><span class="lnt">151
+</span><span class="lnt">152
+</span><span class="lnt">153
+</span><span class="lnt">154
+</span><span class="lnt">155
+</span><span class="lnt">156
+</span><span class="lnt">157
+</span><span class="lnt">158
+</span><span class="lnt">159
+</span><span class="lnt">160
+</span><span class="lnt">161
+</span><span class="lnt">162
+</span><span class="lnt">163
+</span><span class="lnt">164
+</span><span class="lnt">165
+</span><span class="lnt">166
+</span><span class="lnt">167
+</span><span class="lnt">168
+</span><span class="lnt">169
+</span><span class="lnt">170
+</span><span class="lnt">171
+</span><span class="lnt">172
+</span><span class="lnt">173
+</span><span class="lnt">174
+</span><span class="lnt">175
+</span><span class="lnt">176
+</span><span class="lnt">177
+</span><span class="lnt">178
+</span><span class="lnt">179
+</span><span class="lnt">180
+</span><span class="lnt">181
+</span><span class="lnt">182
+</span><span class="lnt">183
+</span><span class="lnt">184
+</span><span class="lnt">185
+</span><span class="lnt">186
+</span><span class="lnt">187
+</span><span class="lnt">188
+</span><span class="lnt">189
+</span><span class="lnt">190
+</span><span class="lnt">191
+</span><span class="lnt">192
+</span><span class="lnt">193
+</span><span class="lnt">194
+</span><span class="lnt">195
+</span><span class="lnt">196
+</span><span class="lnt">197
+</span><span class="lnt">198
+</span><span class="lnt">199
+</span><span class="lnt">200
+</span><span class="lnt">201
+</span><span class="lnt">202
+</span><span class="lnt">203
+</span><span class="lnt">204
+</span><span class="lnt">205
+</span><span class="lnt">206
+</span><span class="lnt">207
+</span><span class="lnt">208
+</span><span class="lnt">209
+</span><span class="lnt">210
+</span><span class="lnt">211
+</span><span class="lnt">212
+</span><span class="lnt">213
+</span><span class="lnt">214
+</span><span class="lnt">215
+</span><span class="lnt">216
+</span><span class="lnt">217
+</span><span class="lnt">218
+</span><span class="lnt">219
+</span><span class="lnt">220
+</span><span class="lnt">221
+</span><span class="lnt">222
+</span><span class="lnt">223
+</span><span class="lnt">224
+</span><span class="lnt">225
+</span><span class="lnt">226
+</span><span class="lnt">227
+</span><span class="lnt">228
+</span><span class="lnt">229
+</span><span class="lnt">230
+</span><span class="lnt">231
+</span><span class="lnt">232
+</span><span class="lnt">233
+</span><span class="lnt">234
+</span><span class="lnt">235
+</span><span class="lnt">236
+</span><span class="lnt">237
+</span><span class="lnt">238
+</span><span class="lnt">239
+</span><span class="lnt">240
+</span><span class="lnt">241
+</span><span class="lnt">242
+</span><span class="lnt">243
+</span><span class="lnt">244
+</span><span class="lnt">245
+</span><span class="lnt">246
+</span><span class="lnt">247
+</span><span class="lnt">248
+</span><span class="lnt">249
+</span><span class="lnt">250
+</span><span class="lnt">251
+</span><span class="lnt">252
+</span><span class="lnt">253
+</span><span class="lnt">254
+</span><span class="lnt">255
+</span><span class="lnt">256
+</span><span class="lnt">257
+</span><span class="lnt">258
+</span><span class="lnt">259
+</span><span class="lnt">260
+</span><span class="lnt">261
+</span><span class="lnt">262
+</span><span class="lnt">263
+</span><span class="lnt">264
+</span><span class="lnt">265
+</span><span class="lnt">266
+</span><span class="lnt">267
+</span><span class="lnt">268
+</span><span class="lnt">269
+</span><span class="lnt">270
+</span><span class="lnt">271
+</span><span class="lnt">272
+</span><span class="lnt">273
+</span><span class="lnt">274
+</span><span class="lnt">275
+</span><span class="lnt">276
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define MAX_LINE 1024
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">#define FD_INIT_SIZE 128
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> char rot13_char(char c) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if ((c &gt;= &#39;a&#39; &amp;&amp; c &lt;= &#39;m&#39;) || (c &gt;= &#39;A&#39; &amp;&amp; c &lt;= &#39;M&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c + 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else if ((c &gt;= &#39;n&#39; &amp;&amp; c &lt;= &#39;z&#39;) || (c &gt;= &#39;N&#39; &amp;&amp; c &lt;= &#39;Z&#39;))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c - 13;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    else
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return c;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> // 数据缓冲区
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">struct Buffer {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int connect_fd;  // 连接字
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char buffer[MAX_LINE];  // 实际缓冲
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    size_t writeIndex;      // 缓冲写入位置
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    size_t readIndex;       // 缓冲读取位置
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int readable;           // 是否可以读
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">};
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> struct Buffer *alloc_Buffer() {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    struct Buffer *buffer = malloc(sizeof(struct Buffer));
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    if (!buffer)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return NULL;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    buffer-&gt;connect_fd = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    buffer-&gt;writeIndex = buffer-&gt;readIndex = buffer-&gt;readable = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    return buffer;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> void free_Buffer(struct Buffer *buffer) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    free(buffer);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int onSocketRead(int fd, struct Buffer *buffer) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    char buf[1024];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int i;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    ssize_t result;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        result = recv(fd, buf, sizeof(buf), 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (result &lt;= 0)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            break;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         for (i = 0; i &lt; result; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (buffer-&gt;writeIndex &lt; sizeof(buffer-&gt;buffer))
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                buffer-&gt;buffer[buffer-&gt;writeIndex++] = rot13_char(buf[i]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (buf[i] == &#39;\n&#39;) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                buffer-&gt;readable = 1;  // 缓冲区可以读
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     if (result == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return 1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    } else if (result &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (errno == EAGAIN)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        return -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int onSocketWrite(int fd, struct Buffer *buffer) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    while (buffer-&gt;readIndex &lt; buffer-&gt;writeIndex) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        ssize_t result = send(fd, buffer-&gt;buffer + buffer-&gt;readIndex, buffer-&gt;writeIndex - buffer-&gt;readIndex, 0);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        if (result &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (errno == EAGAIN)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            return -1;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         buffer-&gt;readIndex += result;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     if (buffer-&gt;readIndex == buffer-&gt;writeIndex)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        buffer-&gt;readIndex = buffer-&gt;writeIndex = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     buffer-&gt;readable = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     return 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> int main(int argc, char **argv) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int listen_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    int i, maxfd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     struct Buffer *buffer[FD_INIT_SIZE];
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    for (i = 0; i &lt; FD_INIT_SIZE; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        buffer[i] = alloc_Buffer();
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     listen_fd = tcp_nonblocking_server_listen(SERV_PORT);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     fd_set readset, writeset, exset;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    FD_ZERO(&amp;readset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    FD_ZERO(&amp;writeset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    FD_ZERO(&amp;exset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">     while (1) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        maxfd = listen_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         FD_ZERO(&amp;readset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        FD_ZERO(&amp;writeset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        FD_ZERO(&amp;exset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         // listener 加入 readset
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        FD_SET(listen_fd, &amp;readset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         for (i = 0; i &lt; FD_INIT_SIZE; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (buffer[i]-&gt;connect_fd &gt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (buffer[i]-&gt;connect_fd &gt; maxfd)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    maxfd = buffer[i]-&gt;connect_fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                FD_SET(buffer[i]-&gt;connect_fd, &amp;readset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (buffer[i]-&gt;readable) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    FD_SET(buffer[i]-&gt;connect_fd, &amp;writeset);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (select(maxfd + 1, &amp;readset, &amp;writeset, &amp;exset, NULL) &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            error(1, errno, &#34;select error&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         if (FD_ISSET(listen_fd, &amp;readset)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            printf(&#34;listening socket readable\n&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            sleep(5);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            struct sockaddr_storage ss;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            socklen_t slen = sizeof(ss);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">           int fd = accept(listen_fd, (struct sockaddr *) &amp;ss, &amp;slen);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (fd &lt; 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                error(1, errno, &#34;accept failed&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } else if (fd &gt; FD_INIT_SIZE) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                error(1, 0, &#34;too many connections&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                close(fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                make_nonblocking(fd);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                if (buffer[fd]-&gt;connect_fd == 0) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    buffer[fd]-&gt;connect_fd = fd;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                } else {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                    error(1, 0, &#34;too many connections&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">         for (i = 0; i &lt; maxfd + 1; ++i) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            int r = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (i == listen_fd)
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                continue;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">             if (FD_ISSET(i, &amp;readset)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                r = onSocketRead(i, buffer[i]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (r == 0 &amp;&amp; FD_ISSET(i, &amp;writeset)) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                r = onSocketWrite(i, buffer[i]);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            if (r) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                buffer[i]-&gt;connect_fd = 0;
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">                close(i);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">}
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第 93 行，调用 fcntl 将监听套接字设置为非阻塞。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fcntl(fd, F_SETFL, O_NONBLOCK);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第 121 行调用 select 进行 I/O 事件分发处理。</p>
+<p>131-142 行在处理新的连接套接字，注意这里也把连接套接字设置为非阻塞的。</p>
+<p>151-156 行在处理连接套接字上的 I/O 读写事件，这里我们抽象了一个 Buffer 对象，Buffer 对象使用了 readIndex 和 writeIndex 分别表示当前缓冲的读写位置。</p>
+<h2 id="实验">实验</h2>
+<p>启动该服务器：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$./nonblockingserver
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>使用多个 telnet 客户端连接该服务器，可以验证交互正常。</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">$telnet 127.0.0.1 43211
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Trying 127.0.0.1...
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Connected to localhost.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">Escape character is &#39;^]&#39;.
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">fasfasfasf
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">snfsnfsnfs
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h2 id="总结">总结</h2>
+<p>非阻塞 I/O 可以使用在 read、write、accept、connect 等多种不同的场景，在非阻塞 I/O 下，使用轮询的方式引起 CPU 占用率高，所以一般将非阻塞 I/O 和 I/O 多路复用技术 select、poll 等搭配使用，在非阻塞 I/O 事件发生时，再调用对应事件的处理函数。这种方式，极大地提高了程序的健壮性和稳定性，是 Linux 下高性能网络编程的首选。</p>
+<h2 id="思考题">思考题</h2>
+<p>给大家布置两道思考题:</p>
+<p>第一道，程序中第 133 行这个判断说明了什么？如果要改进的话，你有什么想法？</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">else if (fd &gt; FD_INIT_SIZE) {
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    error(1, 0, &#34;too many connections&#34;);
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    close(fd);
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>第二道，你可以仔细阅读一下数据读写部分 Buffer 的代码，你觉得用一个 Buffer 对象，而不是两个的目的是什么？</p>
+<p>欢迎在评论区写下你的思考，我会和你一起交流，也欢迎把这篇文章分享给你的朋友或者同事，一起交流一下。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/5a282807b2a1ff091b7f803e8cef3429.png" alt=""></p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B%E5%AE%9E%E6%88%98/">网络编程实战</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/mysql%E5%BF%85%E7%9F%A5%E5%BF%85%E4%BC%9A/22__%E8%8C%83%E5%BC%8F%E5%A6%82%E4%BD%95%E6%B6%88%E9%99%A4%E5%86%97%E4%BD%99%E5%92%8C%E9%AB%98%E6%95%88%E5%AD%98%E5%8F%96/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">22__范式：如何消除冗余和高效存取？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E7%A1%85%E8%B0%B7%E4%BA%A7%E5%93%81%E5%AE%9E%E6%88%9836%E8%AE%B2/22__%E7%A1%85%E8%B0%B7%E9%AB%98%E7%AE%A1%E7%9A%84uieunderstand_identify_execute%E5%A2%9E%E9%95%BF%E8%AE%BA/">
+            <span class="next-text nav-default">22__硅谷高管的UIE（Understand,_Identify,_Execute）增长论</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

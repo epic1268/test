@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>19__如何用着色器实现像素动画？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是月影。
+上节课，我们以 HTML/CSS 为例，讲了三种动画的实现方法，以及标准的动画模型。我们先来回顾一下：
+固定帧动画：为每一帧准备一张图片，然后把 CSS 关键帧动画的 easing-function 设为 step-end 进行循环播放。 增加增量动画：在每帧给元素的相关属性增加一定的量，比如增加一个 rotate 角度。 时序动画：通过控制时间和动画函数来描述动画，首先定义初始时间和周期，然后在 update 中计算当前经过时间和进度 p，最后通过 p 来更新动画元素的属性。 标准动画模型：先定义 Animator 类，然后使用线性插值实现匀速运动的动画，以及通过缓动函数实现变速运动的动画。 而 WebGL 实现动画的方式和以上这些方式都有差别。所以这节课，我们就接着来讲怎么用着色器来实现动画。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/19__%E5%A6%82%E4%BD%95%E7%94%A8%E7%9D%80%E8%89%B2%E5%99%A8%E5%AE%9E%E7%8E%B0%E5%83%8F%E7%B4%A0%E5%8A%A8%E7%94%BB/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/19__%E5%A6%82%E4%BD%95%E7%94%A8%E7%9D%80%E8%89%B2%E5%99%A8%E5%AE%9E%E7%8E%B0%E5%83%8F%E7%B4%A0%E5%8A%A8%E7%94%BB/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="19__如何用着色器实现像素动画？">
+  <meta property="og:description" content="你好，我是月影。
+上节课，我们以 HTML/CSS 为例，讲了三种动画的实现方法，以及标准的动画模型。我们先来回顾一下：
+固定帧动画：为每一帧准备一张图片，然后把 CSS 关键帧动画的 easing-function 设为 step-end 进行循环播放。 增加增量动画：在每帧给元素的相关属性增加一定的量，比如增加一个 rotate 角度。 时序动画：通过控制时间和动画函数来描述动画，首先定义初始时间和周期，然后在 update 中计算当前经过时间和进度 p，最后通过 p 来更新动画元素的属性。 标准动画模型：先定义 Animator 类，然后使用线性插值实现匀速运动的动画，以及通过缓动函数实现变速运动的动画。 而 WebGL 实现动画的方式和以上这些方式都有差别。所以这节课，我们就接着来讲怎么用着色器来实现动画。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="跟月影学可视化">
+
+  <meta itemprop="name" content="19__如何用着色器实现像素动画？">
+  <meta itemprop="description" content="你好，我是月影。
+上节课，我们以 HTML/CSS 为例，讲了三种动画的实现方法，以及标准的动画模型。我们先来回顾一下：
+固定帧动画：为每一帧准备一张图片，然后把 CSS 关键帧动画的 easing-function 设为 step-end 进行循环播放。 增加增量动画：在每帧给元素的相关属性增加一定的量，比如增加一个 rotate 角度。 时序动画：通过控制时间和动画函数来描述动画，首先定义初始时间和周期，然后在 update 中计算当前经过时间和进度 p，最后通过 p 来更新动画元素的属性。 标准动画模型：先定义 Animator 类，然后使用线性插值实现匀速运动的动画，以及通过缓动函数实现变速运动的动画。 而 WebGL 实现动画的方式和以上这些方式都有差别。所以这节课，我们就接着来讲怎么用着色器来实现动画。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="4983">
+  <meta itemprop="keywords" content="跟月影学可视化">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="19__如何用着色器实现像素动画？">
+  <meta name="twitter:description" content="你好，我是月影。
+上节课，我们以 HTML/CSS 为例，讲了三种动画的实现方法，以及标准的动画模型。我们先来回顾一下：
+固定帧动画：为每一帧准备一张图片，然后把 CSS 关键帧动画的 easing-function 设为 step-end 进行循环播放。 增加增量动画：在每帧给元素的相关属性增加一定的量，比如增加一个 rotate 角度。 时序动画：通过控制时间和动画函数来描述动画，首先定义初始时间和周期，然后在 update 中计算当前经过时间和进度 p，最后通过 p 来更新动画元素的属性。 标准动画模型：先定义 Animator 类，然后使用线性插值实现匀速运动的动画，以及通过缓动函数实现变速运动的动画。 而 WebGL 实现动画的方式和以上这些方式都有差别。所以这节课，我们就接着来讲怎么用着色器来实现动画。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">19__如何用着色器实现像素动画？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 4983 字 </span>
+          <span class="more-meta"> 预计阅读 10 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#如何用着色器实现固定帧动画">如何用着色器实现固定帧动画</a></li>
+        <li><a href="#如何用着色器实现非固定帧动画">如何用着色器实现非固定帧动画</a>
+          <ul>
+            <li><a href="#1-用顶点着色器实现非固定帧动画">1. 用顶点着色器实现非固定帧动画</a></li>
+            <li><a href="#2-用片元着色器实现非固定帧动画">2. 用片元着色器实现非固定帧动画</a></li>
+          </ul>
+        </li>
+        <li><a href="#如何在着色器中实现缓动函数与非线性插值">如何在着色器中实现缓动函数与非线性插值</a></li>
+        <li><a href="#如何在片元着色器中实现随机粒子动画">如何在片元着色器中实现随机粒子动画</a></li>
+        <li><a href="#要点总结">要点总结</a></li>
+        <li><a href="#小试牛刀">小试牛刀</a></li>
+        <li><a href="#源码">源码</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是月影。</p>
+<p>上节课，我们以 HTML/CSS 为例，讲了三种动画的实现方法，以及标准的动画模型。我们先来回顾一下：</p>
+<ol>
+<li>固定帧动画：为每一帧准备一张图片，然后把 CSS 关键帧动画的 easing-function 设为 step-end 进行循环播放。</li>
+<li>增加增量动画：在每帧给元素的相关属性增加一定的量，比如增加一个 rotate 角度。</li>
+<li>时序动画：通过控制时间和动画函数来描述动画，首先定义初始时间和周期，然后在 update 中计算当前经过时间和进度 p，最后通过 p 来更新动画元素的属性。</li>
+<li>标准动画模型：先定义 Animator 类，然后使用线性插值实现匀速运动的动画，以及通过缓动函数实现变速运动的动画。</li>
+</ol>
+<p>而 WebGL 实现动画的方式和以上这些方式都有差别。所以这节课，我们就接着来讲怎么用着色器来实现动画。</p>
+<p>因为实现固定帧动画最简单，所以我们还是先来说它。</p>
+<h2 id="如何用着色器实现固定帧动画">如何用着色器实现固定帧动画</h2>
+<p>我们完全可以使用在片元着色器中替换纹理坐标的方式，来非常简单地实现固定帧动画。为了方便对比，我还是用上一节课实现会飞的小鸟的例子来讲，那片元着色器中的代码和最终要实现的效果如下所示。</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>varying vec2 vUv;<br>
+uniform sampler2D tMap;<br>
+uniform float fWidth;<br>
+uniform vec2 vFrames[3];<br>
+uniform int frameIndex;</p>
+<p>void main() {<br>
+vec2 uv = vUv;<br>
+for (int i = 0; i &lt; 3; i++) {<br>
+uv.x = mix(vFrames[i].x, vFrames[i].y, vUv.x) / fWidth;<br>
+if(float(i) == mod(float(frameIndex), 3.0)) break;<br>
+}<br>
+vec4 color = texture2D(tMap, uv);<br>
+gl_FragColor = color;<br>
+}</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/e43f5b4d4db05bee99ea023e4b93052c.png" alt=""></p>
+<p>会飞的小鸟</p>
+<p>利用片元着色器实现固定帧动画的关键部分，是 main 函数中的 for 循环。因为我们的动画只有 3 帧，所以最多只需要循环 3 次。</p>
+<p>我们还需要一个重要的参数，vFrames。它是每一帧动画的图片起始 x 和结束 x 坐标，我们用这两个坐标和 vUv.x 计算插值，最后除以图片的总宽度 fWidth，就能得到对应的纹理 x 坐标。替换纹理坐标之后，我们就能实现一个会飞的小鸟了。</p>
+<p>实现这个固定帧动画对应的 JavaScript 代码如下：</p>
+<p>const canvas = document.querySelector(&lsquo;canvas&rsquo;);<br>
+const renderer = new GlRenderer(canvas);<br>
+const textureURL = &lsquo;<a href="https://p.ssl.qhimg.com/t01f265b6b6479fffc4.png';">https://p.ssl.qhimg.com/t01f265b6b6479fffc4.png';</a><br>
+(async function () {<br>
+const texture = await renderer.loadTexture(textureURL);<br>
+const program = renderer.compileSync(fragment, vertex);<br>
+renderer.useProgram(program);<br>
+renderer.uniforms.tMap = texture;<br>
+renderer.uniforms.fWidth = 272;<br>
+renderer.uniforms.vFrames = [2, 88, 90, 176, 178, 264];<br>
+renderer.uniforms.frameIndex = 0;<br>
+setInterval(() =&gt; {<br>
+renderer.uniforms.frameIndex++;<br>
+}, 200);<br>
+const x = 43 / canvas.width;<br>
+const y = 30 / canvas.height;<br>
+renderer.setMeshData([{<br>
+positions: [<br>
+[-x, -y],<br>
+[-x, y],<br>
+[x, y],<br>
+[x, -y],<br>
+],<br>
+attributes: {<br>
+uv: [<br>
+[0, 0],<br>
+[0, 1],<br>
+[1, 1],<br>
+[1, 0],<br>
+],<br>
+},<br>
+cells: [[0, 1, 2], [2, 0, 3]],<br>
+}]);<br>
+renderer.render();<br>
+}());</p>
+<p>实际上 WebGL 实现固定帧动画的思路，和上一节课的思路是类似的。只不过，上一节课我们直接用 CSS 的 background-image，来切换 background-position 就可以实现动画。而在这里，我们需要将图片纹理 tMap 传进去，然后根据不同的 frameIndex 来计算出对应的纹理坐标，并且这个计算是在片元着色器中进行的。</p>
+<h2 id="如何用着色器实现非固定帧动画">如何用着色器实现非固定帧动画</h2>
+<p>好了，知道了怎么实现固定帧动画。接着，我们再来说增量动画和时序动画的实现。由于这两种动画都要将与时间有关的参数传给着色器，处理过程非常相似，所以我们可以将它们统称为非固定帧动画，放在一起来说。</p>
+<p>由于这两种动画都要将与时间有关的参数传给着色器，因此它们的处理过程非常相似，我们可以将它们统称为非固定帧动画，放在一起来说。</p>
+<p>用 Shader 实现非固定帧动画，本质上和上一节课的实现方法没有太大区别。所以，我们仍然可以使用同样的方法，以及标准动画模型来实现它。只不过，用 Shader 来实现非固定帧动画更加灵活，我们可以操作更多的属性，实现更丰富的效果。下面，我们详细来说说。</p>
+<h3 id="1-用顶点着色器实现非固定帧动画">1. 用顶点着色器实现非固定帧动画</h3>
+<p>我们知道，WebGL 有两种 Shader，分别是顶点着色器和片元着色器，它们都可以用来实现动画。我们先来看顶点着色器是怎么实现动画的。</p>
+<p>attribute vec2 a_vertexPosition;<br>
+attribute vec2 uv;</p>
+<p>varying vec2 vUv;<br>
+uniform float rotation;</p>
+<p>void main() {<br>
+gl_PointSize = 1.0;<br>
+vUv = uv;<br>
+float c = cos(rotation);<br>
+float s = sin(rotation);<br>
+mat3 transformMatrix = mat3(<br>
+c, s, 0,<br>
+-s, c, 0,<br>
+0, 0, 1<br>
+);<br>
+vec3 pos = transformMatrix * vec3(a_vertexPosition, 1);<br>
+gl_Position = vec4(pos, 1);<br>
+}</p>
+<p>在顶点着色器中，我们先绘制出一个红色的正方形，然后用三维齐次矩阵实现旋转。具体来说，就是把顶点坐标进行矩阵运算，再配合下面的 JavaScript 代码，就能让这个正方形旋转了。</p>
+<p>renderer.uniforms.rotation = 0.0;</p>
+<p>requestAnimationFrame(function update() {<br>
+renderer.uniforms.rotation += 0.05;<br>
+requestAnimationFrame(update);<br>
+});</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/7500856d6f1823ff26e00b85a3383903.png" alt=""></p>
+<p>逆时针旋转的红色正方形</p>
+<p>当然，我们也可以使用上一节课得到的标准动画模型来实现。具体来说，就是定义一个新的 Animator 对象，然后在 Animator 对象的方法中更新 rotation 属性。使用标准模型能更加精确地控制图形的旋转效果，代码如下：</p>
+<p>const animator = new Animator({duration: 2000, iterations: Infinity});<br>
+animator.animate(renderer, ({target, timing}) =&gt; {<br>
+target.uniforms.rotation = timing.p * 2 * Math.PI;<br>
+});</p>
+<p>总之，WebGL 实现非固定帧动画的方法与上节课的方式基本上一样。只不过，前一节课我们直接修改 HTML 元素的属性，而这一节课我们将属性通过 uniform 变量传给着色器执行渲染。</p>
+<h3 id="2-用片元着色器实现非固定帧动画">2. 用片元着色器实现非固定帧动画</h3>
+<p>除了用顶点着色器，我们也能用片元着色器实现动画。实际上，我们已经用片元着色器实现了不少动画。比如说，当我们将时间参数 uTime 通过 uniform 传给着色器的时候，就是在实现动画。</p>
+<p>还是用上面的例子。这次，我们将旋转放到片元着色器中处理，其实也能实现类似的旋转效果。代码如下所示：</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>varying vec2 vUv;<br>
+uniform vec4 color;<br>
+uniform float rotation;</p>
+<p>void main() {<br>
+vec2 st = 2.0 * (vUv - vec2(0.5));<br>
+float c = cos(rotation);<br>
+float s = sin(rotation);<br>
+mat3 transformMatrix = mat3(<br>
+c, s, 0,<br>
+-s, c, 0,<br>
+0, 0, 1<br>
+);<br>
+vec3 pos = transformMatrix * vec3(st, 1.0);<br>
+float d1 = 1.0 - smoothstep(0.5, 0.505, abs(pos.x));<br>
+float d2 = 1.0 - smoothstep(0.5, 0.505, abs(pos.y));<br>
+gl_FragColor = d1 * d2 * color;<br>
+}</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/cd7a9c306329b42a22d02a63f64ade0f.png" alt=""></p>
+<p>顺时针旋转的红色正方形</p>
+<p>你发现了吗，顶点着色器和片元着色器实现的旋转动画方向正好相反。为什么会出现这样的情况呢？因为在顶点着色器中，我们直接改变了顶点坐标，所以这样实现的旋转动画和 WebGL 坐标系（右手系）的方向一致，角度增大呈逆时针方向旋转。而在片元着色器中，我们的绘制原理是通过距离场着色来实现的，所以这里的旋转实际上改变的是距离场的角度而不是图形角度，最终绘制的图形也是相对于距离场的。又因为距离场逆时针旋转，所以图形就顺时针旋转了。</p>
+<p>最后我再补充一点，一般来说，动画如果能使用顶点着色器实现，我们会尽量在顶点着色器中实现。因为在绘制一帧画面的时候，顶点着色器的运算量会大大少于片元着色器，所以使用顶点着色器消耗的性能更少。</p>
+<p>但是，在片元着色器中实现非固定帧动画也有优势。我们可以使用片元着色器的技巧，如重复、随机、噪声等等来绘制更加复杂的效果。</p>
+<p>比如说，我们把上面的代码稍微修改一下，使用取小数和取整数的函数，再用之前网格化的思路，来利用网格实现了大量的重复动画。这个做法充分利用了 GPU 的并行效率，比用其他方式把图形一个一个地绘制出来性能要高得多。</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>varying vec2 vUv;<br>
+uniform float rotation;</p>
+<p>float random (vec2 st) {<br>
+return fract(sin(dot(st.xy,<br>
+vec2(12.9898,78.233)))*<br>
+43758.5453123);<br>
+}</p>
+<p>vec3 hsb2rgb(vec3 c){<br>
+vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0), 6.0)-3.0)-1.0, 0.0, 1.0);<br>
+rgb = rgb * rgb * (3.0 - 2.0 * rgb);<br>
+return c.z * mix(vec3(1.0), rgb, c.y);<br>
+}</p>
+<p>void main() {<br>
+vec2 f_uv = fract(vUv * 10.0);<br>
+vec2 i_uv = floor(vUv * 10.0);<br>
+vec2 st = 2.0 * (f_uv - vec2(0.5));<br>
+float c = 0.7 * cos(rotation);<br>
+float s = 0.7 * sin(rotation);<br>
+mat3 transformMatrix = mat3(<br>
+c, s, 0,<br>
+-s, c, 0,<br>
+0, 0, 1<br>
+);<br>
+vec3 pos = transformMatrix * vec3(st, 1.0);<br>
+float d1 = 1.0 - smoothstep(0.5, 0.505, abs(pos.x));<br>
+float d2 = 1.0 - smoothstep(0.5, 0.505, abs(pos.y));<br>
+gl_FragColor = d1 * d2 * vec4(hsb2rgb(vec3(random(i_uv), 1.0, 1.0)), 1.0);<br>
+}</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/65b941f399cb009d054e9f06229d968e.png" alt=""></p>
+<p>大量重复的旋转正方形</p>
+<h2 id="如何在着色器中实现缓动函数与非线性插值">如何在着色器中实现缓动函数与非线性插值</h2>
+<p>在前面的例子中，我们使用 Shader 的矩阵运算实现了旋转动画。同样，轨迹动画也可以用 Shader 矩阵运算实现。</p>
+<p>比如说，我们要在画布上绘制一个红色的方块，利用它实现轨迹动画。首先，我们要实现一个着色器，它通过设置 translation 来改变图形位置，代码如下：</p>
+<p>attribute vec2 a_vertexPosition;<br>
+attribute vec2 uv;</p>
+<p>varying vec2 vUv;<br>
+uniform vec2 translation;</p>
+<p>void main() {<br>
+gl_PointSize = 1.0;<br>
+vUv = uv;<br>
+mat3 transformMatrix = mat3(<br>
+1, 0, 0,<br>
+0, 1, 0,<br>
+translation, 1<br>
+);<br>
+vec3 pos = transformMatrix * vec3(a_vertexPosition, 1);<br>
+gl_Position = vec4(pos, 1);<br>
+}</p>
+<p>然后，在 JavaScript 中，我们将 translation 依照时间变化传给上面的着色器，就可以让方块移动。那利用下面的代码，我们就让方块沿水平方向向右匀速运动一段距离。</p>
+<p>const canvas = document.querySelector(&lsquo;canvas&rsquo;);<br>
+const renderer = new GlRenderer(canvas);<br>
+const program = renderer.compileSync(fragment, vertex);<br>
+renderer.useProgram(program);<br>
+renderer.uniforms.color = [1, 0, 0, 1];<br>
+renderer.uniforms.translation = [-0.5, 0];</p>
+<p>const animator = new Animator({duration: 2000});<br>
+animator.animate(renderer, ({target, timing}) =&gt; {<br>
+target.uniforms.translation = [-0.5 * (1 - timing.p) + 0.5 * timing.p, 0];<br>
+});</p>
+<p>renderer.setMeshData([{<br>
+positions: [<br>
+[-0.25, -0.25],<br>
+[-0.25, 0.25],<br>
+[0.25, 0.25],<br>
+[0.25, -0.25],<br>
+],<br>
+attributes: {<br>
+uv: [<br>
+[0, 0],<br>
+[0, 1],<br>
+[1, 1],<br>
+[1, 0],<br>
+],<br>
+},<br>
+cells: [[0, 1, 2], [2, 0, 3]],<br>
+}]);<br>
+renderer.render();</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/82d2730001c9db3990b0cedfcbf3f483.png" alt=""></p>
+<p>水平向右匀速运动的红色正方形</p>
+<p>此外，我们还可以通过缓动函数来实现非匀速运动。而且我们既可以将缓动函数用 JavaScript 计算，也可以直接将缓动函数放在 Shader 中。如果将缓动函数用 JavaScript 计算，那么方法和上一节课完全一样，也就是给 Animator 传一个 easing 函数进去就可以了，这里我就不再重复了。但如果要将缓动函数写在 Shader 中，其实方法也非常简单。</p>
+<p>我们以前面顶点着色器实现非固定帧动画的代码为例，这次，我们不使用 Animator，而是直接将时间 uTime 参数传入 Shader，然后在 Shader 中加入缓动函数。在这里，我们用 smooth(0.0, 1.0, p) 来让方块做平滑加速、减速运动。除此之外，你也可以替换缓动函数，比如 clamp(p * p, 0.0, 1.0) 或者 clamp(p * (2 - p) * 0.0, 1.0) 来实现匀加速、匀减速的运动效果。修改后的代码如下：</p>
+<p>attribute vec2 a_vertexPosition;<br>
+attribute vec2 uv;</p>
+<p>varying vec2 vUv;<br>
+uniform vec4 uFromTo;<br>
+uniform float uTime;</p>
+<p>float easing(in float p) {<br>
+return smoothstep(0.0, 1.0, p);<br>
+// return clamp(p * p, 0.0, 1.0);<br>
+// return clamp(p * (2 - p) * 0.0, 1.0);<br>
+}</p>
+<p>void main() {<br>
+gl_PointSize = 1.0;<br>
+vUv = uv;<br>
+vec2 from = uFromTo.xy;<br>
+vec2 to = uFromTo.zw;<br>
+float p = easing(uTime / 2.0);<br>
+vec2 translation = mix(from, to, p);<br>
+mat3 transformMatrix = mat3(<br>
+1, 0, 0,<br>
+0, 1, 0,<br>
+translation, 1<br>
+);<br>
+vec3 pos = transformMatrix * vec3(a_vertexPosition, 1);<br>
+gl_Position = vec4(pos, 1);<br>
+}</p>
+<p>总之，因为 Shader 是在 GPU 中运算的，所以所有顶点都是被并行处理的。因此，通常情况下，我们在顶点着色器中执行缓动函数会更快。</p>
+<p>不过，直接用 JavaScript 计算和放在顶点着色器里计算，差别也不是很大，但如果把它放在片元着色器里计算，因为要把每个像素点都计算一遍，所以性能消耗反而更大一些。那我们为什么还要在着色器中计算 easing 呢？这是因为，我们不仅可以利用 easing 控制动画过程，还可以在片元着色器中用 easing 来实现非线性的插值。</p>
+<p>那什么是非线性插值呢？我们依然通过例子来进一步理解。</p>
+<p>我们知道，在正常情况下，顶点着色器定义的变量在片元着色器中，都会被线性插值。比如，你可以看我下面给出的顶点着色器、片元着色器，以及 JavaScript 中的代码。</p>
+<p>//顶点着色器<br>
+attribute vec2 a_vertexPosition;<br>
+attribute vec2 uv;<br>
+attribute vec4 color;</p>
+<p>varying vec2 vUv;<br>
+varying vec4 vColor;<br>
+uniform vec4 uFromTo;<br>
+uniform float uTime;</p>
+<p>void main() {<br>
+gl_PointSize = 1.0;<br>
+vUv = uv;<br>
+vColor = color;<br>
+gl_Position = vec4(a_vertexPosition, 1, 1);<br>
+}</p>
+<p>//片元着色器</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>varying vec2 vUv;<br>
+varying vec4 vColor;</p>
+<p>void main() {<br>
+gl_FragColor = vColor;<br>
+}</p>
+<p>//JavaScript 中的代码<br>
+renderer.setMeshData([{<br>
+positions: [<br>
+[-0.5, -0.25],<br>
+[-0.5, 0.25],<br>
+[0.5, 0.25],<br>
+[0.5, -0.25],<br>
+],<br>
+attributes: {<br>
+uv: [<br>
+[0, 0],<br>
+[0, 1],<br>
+[1, 1],<br>
+[1, 0],<br>
+],<br>
+color: [<br>
+[1, 0, 0, 1],<br>
+[1, 0, 0, 1],<br>
+[0, 0.5, 0, 1],<br>
+[0, 0.5, 0, 1],<br>
+],<br>
+},<br>
+cells: [[0, 1, 2], [2, 0, 3]],<br>
+}]);<br>
+renderer.render();</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/b37cd8b59d9caca73b3306c54f98344e.png" alt=""></p>
+<p>从左往右，由红色线性过渡到绿色</p>
+<p>通过执行上面的代码，我们可以得到一个长方形，它的颜色会从左到右，由红色线性地过渡到绿色。如果想要实现非线性的颜色过渡，我们就不能采用这种方式了，我们可以采用 uniform 的方式，通过 easing 函数来实现。</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>float easing(in float p) {<br>
+return smoothstep(0.0, 1.0, p);<br>
+// return clamp(p * p, 0.0, 1.0);<br>
+// return clamp(p * (2 - p) * 0.0, 1.0);<br>
+}</p>
+<p>varying vec2 vUv;<br>
+uniform vec4 fromColor;<br>
+uniform vec4 toColor;</p>
+<p>void main() {<br>
+float d = easing(vUv.x);<br>
+gl_FragColor = mix(fromColor, toColor, d);<br>
+}</p>
+<p>比如，我们可以使用 smoothstep 这种 easing 函数，来实现如下的插值效果：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/b9ece14053ba4e987bdf047891006938.png" alt=""></p>
+<p>另外，我们还可以像利用 JavaScript 那样，在 Shader 里实现贝塞尔曲线缓动。</p>
+<p>// <a href="http://www.flong.com/texts/code/shapers_bez/">http://www.flong.com/texts/code/shapers_bez/</a><br>
+// Helper functions:<br>
+float slope_from_t (float t, float A, float B, float C){<br>
+float dtdx = 1.0/(3.0<em>A</em>t<em>t + 2.0</em>B*t + C);<br>
+return dtdx;<br>
+}</p>
+<p>float x_from_t (float t, float A, float B, float C, float D){<br>
+float x = A*(t<em>t</em>t) + B*(t<em>t) + C</em>t + D;<br>
+return x;<br>
+}</p>
+<p>float y_from_t (float t, float E, float F, float G, float H){<br>
+float y = E*(t<em>t</em>t) + F*(t<em>t) + G</em>t + H;<br>
+return y;<br>
+}</p>
+<p>float cubic_bezier (float x, float a, float b, float c, float d){<br>
+float y0a = 0.00; // initial y<br>
+float x0a = 0.00; // initial x<br>
+float y1a = b;    // 1st influence y  <br>
+float x1a = a;    // 1st influence x<br>
+float y2a = d;    // 2nd influence y<br>
+float x2a = c;    // 2nd influence x<br>
+float y3a = 1.00; // final y<br>
+float x3a = 1.00; // final x</p>
+<p>float A = x3a - 3.0 *x2a + 3.0 * x1a - x0a;<br>
+float B = 3.0 * x2a - 6.0 * x1a + 3.0 * x0a;<br>
+float C = 3.0 * x1a - 3.0 * x0a;  <br>
+float D = x0a;</p>
+<p>float E = y3a - 3.0 * y2a + 3.0 * y1a - y0a;   <br>
+float F = 3.0 * y2a - 6.0 * y1a + 3.0 * y0a;            <br>
+float G = 3.0 * y1a - 3.0 * y0a;            <br>
+float H = y0a;</p>
+<p>// Solve for t given x (using Newton-Raphelson), then solve for y given t.<br>
+// Assume for the first guess that t = x.<br>
+float currentt = x;<br>
+const int nRefinementIterations = 5;<br>
+for (int i=0; i &lt; nRefinementIterations; i++){<br>
+float currentx = x_from_t(currentt, A,B,C,D);<br>
+float currentslope = slope_from_t(currentt, A,B,C);<br>
+currentt -= (currentx - x)*(currentslope);<br>
+currentt = clamp(currentt, 0.0, 1.0);<br>
+}</p>
+<p>float y = y_from_t(currentt, E,F,G,H);<br>
+return y;<br>
+}</p>
+<p>使用贝塞尔曲线缓动函数，我们能够实现更加丰富多彩的插值效果。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/c19ae82e96da387893c22870b405347d.png" alt=""></p>
+<p>贝塞尔曲线插值色带</p>
+<h2 id="如何在片元着色器中实现随机粒子动画">如何在片元着色器中实现随机粒子动画</h2>
+<p>我们知道，使用片元着色器还可以实现非常复杂的图形动画，包括粒子动画、网格动画以及网格噪声动画等等。网格动画和网格噪声我们前面都详细讲过，这里我们就重点来说说怎么实现粒子动画效果。</p>
+<p>#ifdef GL_ES<br>
+precision highp float;<br>
+#endif</p>
+<p>&hellip;</p>
+<p>float sdf_circle(vec2 st, vec2 c, float r) {<br>
+return 1.0 - length(st - c) / r;<br>
+}</p>
+<p>varying vec2 vUv;<br>
+uniform float uTime;</p>
+<p>void main() {<br>
+vec2 st = vUv;<br>
+float rx = mix(-0.2, 0.2, noise(vec2(7881.32, 0) + random(st) + uTime));<br>
+float ry = mix(-0.2, 0.2, noise(vec2(0, 1433.59) + random(st) + uTime));<br>
+float dis = distance(st, vec2(0.5));<br>
+dis = pow((1.0 - dis), 2.0);<br>
+float d = sdf_circle(st + vec2(rx, ry), vec2(0.5), 0.2);<br>
+d = smoothstep(0.0, 0.1, d);<br>
+gl_FragColor = vec4(dis * d * vec3(1.0), 1.0);<br>
+}</p>
+<p>如上面代码所示，我们可以使用随机 + 噪声来实现一个粒子效果。首先，我们设置随机数用来生成距离场的初始值，然后设置噪声用来形成位移，最后传入 uTime 变量来实现动画。</p>
+<p>这样一来，我们就能绘制出数量非常多的点，并且让它们沿着随机轨迹运动。最终的视觉效果如下：</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/a237ebcfad1d4a09183b57f7b8e5d056.png" alt=""></p>
+<p>粒子动画效果</p>
+<p>像这样流畅的动画效果，因为实现的过程中会涉及非常多点的运算，如果不用 shader，我们几乎是无法完成的。</p>
+<h2 id="要点总结">要点总结</h2>
+<p>这节课我们学习了用 WebGL 实现动画的方法。</p>
+<p>如果是实现固定帧动画，在 WebGL 中，我们可以把准备好的图片作为纹理，然后动态修改纹理坐标。</p>
+<p>如果是实现非固定帧动画，我们可以通过 uniform，将变化的属性作为参数传给着色器处理。上节课的标准动画模型在 WebGL 中依然可以使用，我们可以利用它计算出属性，再传入着色器执行渲染。</p>
+<p>实际上，今天讲的方法，与用 HTML/CSS、SVG、Canvas2D 实现动画的基本原理是一样的。只不过，WebGL 中的很多计算，是需要用 JavaScript 和 GLSL，也就是 Shader 来配合进行的。</p>
+<p>这节课的实战例子比较多，我建议你好好研究一下。毕竟，使用片元着色器实现动画效果的思路，我们还会在后续课程中经常用到。</p>
+<h2 id="小试牛刀">小试牛刀</h2>
+<ol>
+<li>今天，我们在 Shader 中通过矩阵运算实现了图形的旋转和平移，你能用学到的知识完善矩阵运算，来实现缩放、旋转、平移和扭曲变换，以及它们的组合效果吗？</li>
+<li>结合今天的内容，你可以试着实现一个粒子效果：让一张图片从中心爆炸开来，炸成碎片并最终消失。</li>
+</ol>
+<p>欢迎在留言区和我讨论，分享你的答案和思考，也欢迎你把这节课分享给你的朋友，我们下节课见！</p>
+<h2 id="源码">源码</h2>
+<p>本节课完整示例代码见GitHub 仓库</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/%E8%B7%9F%E6%9C%88%E5%BD%B1%E5%AD%A6%E5%8F%AF%E8%A7%86%E5%8C%96/">跟月影学可视化</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/java%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/19__%E5%A6%82%E4%BD%95%E7%94%A8%E5%8D%8F%E7%A8%8B%E6%9D%A5%E4%BC%98%E5%8C%96%E5%A4%9A%E7%BA%BF%E7%A8%8B%E4%B8%9A%E5%8A%A1/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">19__如何用协程来优化多线程业务？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E7%AE%97%E6%B3%95%E4%B9%8B%E7%BE%8E/19__%E6%95%A3%E5%88%97%E8%A1%A8%E4%B8%AD%E5%A6%82%E4%BD%95%E6%89%93%E9%80%A0%E4%B8%80%E4%B8%AA%E5%B7%A5%E4%B8%9A%E7%BA%A7%E6%B0%B4%E5%B9%B3%E7%9A%84%E6%95%A3%E5%88%97%E8%A1%A8/">
+            <span class="next-text nav-default">19__散列表（中）：如何打造一个工业级水平的散列表？</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>26__MetadataCache：Broker是怎么异步更新元数据缓存的？ - Docs</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="" /><meta name="description" content="你好，我是胡夕。今天，我们学习 Broker 上的元数据缓存（MetadataCache）。
+你肯定很好奇，前面我们不是学过 Controller 端的元数据缓存了吗？这里的元数据缓存又是啥呢？其实，这里的 MetadataCache 是指 Broker 上的元数据缓存，这些数据是 Controller 通过 UpdateMetadataRequest 请求发送给 Broker 的。换句话说，Controller 实现了一个异步更新机制，能够将最新的集群信息广播给所有 Broker。
+" /><meta name="keywords" content="技术文档, docs, 极客时间" />
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2 with theme even" />
+
+
+<link rel="canonical" href="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/26__metadatacachebroker%E6%98%AF%E6%80%8E%E4%B9%88%E5%BC%82%E6%AD%A5%E6%9B%B4%E6%96%B0%E5%85%83%E6%95%B0%E6%8D%AE%E7%BC%93%E5%AD%98%E7%9A%84/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+
+
+<link href="/sass/main.min.f92fd13721ddf72129410fd8250e73152cc6f2438082b6c0208dc24ee7c13fc4.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.css" integrity="sha256-7TyXnr2YU040zfSP+rEcz29ggW4j56/ujTPwjMzyqFY=" crossorigin="anonymous">
+
+
+<meta property="og:url" content="https://politcloud.org/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/26__metadatacachebroker%E6%98%AF%E6%80%8E%E4%B9%88%E5%BC%82%E6%AD%A5%E6%9B%B4%E6%96%B0%E5%85%83%E6%95%B0%E6%8D%AE%E7%BC%93%E5%AD%98%E7%9A%84/">
+  <meta property="og:site_name" content="Docs">
+  <meta property="og:title" content="26__MetadataCache：Broker是怎么异步更新元数据缓存的？">
+  <meta property="og:description" content="你好，我是胡夕。今天，我们学习 Broker 上的元数据缓存（MetadataCache）。
+你肯定很好奇，前面我们不是学过 Controller 端的元数据缓存了吗？这里的元数据缓存又是啥呢？其实，这里的 MetadataCache 是指 Broker 上的元数据缓存，这些数据是 Controller 通过 UpdateMetadataRequest 请求发送给 Broker 的。换句话说，Controller 实现了一个异步更新机制，能够将最新的集群信息广播给所有 Broker。">
+  <meta property="og:locale" content="zh_cn">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="post">
+    <meta property="article:published_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:modified_time" content="2024-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kafka核心源码解读">
+
+  <meta itemprop="name" content="26__MetadataCache：Broker是怎么异步更新元数据缓存的？">
+  <meta itemprop="description" content="你好，我是胡夕。今天，我们学习 Broker 上的元数据缓存（MetadataCache）。
+你肯定很好奇，前面我们不是学过 Controller 端的元数据缓存了吗？这里的元数据缓存又是啥呢？其实，这里的 MetadataCache 是指 Broker 上的元数据缓存，这些数据是 Controller 通过 UpdateMetadataRequest 请求发送给 Broker 的。换句话说，Controller 实现了一个异步更新机制，能够将最新的集群信息广播给所有 Broker。">
+  <meta itemprop="datePublished" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-01-10T00:00:00+00:00">
+  <meta itemprop="wordCount" content="6313">
+  <meta itemprop="keywords" content="Kafka核心源码解读">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="26__MetadataCache：Broker是怎么异步更新元数据缓存的？">
+  <meta name="twitter:description" content="你好，我是胡夕。今天，我们学习 Broker 上的元数据缓存（MetadataCache）。
+你肯定很好奇，前面我们不是学过 Controller 端的元数据缓存了吗？这里的元数据缓存又是啥呢？其实，这里的 MetadataCache 是指 Broker 上的元数据缓存，这些数据是 Controller 通过 UpdateMetadataRequest 请求发送给 Broker 的。换句话说，Controller 实现了一个异步更新机制，能够将最新的集群信息广播给所有 Broker。">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">Docs</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">Docs</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">26__MetadataCache：Broker是怎么异步更新元数据缓存的？</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 10100-01-10 </span>
+        <div class="post-category">
+            <a href="/categories/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/"> 极客时间 </a>
+            </div>
+          <span class="more-meta"> 约 6313 字 </span>
+          <span class="more-meta"> 预计阅读 13 分钟 </span>
+        
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc">
+  <h2 class="post-toc-title">文章目录</h2>
+  <div class="post-toc-content">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#metadatacache-类">MetadataCache 类</a></li>
+        <li><a href="#类定义及字段">类定义及字段</a></li>
+        <li><a href="#重要方法">重要方法</a>
+          <ul>
+            <li><a href="#判断类方法">判断类方法</a></li>
+            <li><a href="#获取类方法">获取类方法</a></li>
+            <li><a href="#更新类方法">更新类方法</a></li>
+          </ul>
+        </li>
+        <li><a href="#总结">总结</a></li>
+        <li><a href="#课后讨论">课后讨论</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>你好，我是胡夕。今天，我们学习 Broker 上的元数据缓存（MetadataCache）。</p>
+<p>你肯定很好奇，前面我们不是学过 Controller 端的元数据缓存了吗？这里的元数据缓存又是啥呢？其实，这里的 MetadataCache 是指 Broker 上的元数据缓存，这些数据是 Controller 通过 UpdateMetadataRequest 请求发送给 Broker 的。换句话说，Controller 实现了一个异步更新机制，能够将最新的集群信息广播给所有 Broker。</p>
+<p>那么，为什么每台 Broker 上都要保存这份相同的数据呢？这里有两个原因。</p>
+<p>第一个，也是最重要的原因，就是保存了这部分数据，Broker 就能够及时<strong>响应客户端发送的元数据请求，也就是处理 Metadata 请求</strong>。Metadata 请求是为数不多的能够被集群任意 Broker 处理的请求类型之一，也就是说，客户端程序能够随意地向任何一个 Broker 发送 Metadata 请求，去获取集群的元数据信息，这完全得益于 MetadataCache 的存在。</p>
+<p>第二个原因是，Kafka 的一些重要组件会用到这部分数据。比如副本管理器会使用它来获取 Broker 的节点信息，事务管理器会使用它来获取分区 Leader 副本的信息，等等。</p>
+<p>总之，MetadataCache 是每台 Broker 上都会保存的数据。Kafka 通过异步更新机制来保证所有 Broker 上的元数据缓存实现最终一致性。</p>
+<p>在实际使用的过程中，你可能会碰到这样一种场景：集群明明新创建了主题，但是消费者端却报错说“找不到主题信息”，这种情况通常只持续很短的时间。不知道你是否思考过这里面的原因，其实说白了，很简单，这就是因为元数据是异步同步的，因此，在某一时刻，某些 Broker 尚未更新元数据，它们保存的数据就是过期的元数据，无法识别最新的主题。</p>
+<p>等你今天学完了 MetadataCache 类，特别是元数据的更新之后，就会彻底明白这个问题了。下面，我们就来学习下 MetadataCache 的类代码。</p>
+<h2 id="metadatacache-类">MetadataCache 类</h2>
+<p>MetadataCache 类位于 server 包下的同名 scala 文件中。这是一个不到 400 行的小文件，里面的代码结构非常简单，该文件只定义了一个类，那就是 MetadataCache。</p>
+<p>MetadataCache 的实例化是在 Kafka Broker 启动时完成的，具体的调用发生在 KafkaServer 类的 startup 方法中。</p>
+<p>// KafkaServer.scala<br>
+def startup(): Unit = {<br>
+try {<br>
+&hellip;&hellip;<br>
+metadataCache = new MetadataCache(config.brokerId)<br>
+&hellip;&hellip;<br>
+}<br>
+catch {<br>
+case e: Throwable =&gt;<br>
+&hellip;&hellip;<br>
+}<br>
+}</p>
+<p>一旦实例被成功创建，就会被 Kafka 的 4 个组件使用。我来给你解释一下这 4 个组件的名称，以及它们各自使用该实例的主要目的。</p>
+<ol>
+<li>KafkaApis：这是源码入口类。它是执行 Kafka 各类请求逻辑的地方。该类大量使用 MetadataCache 中的主题分区和 Broker 数据，执行主题相关的判断与比较，以及获取 Broker 信息。</li>
+<li>AdminManager：这是 Kafka 定义的专门用于管理主题的管理器，里面定义了很多与主题相关的方法。同 KafkaApis 类似，它会用到 MetadataCache 中的主题信息和 Broker 数据，以获取主题和 Broker 列表。</li>
+<li>ReplicaManager：这是我们刚刚学过的副本管理器。它需要获取主题分区和 Broker 数据，同时还会更新 MetadataCache。</li>
+<li>TransactionCoordinator：这是管理 Kafka 事务的协调者组件，它需要用到 MetadataCache 中的主题分区的 Leader 副本所在的 Broker 数据，向指定 Broker 发送事务标记。</li>
+</ol>
+<h2 id="类定义及字段">类定义及字段</h2>
+<p>搞清楚了 MetadataCache 类被创建的时机以及它的调用方，我们就了解了它的典型使用场景，即作为集群元数据集散地，它保存了集群中关于主题和 Broker 的所有重要数据。那么，接下来，我们来看下这些数据到底都是什么。</p>
+<p>class MetadataCache(brokerId: Int) extends Logging {<br>
+private val partitionMetadataLock = new ReentrantReadWriteLock()<br>
+@volatile private var metadataSnapshot: MetadataSnapshot = MetadataSnapshot(partitionStates = mutable.AnyRefMap.empty,<br>
+controllerId = None, aliveBrokers = mutable.LongMap.empty, aliveNodes = mutable.LongMap.empty)<br>
+this.logIdent = s&quot;[MetadataCache brokerId=$brokerId] &quot;<br>
+private val stateChangeLogger = new StateChangeLogger(brokerId, inControllerContext = false, None)<br>
+&hellip;&hellip;<br>
+}</p>
+<p>MetadataCache 类构造函数只需要一个参数：<strong>brokerId</strong>，即 Broker 的 ID 序号。除了这个参数，该类还定义了 4 个字段。</p>
+<p>partitionMetadataLock 字段是保护它写入的锁对象，logIndent 和 stateChangeLogger 字段仅仅用于日志输出，而 metadataSnapshot 字段保存了实际的元数据信息，它是 MetadataCache 类中最重要的字段，我们要重点关注一下它。</p>
+<p>该字段的类型是 MetadataSnapshot 类，该类是 MetadataCache 中定义的一个嵌套类。以下是该嵌套类的源码：</p>
+<p>case class MetadataSnapshot(partitionStates: mutable.AnyRefMap<br>
+[String, mutable.LongMap[UpdateMetadataPartitionState]],<br>
+controllerId: Option[Int],<br>
+aliveBrokers: mutable.LongMap[Broker],<br>
+aliveNodes: mutable.LongMap[collection.Map[ListenerName, Node]])</p>
+<p>从源码可知，它是一个 case 类，相当于 Java 中配齐了 Getter 方法的 POJO 类。同时，它也是一个不可变类（Immutable Class）。正因为它的不可变性，其字段值是不允许修改的，我们只能重新创建一个新的实例，来保存更新后的字段值。</p>
+<p>我们看下它的各个字段的含义。</p>
+<ol>
+<li><strong>partitionStates</strong>：这是一个 Map 类型。Key 是主题名称，Value 又是一个 Map 类型，其 Key 是分区号，Value 是一个 UpdateMetadataPartitionState 类型的字段。UpdateMetadataPartitionState 类型是 UpdateMetadataRequest 请求内部所需的数据结构。一会儿我们再说这个类型都有哪些数据。</li>
+<li><strong>controllerId</strong>：Controller 所在 Broker 的 ID。</li>
+<li><strong>aliveBrokers</strong>：当前集群中所有存活着的 Broker 对象列表。</li>
+<li><strong>aliveNodes</strong>：这也是一个 Map 的 Map 类型。其 Key 是 Broker ID 序号，Value 是 Map 类型，其 Key 是 ListenerName，即 Broker 监听器类型，而 Value 是 Broker 节点对象。</li>
+</ol>
+<p>现在，我们说说 UpdateMetadataPartitionState 类型。这个类型的源码是由 Kafka 工程自动生成的。UpdateMetadataRequest 请求所需的字段用 JSON 格式表示，由 Kafka 的 generator 工程负责为 JSON 格式自动生成对应的 Java 文件，生成的类是一个 POJO 类，其定义如下：</p>
+<p>static public class UpdateMetadataPartitionState implements Message {<br>
+private String topicName;     // 主题名称<br>
+private int partitionIndex;   // 分区号<br>
+private int controllerEpoch;  // Controller Epoch 值<br>
+private int leader;           // Leader 副本所在 Broker ID<br>
+private int leaderEpoch;      // Leader Epoch 值<br>
+private List<Integer> isr;    // ISR 列表<br>
+private int zkVersion;        // ZooKeeper 节点 Stat 统计信息中的版本号<br>
+private List<Integer> replicas;  // 副本列表<br>
+private List<Integer> offlineReplicas;  // 离线副本列表<br>
+private List<RawTaggedField> _unknownTaggedFields; // 未知字段列表<br>
+&hellip;&hellip;<br>
+}</p>
+<p>可以看到，UpdateMetadataPartitionState 类的字段信息非常丰富，它包含了一个主题分区非常详尽的数据，从主题名称、分区号、Leader 副本、ISR 列表到 Controller Epoch、ZooKeeper 版本号等信息，一应俱全。从宏观角度来看，Kafka 集群元数据由主题数据和 Broker 数据两部分构成。所以，可以这么说，MetadataCache 中的这个字段撑起了元数据缓存的“一半天空”。</p>
+<h2 id="重要方法">重要方法</h2>
+<p>接下来，我们学习下 MetadataCache 类的重要方法。你需要记住的是，这个类最重要的方法就是<strong>操作 metadataSnapshot 字段的方法</strong>，毕竟，所谓的元数据缓存，就是指 MetadataSnapshot 类中承载的东西。</p>
+<p>我把 MetadataCache 类的方法大致分为三大类：</p>
+<ol>
+<li>判断类；</li>
+<li>获取类；</li>
+<li>更新类。</li>
+</ol>
+<p>这三大类方法是由浅入深的关系，我们先从简单的判断类方法开始。</p>
+<h3 id="判断类方法">判断类方法</h3>
+<p>所谓的判断类方法，就是判断给定主题或主题分区是否包含在元数据缓存中的方法。MetadataCache 类提供了两个判断类的方法，方法名都是 <strong>contains</strong>，只是输入参数不同。</p>
+<p>// 判断给定主题是否包含在元数据缓存中<br>
+def contains(topic: String): Boolean = {<br>
+metadataSnapshot.partitionStates.contains(topic)<br>
+}<br>
+// 判断给定主题分区是否包含在元数据缓存中<br>
+def contains(tp: TopicPartition): Boolean = getPartitionInfo(tp.topic, tp.partition).isDefined<br>
+// 获取给定主题分区的详细数据信息。如果没有找到对应记录，返回 None<br>
+def getPartitionInfo(topic: String,<br>
+partitionId: Int): Option[UpdateMetadataPartitionState] = {<br>
+metadataSnapshot.partitionStates.get(topic)<br>
+.flatMap(_.get(partitionId))<br>
+}</p>
+<p>第一个 contains 方法用于判断给定主题是否包含在元数据缓存中，比较简单，只需要判断 metadataSnapshot 中 partitionStates 的所有 Key 是否包含指定主题就行了。</p>
+<p>第二个 contains 方法相对复杂一点。它首先要从 metadataSnapshot 中获取指定主题分区的分区数据信息，然后根据分区数据是否存在，来判断给定主题分区是否包含在元数据缓存中。</p>
+<p>判断类的方法实现都很简单，代码也不多，很好理解，我就不多说了。接下来，我们来看获取类方法。</p>
+<h3 id="获取类方法">获取类方法</h3>
+<p>MetadataCache 类的 getXXX 方法非常多，其中，比较有代表性的是 getAllTopics 方法、getAllPartitions 方法和 getPartitionReplicaEndpoints，它们分别是获取主题、分区和副本对象的方法。在我看来，这是最基础的元数据获取方法了，非常值得我们学习。</p>
+<p>首先，我们来看入门级的 get 方法，即 getAllTopics 方法。该方法返回当前集群元数据缓存中的所有主题。代码如下：</p>
+<p>private def getAllTopics(snapshot: MetadataSnapshot): Set[String] = {<br>
+snapshot.partitionStates.keySet<br>
+}</p>
+<p>它仅仅是返回 MetadataSnapshot 数据类型中 partitionStates 字段的所有 Key 字段。前面说过，partitionStates 是一个 Map 类型，Key 就是主题。怎么样，简单吧？</p>
+<p>如果我们要获取元数据缓存中的分区对象，该怎么写呢？来看看 <strong>getAllPartitions 方法</strong>的实现。</p>
+<p>def getAllPartitions(): Set[TopicPartition] = {<br>
+metadataSnapshot.partitionStates.flatMap { case (topicName, partitionsAndStates) =&gt;<br>
+partitionsAndStates.keys.map(partitionId =&gt; new TopicPartition(topicName, partitionId.toInt))<br>
+}.toSet<br>
+}</p>
+<p>和 getAllTopics 方法类似，它的主要思想也是遍历 partitionStates，取出分区号后，构建 TopicPartition 实例，并加入到返回集合中返回。</p>
+<p>最后，我们看一个相对复杂一点的 get 方法：getPartitionReplicaEndpoints。</p>
+<p>def getPartitionReplicaEndpoints(tp: TopicPartition, listenerName: ListenerName): Map[Int, Node] = {<br>
+// 使用局部变量获取当前元数据缓存<br>
+val snapshot = metadataSnapshot<br>
+// 获取给定主题分区的数据<br>
+snapshot.partitionStates.get(tp.topic).flatMap(<em>.get(tp.partition))<br>
+.map { partitionInfo =&gt;<br>
+// 拿到副本 Id 列表<br>
+val replicaIds = partitionInfo.replicas<br>
+replicaIds.asScala<br>
+.map(replicaId =&gt; replicaId.intValue() -&gt; {<br>
+// 获取副本所在的 Broker Id<br>
+snapshot.aliveBrokers.get(replicaId.longValue()) match {<br>
+case Some(broker) =&gt;<br>
+// 根据 Broker Id 去获取对应的 Broker 节点对象<br>
+broker.getNode(listenerName).getOrElse(Node.noNode())<br>
+case None =&gt; // 如果找不到节点<br>
+Node.noNode()<br>
+}}).toMap<br>
+.filter(pair =&gt; pair match {<br>
+case (</em>, node) =&gt; !node.isEmpty<br>
+})<br>
+}.getOrElse(Map.empty[Int, Node])<br>
+}</p>
+<p>这个 getPartitionReplicaEndpoints 方法接收主题分区和 ListenerName，以获取指定监听器类型下该主题分区所有副本的 Broker 节点对象，并按照 Broker ID 进行分组。</p>
+<p>首先，代码使用局部变量获取当前的元数据缓存。这样做的好处在于，不需要使用锁技术，但是，就像我开头说过的，这里有一个可能的问题是，读到的数据可能是过期的数据。不过，好在 Kafka 能够自行处理过期元数据的问题。当客户端因为拿到过期元数据而向 Broker 发出错误的指令时，Broker 会显式地通知客户端错误原因。客户端接收到错误后，会尝试再次拉取最新的元数据。这个过程能够保证，客户端最终可以取得最新的元数据信息。总体而言，过期元数据的不良影响是存在的，但在实际场景中并不是太严重。</p>
+<p>拿到主题分区数据之后，代码会获取副本 ID 列表，接着遍历该列表，依次获取每个副本所在的 Broker ID，再根据这个 Broker ID 去获取对应的 Broker 节点对象。最后，将这些节点对象封装到返回结果中并返回。</p>
+<h3 id="更新类方法">更新类方法</h3>
+<p>下面，我们进入到今天的“重头戏”：Broker 端元数据缓存的更新方法。说它是重头戏，有两个原因：</p>
+<ol>
+<li>跟前两类方法相比，它的代码实现要复杂得多，因此，我们需要花更多的时间去学习；</li>
+<li>元数据缓存只有被更新了，才能被读取。从某种程度上说，它是后续所有 getXXX 方法的前提条件。</li>
+</ol>
+<p>源码中实现更新的方法只有一个：<strong>updateMetadata 方法</strong>。该方法的代码比较长，我先画一张流程图，帮助你理解它做了什么事情。</p>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/459899d6fe11371ec286cda643124a33.png" alt=""></p>
+<p>updateMetadata 方法的主要逻辑，就是<strong>读取 UpdateMetadataRequest 请求中的分区数据，然后更新本地元数据缓存</strong>。接下来，我们详细地学习一下它的实现逻辑。</p>
+<p>为了方便你掌握，我将该方法分成几个部分来讲，首先来看第一部分代码：</p>
+<p>def updateMetadata(correlationId: Int, updateMetadataRequest: UpdateMetadataRequest): Seq[TopicPartition] = {<br>
+inWriteLock(partitionMetadataLock) {<br>
+// 保存存活 Broker 对象。Key 是 Broker ID，Value 是 Broker 对象<br>
+val aliveBrokers = new mutable.LongMap<a href="./metadataSnapshot.aliveBrokers.size.md">Broker</a><br>
+// 保存存活节点对象。Key 是 Broker ID，Value 是监听器-&gt;节点对象<br>
+val aliveNodes = new mutable.LongMap<a href="metadataSnapshot.aliveNodes.size">collection.Map[ListenerName, Node]</a><br>
+// 从 UpdateMetadataRequest 中获取 Controller 所在的 Broker ID<br>
+// 如果当前没有 Controller，赋值为 None<br>
+val controllerIdOpt = updateMetadataRequest.controllerId match {<br>
+case id if id &lt; 0 =&gt; None<br>
+case id =&gt; Some(id)<br>
+}<br>
+// 遍历 UpdateMetadataRequest 请求中的所有存活 Broker 对象<br>
+updateMetadataRequest.liveBrokers.forEach { broker =&gt;<br>
+val nodes = new java.util.HashMap[ListenerName, Node]<br>
+val endPoints = new mutable.ArrayBuffer[EndPoint]<br>
+// 遍历它的所有 EndPoint 类型，也就是为 Broker 配置的监听器<br>
+broker.endpoints.forEach { ep =&gt;<br>
+val listenerName = new ListenerName(ep.listener)<br>
+endPoints += new EndPoint(ep.host, ep.port, listenerName, SecurityProtocol.forId(ep.securityProtocol))<br>
+// 将&lt;监听器，Broker 节点对象&gt;对保存起来<br>
+nodes.put(listenerName, new Node(broker.id, ep.host, ep.port))<br>
+}<br>
+// 将 Broker 加入到存活 Broker 对象集合<br>
+aliveBrokers(broker.id) = Broker(broker.id, endPoints, Option(broker.rack))<br>
+// 将 Broker 节点加入到存活节点对象集合<br>
+aliveNodes(broker.id) = nodes.asScala<br>
+}<br>
+&hellip;&hellip;<br>
+}<br>
+}</p>
+<p>这部分代码的主要作用是给后面的操作准备数据，即 aliveBrokers 和 aliveNodes 两个字段中保存的数据。</p>
+<p>因此，首先，代码会创建这两个字段，分别保存存活 Broker 对象和存活节点对象。aliveBrokers 的 Key 类型是 Broker ID，而 Value 类型是 Broker 对象；aliveNodes 的 Key 类型也是 Broker ID，Value 类型是 &lt; 监听器，节点对象 &gt; 对。</p>
+<p>然后，该方法从 UpdateMetadataRequest 中获取 Controller 所在的 Broker ID，并赋值给 controllerIdOpt 字段。如果集群没有 Controller，则赋值该字段为 None。</p>
+<p>接着，代码会遍历 UpdateMetadataRequest 请求中的所有存活 Broker 对象。取出它配置的所有 EndPoint 类型，也就是 Broker 配置的所有监听器。</p>
+<p>最后，代码会遍历它配置的监听器，并将 &lt; 监听器，Broker 节点对象 &gt; 对保存起来，再将 Broker 加入到存活 Broker 对象集合和存活节点对象集合。至此，第一部分代码逻辑完成。</p>
+<p>再来看第二部分的代码。这一部分的主要工作是<strong>确保集群 Broker 配置了相同的监听器，同时初始化已删除分区数组对象，等待下一部分代码逻辑对它进行操作</strong>。代码如下：</p>
+<p>// 使用上一部分中的存活 Broker 节点对象，<br>
+// 获取当前 Broker 所有的&lt;监听器，节点&gt;对<br>
+aliveNodes.get(brokerId).foreach { listenerMap =&gt;<br>
+val listeners = listenerMap.keySet<br>
+// 如果发现当前 Broker 配置的监听器与其他 Broker 有不同之处，记录错误日志<br>
+if (!aliveNodes.values.forall(_.keySet == listeners))<br>
+error(s&quot;Listeners are not identical across brokers: $aliveNodes&quot;)<br>
+}<br>
+// 构造已删除分区数组，将其作为方法返回结果<br>
+val deletedPartitions = new mutable.ArrayBuffer[TopicPartition]<br>
+// UpdateMetadataRequest 请求没有携带任何分区信息<br>
+if (!updateMetadataRequest.partitionStates.iterator.hasNext) {<br>
+// 构造新的 MetadataSnapshot 对象，使用之前的分区信息和新的 Broker 列表信息<br>
+metadataSnapshot = MetadataSnapshot(metadataSnapshot.partitionStates, controllerIdOpt, aliveBrokers, aliveNodes)<br>
+// 否则，进入到方法最后一部分<br>
+} else {<br>
+&hellip;&hellip;<br>
+}</p>
+<p>这部分代码首先使用上一部分中的存活 Broker 节点对象，获取当前 Broker 所有的 &lt; 监听器，节点 &gt; 对。</p>
+<p>之后，拿到为当前 Broker 配置的所有监听器。如果发现配置的监听器与其他 Broker 有不同之处，则记录一条错误日志。</p>
+<p>接下来，代码会构造一个已删除分区数组，将其作为方法返回结果。然后判断 UpdateMetadataRequest 请求是否携带了任何分区信息，如果没有，则构造一个新的 MetadataSnapshot 对象，使用之前的分区信息和新的 Broker 列表信息；如果有，代码进入到该方法的最后一个部分。</p>
+<p>最后一部分全部位于上面代码中的 else 分支上。这部分的主要工作是<strong>提取 UpdateMetadataRequest 请求中的数据，然后填充元数据缓存</strong>。代码如下：</p>
+<p>val partitionStates = new mutable.AnyRefMap<a href="metadataSnapshot.partitionStates.size">String, mutable.LongMap[UpdateMetadataPartitionState]</a><br>
+// 备份现有元数据缓存中的分区数据<br>
+metadataSnapshot.partitionStates.foreach { case (topic, oldPartitionStates) =&gt;<br>
+val copy = new mutable.LongMap<a href="./oldPartitionStates.size.md">UpdateMetadataPartitionState</a><br>
+copy ++= oldPartitionStates<br>
+partitionStates(topic) = copy<br>
+}<br>
+val traceEnabled = stateChangeLogger.isTraceEnabled<br>
+val controllerId = updateMetadataRequest.controllerId<br>
+val controllerEpoch = updateMetadataRequest.controllerEpoch<br>
+// 获取 UpdateMetadataRequest 请求中携带的所有分区数据<br>
+val newStates = updateMetadataRequest.partitionStates.asScala<br>
+// 遍历分区数据<br>
+newStates.foreach { state =&gt;<br>
+val tp = new TopicPartition(state.topicName, state.partitionIndex)<br>
+// 如果分区处于被删除过程中<br>
+if (state.leader == LeaderAndIsr.LeaderDuringDelete) {<br>
+// 将分区从元数据缓存中移除<br>
+removePartitionInfo(partitionStates, tp.topic, tp.partition)<br>
+if (traceEnabled)<br>
+stateChangeLogger.trace(s&quot;Deleted partition $tp from metadata cache in response to UpdateMetadata &quot; +<br>
+s&quot;request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId&quot;)<br>
+// 将分区加入到返回结果数据<br>
+deletedPartitions += tp<br>
+} else {<br>
+// 将分区加入到元数据缓存<br>
+addOrUpdatePartitionInfo(partitionStates, tp.topic, tp.partition, state)<br>
+if (traceEnabled)<br>
+stateChangeLogger.trace(s&quot;Cached leader info $state for partition $tp in response to &quot; +<br>
+s&quot;UpdateMetadata request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId&quot;)<br>
+}<br>
+}<br>
+val cachedPartitionsCount = newStates.size - deletedPartitions.size<br>
+stateChangeLogger.info(s&quot;Add $cachedPartitionsCount partitions and deleted ${deletedPartitions.size} partitions from metadata cache &quot; +<br>
+s&quot;in response to UpdateMetadata request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId&quot;)<br>
+// 使用更新过的分区元数据，和第一部分计算的存活 Broker 列表及节点列表，构建最新的元数据缓存<br>
+metadataSnapshot =<br>
+MetadataSnapshot(partitionStates, controllerIdOpt, aliveBrokers, aliveNodes)<br>
+// 返回已删除分区列表数组<br>
+deletedPartitions</p>
+<p>首先，该方法会备份现有元数据缓存中的分区数据到 partitionStates 的局部变量中。</p>
+<p>之后，获取 UpdateMetadataRequest 请求中携带的所有分区数据，并遍历每个分区数据。如果发现分区处于被删除的过程中，就将分区从元数据缓存中移除，并把分区加入到已删除分区数组中。否则的话，代码就将分区加入到元数据缓存中。</p>
+<p>最后，方法使用更新过的分区元数据，和第一部分计算的存活 Broker 列表及节点列表，构建最新的元数据缓存，然后返回已删除分区列表数组。至此，updateMetadata 方法结束。</p>
+<h2 id="总结">总结</h2>
+<p>今天，我们学习了 Broker 端的 MetadataCache 类，即所谓的元数据缓存类。该类保存了当前集群上的主题分区详细数据和 Broker 数据。每台 Broker 都维护了一个 MetadataCache 实例。Controller 通过给 Broker 发送 UpdateMetadataRequest 请求的方式，来异步更新这部分缓存数据。</p>
+<p>我们来回顾下这节课的重点。</p>
+<ol>
+<li>MetadataCache 类：Broker 元数据缓存类，保存了分区详细数据和 Broker 节点数据。</li>
+<li>四大调用方：分别是 ReplicaManager、KafkaApis、TransactionCoordinator 和 AdminManager。</li>
+<li>updateMetadata 方法：Controller 给 Broker 发送 UpdateMetadataRequest 请求时，触发更新。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/epic1268/images/master/Kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/bfa6ca5ffd4feeb0aa5f87f994b7498d.png" alt=""></p>
+<p>最后，我想和你讨论一个话题。</p>
+<p>有人认为，Kafka Broker 是无状态的。学完了今天的内容，现在你应该知道了，Broker 并非是无状态的节点，它需要从 Controller 端异步更新保存集群的元数据信息。由于 Kafka 采用的是 Leader/Follower 模式，跟多 Leader 架构和无 Leader 架构相比，这种分布式架构的一致性是最容易保证的，因此，Broker 间元数据的最终一致性是有保证的。不过，就像我前面说过的，你需要处理 Follower 滞后或数据过期的问题。需要注意的是，这里的 Leader 其实是指 Controller，而 Follower 是指普通的 Broker 节点。</p>
+<p>总之，这一路学到现在，不知道你有没有这样的感受，很多分布式架构设计的问题与方案是相通的。比如，在应对数据备份这个问题上，元数据缓存和 Kafka 副本其实都是相同的设计思路，即使用单 Leader 的架构，令 Leader 对外提供服务，Follower 只是被动地同步 Leader 上的数据。</p>
+<p>每次学到新的内容之后，希望你不要把它们当作单一的知识看待，要善于进行思考和总结，做到融会贯通。源码学习固然重要，但能让学习源码引领我们升级架构思想，其实是更难得的收获！</p>
+<h2 id="课后讨论">课后讨论</h2>
+<p>前面说到，Controller 发送 UpdateMetadataRequest 请求给 Broker 时，会更新 MetadataCache，你能在源码中找到更新元数据缓存的完整调用路径吗？</p>
+<p>欢迎在留言区写下你的思考和答案，跟我交流讨论，也欢迎你把今天的内容分享给你的朋友。</p>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">文章作者</span>
+    <span class="item-content"></span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">上次更新</span>
+    <span class="item-content">
+        10100-01-10
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/kafka%E6%A0%B8%E5%BF%83%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">Kafka核心源码解读</a>
+          </div>
+      <nav class="post-nav">
+        <a class="prev" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/spark%E6%80%A7%E8%83%BD%E8%B0%83%E4%BC%98%E5%AE%9E%E6%88%98/26__join_hints%E6%8C%87%E5%8D%97%E4%B8%8D%E5%90%8C%E5%9C%BA%E6%99%AF%E4%B8%8B%E5%A6%82%E4%BD%95%E9%80%89%E6%8B%A9join%E7%AD%96%E7%95%A5/">
+            <i class="iconfont icon-left"></i>
+            <span class="prev-text nav-default">26__Join_Hints指南：不同场景下，如何选择Join策略？</span>
+            <span class="prev-text nav-mobile">上一篇</span>
+          </a>
+        <a class="next" href="/post/%E6%9E%81%E5%AE%A2%E6%97%B6%E9%97%B4/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%AB%98%E6%89%8B%E8%AF%BE/26__mqtt%E5%8D%8F%E8%AE%AE%E5%A6%82%E4%BD%95%E6%94%AF%E6%8C%81%E6%B5%B7%E9%87%8F%E7%9A%84%E5%9C%A8%E7%BA%BFiot%E8%AE%BE%E5%A4%87_/">
+            <span class="next-text nav-default">26__MQTT协议：如何支持海量的在线IoT设备_</span>
+            <span class="next-text nav-mobile">下一篇</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+  
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    由 <a class="hexo-link" href="https://gohugo.io">Hugo</a> 强力驱动
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    主题 - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  
+
+  <span class="copyright-year">
+    &copy; 
+    2024 - 
+    2025<span class="heart"><i class="iconfont icon-heart"></i></span><span></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  <script src="/lib/highlight/highlight.pack.js?v=20171001"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.1.20/dist/jquery.fancybox.min.js" integrity="sha256-XVLffZaxoWfGUEbdzuLi7pwaUJv1cecsQJQqGLe7axY=" crossorigin="anonymous"></script>
+
+
+
+<script type="text/javascript" src="/js/main.min.4ae89da218555efa0e7093a20b92017d2e1202b66fff9fc2edf4cb8d44b44c6e.js"></script>
+
+
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-FVZ07KBD4X"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-FVZ07KBD4X');
+        }
+      </script>
+
+
+
+
+
+
+</body>
+</html>
